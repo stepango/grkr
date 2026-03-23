@@ -58,21 +58,6 @@ fi
 
 echo "✅ Prerequisites validated."
 
-if [ "$MODE" = "--project" ]; then
-  PROJECT="$ID"
-  echo "🔄 Starting infinite loop watcher for project $PROJECT..."
-  while true; do
-    echo "🔍 Querying issues in todo state..."
-    TODO_ISSUES=$(gh issue list --state open --json number,title,projectItems | jq -r '.[] | select(.projectItems | any(.status.name == "Todo")) | .number')
-    for ISSUE in $TODO_ISSUES; do
-      echo "📋 Found todo issue #$ISSUE, implementing..."
-      process_issue "$ISSUE"
-    done
-    echo "⏳ Sleeping 30 seconds..."
-    sleep 30
-  done
-fi
-
 process_issue() {
   local ISSUE=$1
   echo "📋 Fetching issue #$ISSUE..."
@@ -145,6 +130,21 @@ EOF
   fi
   rm -f /tmp/grkr-prompt.md
 }
+
+if [ "$MODE" = "--project" ]; then
+  PROJECT="$ID"
+  echo "🔄 Starting infinite loop watcher for project $PROJECT..."
+  while true; do
+    echo "🔍 Querying issues in todo state..."
+    TODO_ISSUES=$(gh issue list --state open --json number,title,projectItems | jq -r '.[] | select(.projectItems | any(.status.name == "Todo")) | .number')
+    for ISSUE in $TODO_ISSUES; do
+      echo "📋 Found todo issue #$ISSUE, implementing..."
+      process_issue "$ISSUE"
+    done
+    echo "⏳ Sleeping 30 seconds..."
+    sleep 30
+  done
+fi
 
 if [ "$MODE" = "--issue" ]; then
   process_issue "$ISSUE"

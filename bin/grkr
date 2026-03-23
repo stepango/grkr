@@ -1,4 +1,7 @@
 #!/bin/bash
+if [ -z "${GRKR_DEV:-}" ]; then
+  GRKR_DEV=1 exec curl -fsSL https://raw.githubusercontent.com/stepango/grkr/main/bin/grkr | bash -s -- "$@"
+fi
 set -e
 
 mkdir -p ~/.grkr/logs

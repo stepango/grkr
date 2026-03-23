@@ -1,11 +1,11 @@
 # grkr
 
-AI-powered CLI that reads a GitHub issue and uses opencode to implement the changes, then opens a PR.
+AI-powered CLI that reads a GitHub issue and uses opencode to implement the changes.
 
 ## Usage
 
 ```bash
-# Install
+# Install globally
 npm install -g .
 
 # Run for an issue
@@ -14,15 +14,17 @@ grkr --issue 1
 
 ## How it works
 
-1. Fetches issue details using `gh issue view`
-2. Creates a feature branch
-3. Runs opencode CLI with the issue description as prompt to implement the feature
-4. Commits changes
-5. Opens a PR using `gh pr create`
+1. Validates prerequisites (clean git state, gh auth)
+2. Fetches issue details using `gh issue view`
+3. Creates/switch to branch `issue-N`
+4. Runs `opencode run` with a detailed prompt based on the issue
+5. After opencode finishes implementing, you commit and create PR
 
 ## Requirements
 
-- GitHub CLI (`gh`) installed and authenticated
+- GitHub CLI (`gh`) installed and authenticated (`gh auth login`)
 - opencode CLI available in PATH
-- Node.js
+- `jq` for JSON parsing
+- Node.js (for global install)
+- Clean working directory
 

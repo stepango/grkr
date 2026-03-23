@@ -1,0 +1,111 @@
+#!/bin/bash
+set -e
+
+usage() {
+  echo "Usage: grkr --issue <number>"
+  echo "Example: grkr --issue 1"
+  exit 1
+}
+
+if [ "$1" != "--issue" ] || [ -z "$2" ]; then
+  usage
+fi
+
+ISSUE="$2"
+
+# Prerequisites
+echo "🔍 Validating prerequisites..."
+
+if ! command -v gh &> /dev/null; then
+  echo "❌ GitHub CLI (gh) is not installed. Please install it."
+  exit 1
+fi
+
+if ! gh auth status &> /dev/null; then
+  echo "❌ Not authenticated with GitHub. Run: gh auth login"
+  exit 1
+fi
+
+if [ -n "$(git status --porcelain)" ]; then
+  echo "❌ Working directory is not clean. Commit or stash changes first."
+  exit 1
+fi
+
+if ! command -v opencode &> /dev/null; then
+  echo "❌ opencode is not in PATH. Please install it."
+  exit 1
+fi
+
+if ! command -v jq &> /dev/null; then
+  echo "❌ jq is required for JSON parsing. Please install it."
+  exit 1
+fi
+
+echo "✅ Prerequisites validated."
+
+# Fetch issue
+echo "📋 Fetching issue #$ISSUE..."
+ISSUE_JSON=$(gh issue view "$ISSUE" --json title,body,url,number 2>&1)
+
+if echo "$ISSUE_JSON" | grep -q "Could not resolve"; then
+  echo "❌ Issue #$ISSUE not found."
+  exit 1
+fi
+
+TITLE=$(echo "$ISSUE_JSON" | jq -r '.title')
+BODY=$(echo "$ISSUE_JSON" | jq -r '.body // "No description provided."')
+URL=$(echo "$ISSUE_JSON" | jq -r '.url')
+
+echo "📝 Issue: $TITLE"
+echo "🔗 $URL"
+
+# Create branch
+BRANCH="issue-$ISSUE"
+if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
+  echo "⚠️ Branch $BRANCH already exists remotely. Checking it out..."
+  git checkout "$BRANCH"
+else
+  git checkout -b "$BRANCH"
+  echo "🌿 Created and switched to branch: $BRANCH"
+fi
+
+# Prepare prompt
+cat > /tmp/grkr-prompt.md << EOF
+Implement the GitHub issue described below using the opencode coding agent best practices.
+
+**Issue #$ISSUE: $TITLE**
+**URL:** $URL
+
+**Description:**
+$BODY
+
+---
+
+**Instructions for you:**
+1. First explore the codebase using available tools (grep, glob, read, etc.) to understand the current structure and conventions.
+2. Follow the project's code style, naming conventions, and architecture.
+3. Make minimal, focused changes.
+4. Do not add comments unless specifically asked.
+5. After changes, run linting and tests if available (use the bash tool).
+6. Be concise in your responses.
+7. When done, the changes should fully address the issue.
+
+Begin by analyzing the project.
+EOF
+
+echo "🚀 Running opencode to implement the issue..."
+echo "Prompt saved to /tmp/grkr-prompt.md for reference."
+
+opencode run --title "Implement GitHub issue #$ISSUE: $TITLE" "$(cat /tmp/grkr-prompt.md)"
+
+echo ""
+echo "✅ opencode has finished implementing the changes."
+echo ""
+echo "Next steps:"
+echo "  1. Review the changes: git diff HEAD~1..HEAD (or git status)"
+echo "  2. Commit: git add . && git commit -m \"feat: implement #${ISSUE} - ${TITLE}\""
+echo "  3. Push and create PR: gh pr create --fill"
+echo ""
+echo "You can run 'grkr --issue $ISSUE' again if more changes are needed."
+
+rm -f /tmp/grkr-prompt.md

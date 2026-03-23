@@ -1,18 +1,14 @@
 {
   "name": "grkr",
   "version": "0.1.0",
-  "description": "AI-powered GitHub issue implementer using opencode",
+  "description": "AI-powered CLI that reads a GitHub issue and uses opencode to implement the changes.",
   "bin": {
-    "grkr": "bin/grkr.js"
+    "grkr": "bin/grkr"
   },
   "scripts": {
-    "build": "echo 'No build needed for JS CLI'",
-    "test": "echo 'No tests yet'"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "dependencies": {
-    "commander": "^12.0.0"
-  },
-  "keywords": ["cli", "github", "opencode", "ai"],
-  "author": "",
+  "keywords": ["cli", "github", "opencode", "ai", "coding-agent"],
+  "author": "stepango",
   "license": "MIT"
 }

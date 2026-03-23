@@ -60,7 +60,7 @@ if [ "$MODE" = "--project" ]; then
   echo "🔄 Starting infinite loop watcher for project $PROJECT..."
   while true; do
     echo "🔍 Querying issues in todo state..."
-    TODO_ISSUES=$(gh issue list --state open --json number,title | jq -r '.[] | select(.title | test("todo"; "i")) | .number')
+    TODO_ISSUES=$(gh issue list --state open --json number,title,projectItems | jq -r '.[] | select(.projectItems | any(.status.name == "Todo")) | .number')
     for ISSUE in $TODO_ISSUES; do
       echo "📋 Found todo issue #$ISSUE, implementing..."
       process_issue "$ISSUE"

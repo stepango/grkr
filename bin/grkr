@@ -1,17 +1,29 @@
 #!/bin/bash
 set -e
 
+mkdir -p ~/.grkr/logs
+LOGFILE=~/.grkr/logs/grkr-$(date +%Y%m%d-%H%M%S).log
+exec > >(tee -a "$LOGFILE") 2>&1
+
 usage() {
-  echo "Usage: grkr --issue <number>"
+  echo "Usage: grkr --issue <number> | grkr --project <id>"
   echo "Example: grkr --issue 1"
+  echo "Example: grkr --project 42"
   exit 1
 }
 
-if [ "$1" != "--issue" ] || [ -z "$2" ]; then
+if [ -z "$2" ]; then
   usage
 fi
-
-ISSUE="$2"
+MODE="$1"
+ID="$2"
+if [ "$MODE" = "--issue" ]; then
+  ISSUE="$ID"
+elif [ "$MODE" = "--project" ]; then
+  :
+else
+  usage
+fi
 
 # Prerequisites
 echo "🔍 Validating prerequisites..."
@@ -43,34 +55,43 @@ fi
 
 echo "✅ Prerequisites validated."
 
-# Fetch issue
-echo "📋 Fetching issue #$ISSUE..."
-ISSUE_JSON=$(gh issue view "$ISSUE" --json title,body,url,number 2>&1)
-
-if echo "$ISSUE_JSON" | grep -q "Could not resolve"; then
-  echo "❌ Issue #$ISSUE not found."
-  exit 1
+if [ "$MODE" = "--project" ]; then
+  PROJECT="$ID"
+  echo "🔄 Starting infinite loop watcher for project $PROJECT..."
+  while true; do
+    echo "🔍 Querying issues in todo state..."
+    TODO_ISSUES=$(gh issue list --state open --json number,title | jq -r '.[] | select(.title | test("todo"; "i")) | .number')
+    for ISSUE in $TODO_ISSUES; do
+      echo "📋 Found todo issue #$ISSUE, implementing..."
+      process_issue "$ISSUE"
+    done
+    echo "⏳ Sleeping 30 seconds..."
+    sleep 30
+  done
 fi
 
-TITLE=$(echo "$ISSUE_JSON" | jq -r '.title')
-BODY=$(echo "$ISSUE_JSON" | jq -r '.body // "No description provided."')
-URL=$(echo "$ISSUE_JSON" | jq -r '.url')
-
-echo "📝 Issue: $TITLE"
-echo "🔗 $URL"
-
-# Create branch
-BRANCH="issue-$ISSUE"
-if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
-  echo "⚠️ Branch $BRANCH already exists remotely. Checking it out..."
-  git checkout "$BRANCH"
-else
-  git checkout -b "$BRANCH"
-  echo "🌿 Created and switched to branch: $BRANCH"
-fi
-
-# Prepare prompt
-cat > /tmp/grkr-prompt.md << EOF
+process_issue() {
+  local ISSUE=$1
+  echo "📋 Fetching issue #$ISSUE..."
+  ISSUE_JSON=$(gh issue view "$ISSUE" --json title,body,url,number 2>&1)
+  if echo "$ISSUE_JSON" | grep -q "Could not resolve"; then
+    echo "❌ Issue #$ISSUE not found."
+    return 1
+  fi
+  TITLE=$(echo "$ISSUE_JSON" | jq -r '.title')
+  BODY=$(echo "$ISSUE_JSON" | jq -r '.body // "No description provided."')
+  URL=$(echo "$ISSUE_JSON" | jq -r '.url')
+  echo "📝 Issue: $TITLE"
+  echo "🔗 $URL"
+  BRANCH="issue-$ISSUE"
+  if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
+    echo "⚠️ Branch $BRANCH already exists remotely. Checking it out..."
+    git checkout "$BRANCH"
+  else
+    git checkout -b "$BRANCH"
+    echo "🌿 Created and switched to branch: $BRANCH"
+  fi
+  cat > /tmp/grkr-prompt.md << EOF
 Implement the GitHub issue described below using the opencode coding agent best practices.
 
 **Issue #$ISSUE: $TITLE**
@@ -92,20 +113,36 @@ $BODY
 
 Begin by analyzing the project.
 EOF
+  echo "🚀 Running opencode to implement the issue..."
+  echo "Prompt saved to /tmp/grkr-prompt.md for reference."
+  opencode run --title "Implement GitHub issue #$ISSUE: $TITLE" "$(cat /tmp/grkr-prompt.md)"
+  echo ""
+  echo "✅ opencode has finished implementing the changes."
+  if [ "$MODE" = "--project" ]; then
+    echo "🔄 Auto-committing, pushing and creating PR..."
+    git add .
+    if git diff --cached --quiet; then
+      echo "No changes for #$ISSUE"
+    else
+      git commit -m "feat: implement #$ISSUE - $TITLE"
+      git push -u origin "issue-$ISSUE"
+      PR_URL=$(gh pr create --fill)
+      echo "✅ PR created: $PR_URL"
+      gh issue edit "$ISSUE" --add-label "implemented" || true
+      gh issue edit "$ISSUE" --remove-label "todo" || true
+    fi
+  else
+    echo ""
+    echo "Next steps:"
+    echo "  1. Review the changes: git diff HEAD~1..HEAD (or git status)"
+    echo "  2. Commit: git add . && git commit -m \"feat: implement #${ISSUE} - ${TITLE}\""
+    echo "  3. Push and create PR: gh pr create --fill"
+    echo ""
+    echo "You can run 'grkr --issue $ISSUE' again if more changes are needed."
+  fi
+  rm -f /tmp/grkr-prompt.md
+}
 
-echo "🚀 Running opencode to implement the issue..."
-echo "Prompt saved to /tmp/grkr-prompt.md for reference."
-
-opencode run --title "Implement GitHub issue #$ISSUE: $TITLE" "$(cat /tmp/grkr-prompt.md)"
-
-echo ""
-echo "✅ opencode has finished implementing the changes."
-echo ""
-echo "Next steps:"
-echo "  1. Review the changes: git diff HEAD~1..HEAD (or git status)"
-echo "  2. Commit: git add . && git commit -m \"feat: implement #${ISSUE} - ${TITLE}\""
-echo "  3. Push and create PR: gh pr create --fill"
-echo ""
-echo "You can run 'grkr --issue $ISSUE' again if more changes are needed."
-
-rm -f /tmp/grkr-prompt.md
+if [ "$MODE" = "--issue" ]; then
+  process_issue "$ISSUE"
+fi

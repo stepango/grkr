@@ -1,6 +1,6 @@
 # grkr
 
-AI-powered CLI that reads a GitHub issue and uses opencode to implement the changes.
+AI-powered CLI that reads a GitHub issue and uses Codex to implement the changes.
 
 ## Usage
 
@@ -17,14 +17,13 @@ grkr --issue 1
 1. Validates prerequisites (clean git state, gh auth)
 2. Fetches issue details using `gh issue view`
 3. Creates/switch to branch `issue-N`
-4. Runs `opencode run` with a detailed prompt based on the issue
-5. After opencode finishes implementing, you commit and create PR
+4. Runs `codex exec` with a detailed prompt based on the issue
+5. After Codex finishes implementing, you commit and create PR
 
 ## Requirements
 
 - GitHub CLI (`gh`) installed and authenticated (`gh auth login`)
-- opencode CLI available in PATH
+- Codex CLI available in PATH
 - `jq` for JSON parsing
 - Node.js (for global install)
 - Clean working directory
-

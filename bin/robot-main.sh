@@ -277,15 +277,28 @@ run_phase_with_lock() {
 }
 
 phase_sync_main_impl() {
+  local status=0
+
   if [ "$VALIDATION_OK" -ne 1 ]; then
     log_warn "sync_main" "-" "repo/$REPO" "skipped validation_ok=false"
     return 0
   fi
 
-  git fetch origin "$MAIN_BRANCH" --prune &&
-    git checkout "$MAIN_BRANCH" &&
-    git reset --hard "origin/$MAIN_BRANCH" &&
-    log_info "sync_main" "-" "repo/$REPO" "synced_branch=$MAIN_BRANCH"
+  "$SCRIPT_DIR/worker-sync-main.sh" || status=$?
+
+  case "$status" in
+    0)
+      log_info "sync_main" "-" "repo/$REPO" "synced_branch=$MAIN_BRANCH"
+      return 0
+      ;;
+    75)
+      log_warn "sync_main" "-" "repo/$REPO" "lock_busy=main"
+      return 0
+      ;;
+    *)
+      return "$status"
+      ;;
+  esac
 }
 
 phase_scan_prs_impl() {
@@ -320,7 +333,7 @@ run_phase() {
   log_info "$phase" "-" "repo/$REPO" "phase_started=true"
   case "$phase" in
     sync_main)
-      run_phase_with_lock "$phase" "main" phase_sync_main_impl || status=$?
+      run_phase_command phase_sync_main_impl || status=$?
       ;;
     scan_and_schedule_pr_conflicts)
       run_phase_with_lock "$phase" "prs" phase_scan_prs_impl || status=$?

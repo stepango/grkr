@@ -297,12 +297,9 @@ EOF
 append_issue_footer() {
   local pr_body_file=$1
   local issue=$2
-  local url=$3
 
   cat >> "$pr_body_file" <<EOF
 
 Fixes #$issue
-
-Issue: [#$issue]($url)
 EOF
 }

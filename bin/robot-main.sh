@@ -201,6 +201,11 @@ purge_stale_lock_files() {
   local purged=0
   local lock_file
 
+  if ! jq -e '.' "$ACTIVE_JOBS_FILE" >/dev/null 2>&1; then
+    log_error "cleanup_stale_worktrees" "-" "repo/$REPO" "active_jobs_state_invalid=true"
+    return 1
+  fi
+
   while IFS= read -r lock_file; do
     [ -n "$lock_file" ] || continue
     if jq -e --arg lock_name "$(basename "$lock_file" .lock)" 'to_entries[]? | select(.value.lock_name == $lock_name)' "$ACTIVE_JOBS_FILE" >/dev/null 2>&1; then
@@ -226,6 +231,16 @@ phase_should_fail() {
   return 1
 }
 
+run_phase_command() {
+  (
+    set -e
+    "$@"
+  )
+  local status=$?
+
+  return "$status"
+}
+
 run_phase_with_lock() {
   local phase=$1
   local lock_name=$2
@@ -236,24 +251,27 @@ run_phase_with_lock() {
   fi
 
   if [ "$VALIDATION_OK" -ne 1 ]; then
-    "$@"
+    run_phase_command "$@"
     return $?
   fi
 
-  if (
+  (
+    set -e
     flock -n 9 || exit 75
     "$@"
-  ) 9>"$LOCKS_DIR/$lock_name.lock"; then
-    return 0
-  fi
+  ) 9>"$LOCKS_DIR/$lock_name.lock"
+  local status=$?
 
-  case $? in
+  case "$status" in
+    0)
+      return 0
+      ;;
     75)
       log_warn "$phase" "-" "repo/$REPO" "lock_busy=$lock_name"
       return 0
       ;;
     *)
-      return 1
+      return "$status"
       ;;
   esac
 }
@@ -264,10 +282,10 @@ phase_sync_main_impl() {
     return 0
   fi
 
-  git fetch origin "$MAIN_BRANCH" --prune
-  git checkout "$MAIN_BRANCH"
-  git reset --hard "origin/$MAIN_BRANCH"
-  log_info "sync_main" "-" "repo/$REPO" "synced_branch=$MAIN_BRANCH"
+  git fetch origin "$MAIN_BRANCH" --prune &&
+    git checkout "$MAIN_BRANCH" &&
+    git reset --hard "origin/$MAIN_BRANCH" &&
+    log_info "sync_main" "-" "repo/$REPO" "synced_branch=$MAIN_BRANCH"
 }
 
 phase_scan_prs_impl() {
@@ -314,10 +332,10 @@ run_phase() {
       run_phase_with_lock "$phase" "issues" phase_pick_issue_impl || status=$?
       ;;
     reap_finished_jobs)
-      phase_reap_impl || status=$?
+      run_phase_command phase_reap_impl || status=$?
       ;;
     cleanup_stale_worktrees)
-      phase_cleanup_impl || status=$?
+      run_phase_command phase_cleanup_impl || status=$?
       ;;
     *)
       status=1

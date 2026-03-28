@@ -29,6 +29,7 @@ usage() {
 }
 
 MAX_FILE_LINES=1000
+MAX_PR_BODY_CHARS=60000
 VALIDATION_OK=0
 
 MODE=${1:-}
@@ -83,8 +84,7 @@ fi
 
 if [ "$VALIDATION_OK" -eq 1 ]; then
   if [ -n "$(git status --porcelain --untracked-files=all | grep -vE '^.. \.grkr(/|$)')" ]; then
-    echo "❌ Working directory is not clean. Commit or stash changes first."
-    exit 1
+    echo "⚠️ Working directory is not clean. Continuing with the existing changes in the worktree."
   fi
 fi
 
@@ -103,31 +103,30 @@ check_file_line_limit() {
   return $violations
 }
 
-extract_codex_pr_body() {
-  local codex_output_file=$1
-  local pr_body_file=$2
-  local body=$3
-  local title=$4
-  local issue=$5
-  local url=$6
+summarize_text() {
+  local text=$1
+  local max_chars=$2
 
-  if [ -s "$codex_output_file" ]; then
-    awk '
-      /^## / {found=1}
-      found {print}
-    ' "$codex_output_file" > "$pr_body_file"
-    if [ -s "$pr_body_file" ]; then
-      if ! grep -Fq "Fixes #$issue" "$pr_body_file"; then
-        cat >> "$pr_body_file" << EOF
+  printf '%s' "$text" \
+    | tr '\n' ' ' \
+    | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//' \
+    | awk -v limit="$max_chars" '
+        {
+          if (length($0) <= limit) {
+            print $0
+          } else if (limit > 3) {
+            print substr($0, 1, limit - 3) "..."
+          } else {
+            print substr($0, 1, limit)
+          }
+        }
+      '
+}
 
-Fixes #$issue
-
-Issue: [#$issue]($url)
-EOF
-      fi
-      return 0
-    fi
-  fi
+write_default_pr_body() {
+  local pr_body_file=$1
+  local body=$2
+  local title=$3
 
   cat > "$pr_body_file" << EOF
 ## Detailed description of the task
@@ -145,11 +144,89 @@ $body
 ## Testing results
 
 - Functional testing performed: the launcher completed the issue workflow and created this PR.
+EOF
+}
+
+write_compact_pr_body() {
+  local pr_body_file=$1
+  local body=$2
+  local title=$3
+  local short_title
+  local short_body
+
+  short_title=$(summarize_text "$title" 200)
+  short_body=$(summarize_text "$body" 4000)
+
+  cat > "$pr_body_file" << EOF
+## Detailed description of the task
+
+$short_title
+
+$short_body
+
+## Implementation plan details
+
+- The full Codex-generated summary exceeded GitHub's PR body size limit and was replaced with this compact summary.
+- See the issue discussion, commit history, and local grkr logs for the complete implementation details.
+
+## Testing results
+
+- Review the local grkr logs for the full Codex test output when needed.
+EOF
+}
+
+append_issue_footer() {
+  local pr_body_file=$1
+  local issue=$2
+  local url=$3
+
+  cat >> "$pr_body_file" << EOF
 
 Fixes #$issue
 
 Issue: [#$issue]($url)
 EOF
+}
+
+ensure_pr_body_limit() {
+  local pr_body_file=$1
+  local body=$2
+  local title=$3
+  local issue=$4
+  local url=$5
+  local body_length
+
+  body_length=$(wc -m < "$pr_body_file" | tr -d '[:space:]')
+  if [ "$body_length" -gt "$MAX_PR_BODY_CHARS" ]; then
+    write_compact_pr_body "$pr_body_file" "$body" "$title"
+  fi
+
+  if ! grep -Fq "Fixes #$issue" "$pr_body_file"; then
+    append_issue_footer "$pr_body_file" "$issue" "$url"
+  fi
+}
+
+extract_codex_pr_body() {
+  local codex_output_file=$1
+  local pr_body_file=$2
+  local body=$3
+  local title=$4
+  local issue=$5
+  local url=$6
+
+  if [ -s "$codex_output_file" ]; then
+    awk '
+      /^## / {found=1}
+      found {print}
+    ' "$codex_output_file" > "$pr_body_file"
+    if [ -s "$pr_body_file" ]; then
+      ensure_pr_body_limit "$pr_body_file" "$body" "$title" "$issue" "$url"
+      return 0
+    fi
+  fi
+
+  write_default_pr_body "$pr_body_file" "$body" "$title"
+  ensure_pr_body_limit "$pr_body_file" "$body" "$title" "$issue" "$url"
 }
 
 publish_issue_changes() {

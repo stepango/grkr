@@ -32,7 +32,7 @@ npm test
 5. `grkr --issue <n>` remains the focused single-issue helper that fetches issue details using `gh issue view`
 6. Before it starts implementation, the issue helper creates `.grkr/tasks/<issue-slug>/`, writes `research.md`, `plan.md`, and `progress.json`, and posts the research and plan checkpoints back to the issue
 7. If matching checkpoint comments already exist, the issue helper reuses those comments and resumes without reposting duplicate research or plan checkpoints
-8. Before it checks out or creates `issue-N`, the issue helper moves the configured project item to `In Progress` when it can resolve that project item
+8. Before it checks out or creates `issue-N`, the issue helper moves the configured project item to the configured in-progress status when it can resolve that project item; project status option matching is case-insensitive and whitespace-normalized
 9. The issue helper reuses branch `issue-N` when it already exists locally or remotely, otherwise creates it
 10. Codex output is stored in `.grkr/tasks/<issue-slug>/implementation.log`; if the staged diff would leave any file over the 1000-line limit, `grkr` immediately runs one Codex refactor pass before moving on
 11. After the implementation is publishable, `grkr` runs the configured build and test commands, writes `.grkr/tasks/<issue-slug>/test.md`, and posts the test checkpoint back to the issue
@@ -47,7 +47,7 @@ npm test
 - `robot-main.sh` uses `MAIN_BRANCH` and `LOOP_INTERVAL_SECS` from `.grkr/config.sh`; `grkr init <id>` now writes both defaults into the generated config.
 - `worker-sync-main.sh` is the phase-1 supervisor worker; it always returns the main checkout to the configured `MAIN_BRANCH` before later phases run.
 - `worker-pick-issue.sh` is the phase-4 selector; it emits shell-safe key/value output for the next Todo issue candidate, including `JOB_KEY` and `TASK_SLUG`.
-- `grkr init <id>` also writes `IN_PROGRESS_VALUE="In Progress"` so issue execution can move a project item out of Todo before branching.
+- `grkr init <id>` also writes `IN_PROGRESS_VALUE="In Progress"` so issue execution can move a project item out of Todo before branching; status option lookup tolerates casing differences such as `In progress`.
 - `grkr init <id>` also writes `DONE_VALUE="Done"` plus default `TEST_COMMAND` and `BUILD_COMMAND` entries so the test stage has explicit verification commands.
 - `npm test` refreshes the spec index from the split files under `spec/parts/` and runs the mocked shell tests without needing GitHub access.
 - `grkr --issue <id>` automatically shrinks oversized Codex-generated PR bodies so `gh pr create` stays under GitHub's 65536-character body limit.

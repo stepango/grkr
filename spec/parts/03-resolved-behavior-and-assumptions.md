@@ -43,6 +43,8 @@ If refusal occurs, the issue is moved from `Todo` to `Backlog`.
 
 When issue execution is about to begin, the issue should be moved from `Todo` to the configured **In Progress** state before the workflow creates or checks out the issue branch.
 
+Status option resolution should treat configured values case-insensitively and normalize repeated or surrounding whitespace before matching the live project option name.
+
 ### 3.5 Priority field
 
 The project priority field may be either:

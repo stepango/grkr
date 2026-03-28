@@ -5,6 +5,7 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-smoke.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
 cp bin/grkr "$tmpdir/grkr.sh"
+cp bin/grkr-project-status.sh "$tmpdir/grkr-project-status.sh"
 cp bin/grkr-templates.sh "$tmpdir/grkr-templates.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
 chmod +x "$tmpdir/grkr.sh"
@@ -102,7 +103,7 @@ case "\${1-} \${2-}" in
     echo 'https://example.com/pr/1'
     ;;
   'project view') printf '{"id":"PROJECT_1"}\n' ;;
-  'project field-list') printf '[{"id":"FIELD_STATUS","name":"Status","options":[{"id":"OPTION_TODO","name":"Todo"},{"id":"OPTION_IN_PROGRESS","name":"In Progress"},{"id":"OPTION_DONE","name":"Done"}]}]\n' ;;
+  'project field-list') printf '[{"id":"FIELD_STATUS","name":"Status","options":[{"id":"OPTION_TODO","name":"Todo"},{"id":"OPTION_IN_PROGRESS","name":"In progress"},{"id":"OPTION_DONE","name":"Done"}]}]\n' ;;
   'project item-edit') exit 0 ;;
   'issue edit') exit 0 ;;
   *) exit 0 ;;

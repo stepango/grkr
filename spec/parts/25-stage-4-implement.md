@@ -46,6 +46,7 @@ fix(robot): implement #123 stabilize cache invalidation
 Default behavior:
 
 - move the configured project item to `In Progress`
+- resolve that status option against the live project field case-insensitively with normalized whitespace
 - push issue branch
 - create or update a PR for that branch
 - link the issue in the PR body

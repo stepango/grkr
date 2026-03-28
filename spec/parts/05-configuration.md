@@ -54,6 +54,8 @@ ALLOW_ISSUE_REFUSAL="true"
 REFUSAL_REQUIRES_BACKLOG_MOVE="true"
 ```
 
+`TODO_VALUE`, `IN_PROGRESS_VALUE`, `DONE_VALUE`, and `BACKLOG_VALUE` are matched against the live project field options case-insensitively after trimming and collapsing whitespace, so config can safely use `In Progress` even when the project option is `In progress`.
+
 Optional recommended settings:
 
 ```bash
@@ -62,4 +64,3 @@ MAX_REFUSAL_COMMENT_UPDATES="3"
 ```
 
 ---
-

@@ -1,0 +1,7 @@
+REPO="stepango/grkr"
+PROJECT_OWNER="stepango"
+PROJECT_NUMBER="1"
+STATUS_FIELD_NAME="Status"
+TODO_VALUE="Todo"
+BACKLOG_VALUE="Backlog"
+PRIORITY_FIELD_NAME="Priority"

@@ -22,7 +22,7 @@ npm test
 
 1. Validates prerequisites (clean git state, gh auth)
 2. Fetches issue details using `gh issue view`
-3. Creates/switch to branch `issue-N`
+3. Reuses branch `issue-N` when it already exists locally or remotely, otherwise creates it
 4. Runs `codex exec` with a detailed prompt based on the issue
 5. After Codex finishes implementing, grkr commits, pushes, and opens a PR that links the issue
 

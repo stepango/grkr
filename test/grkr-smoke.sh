@@ -12,6 +12,7 @@ chmod +x "$tmpdir/doctor.sh"
 real_git=$(command -v git)
 mkdir -p "$tmpdir/bin"
 gh_log="$tmpdir/gh.log"
+issue_comment_body="$tmpdir/issue-comment-body.log"
 mkdir -p "$tmpdir/.grkr"
 
 cat > "$tmpdir/.grkr/config.sh" <<'EOF'
@@ -30,6 +31,25 @@ printf '%s\n' "\$*" >> "$gh_log"
 case "\$1 \$2" in
   'auth status') exit 0 ;;
   'issue view') printf '{"title":"Test issue","body":"Body","url":"https://example.com","number":1}\n' ;;
+  'issue comment')
+    shift 2
+    while [ "\$#" -gt 0 ]; do
+      case "\$1" in
+        --body-file)
+          cat "\$2" >> "$issue_comment_body"
+          shift 2
+          ;;
+        --body)
+          printf '%s\n' "\$2" >> "$issue_comment_body"
+          shift 2
+          ;;
+        *)
+          shift
+          ;;
+      esac
+    done
+    exit 0
+    ;;
   'pr create') echo 'https://example.com/pr/1' ;;
   'issue edit') exit 0 ;;
   *) exit 0 ;;
@@ -82,3 +102,5 @@ grep -F "✅ codex has finished implementing the changes." "$output_file" >/dev/
 grep -F "✅ PR created: https://example.com/pr/1" "$output_file" >/dev/null
 grep -F "Fixes #1" "$gh_log" >/dev/null
 grep -F "Issue: [#1](https://example.com)" "$gh_log" >/dev/null
+grep -F "🚀 Running codex to implement the issue..." "$issue_comment_body" >/dev/null
+grep -F "✅ PR created: https://example.com/pr/1" "$issue_comment_body" >/dev/null

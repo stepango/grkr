@@ -6,13 +6,15 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 mkdir -p "${HOME:-.}/.grkr/logs"
 LOGFILE="${HOME:-.}/.grkr/logs/grkr-$(date +%Y%m%d-%H%M%S).log"
+CURRENT_ISSUE=""
+CURRENT_PROMPT_FILE=""
+ATTACH_ISSUE_LOGS=0
 if command -v tee >/dev/null 2>&1; then
   LOG_PIPE=$(mktemp "${TMPDIR:-/tmp}/grkr-log.XXXXXX")
   rm -f "$LOG_PIPE"
   mkfifo "$LOG_PIPE"
   tee -a "$LOGFILE" < "$LOG_PIPE" &
   LOG_TEE_PID=$!
-  trap 'rm -f "$LOG_PIPE"; kill "$LOG_TEE_PID" 2>/dev/null || true' EXIT
   exec >"$LOG_PIPE" 2>&1
 else
   exec >>"$LOGFILE" 2>&1
@@ -27,6 +29,24 @@ usage() {
 
 MAX_FILE_LINES=1000
 VALIDATION_OK=0
+
+attach_issue_logs() {
+  local issue=${CURRENT_ISSUE:-}
+  [ -n "$issue" ] || return 0
+  [ -f "$LOGFILE" ] || return 0
+  gh issue comment "$issue" --body-file "$LOGFILE" >/dev/null 2>&1 || true
+}
+
+cleanup_on_exit() {
+  [ -n "${CURRENT_PROMPT_FILE:-}" ] && rm -f "$CURRENT_PROMPT_FILE" 2>/dev/null || true
+  if [ "${ATTACH_ISSUE_LOGS:-0}" -eq 1 ]; then
+    attach_issue_logs
+  fi
+  [ -n "${LOG_PIPE:-}" ] && rm -f "$LOG_PIPE" 2>/dev/null || true
+  [ -n "${LOG_TEE_PID:-}" ] && kill "$LOG_TEE_PID" 2>/dev/null || true
+}
+
+trap cleanup_on_exit EXIT
 
 if doctor_validate; then
   VALIDATION_OK=1
@@ -114,6 +134,8 @@ process_issue() {
   echo "📝 Issue: $TITLE"
   echo "🔗 $URL"
   BRANCH="issue-$ISSUE"
+  CURRENT_ISSUE="$ISSUE"
+  ATTACH_ISSUE_LOGS=1
   if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
     echo "⚠️ Branch $BRANCH already exists remotely. Checking it out..."
     git checkout --ignore-other-worktrees "$BRANCH"
@@ -122,7 +144,7 @@ process_issue() {
     echo "🌿 Created and switched to branch: $BRANCH"
   fi
   prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-prompt.XXXXXX")
-  trap 'rm -f "$prompt_file"' RETURN
+  CURRENT_PROMPT_FILE="$prompt_file"
   cat > "$prompt_file" << EOF
 Implement the GitHub issue described below using the Codex coding agent best practices.
 
@@ -151,6 +173,10 @@ EOF
   echo ""
   echo "✅ codex has finished implementing the changes."
   publish_issue_changes "$ISSUE" "$TITLE" "$URL"
+  rm -f "$prompt_file"
+  CURRENT_PROMPT_FILE=""
+  ATTACH_ISSUE_LOGS=0
+  attach_issue_logs
 }
 
 if [ "$MODE" = "--project" ]; then

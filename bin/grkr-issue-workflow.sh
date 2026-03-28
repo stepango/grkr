@@ -37,8 +37,8 @@ issue_worktree_base_ref() {
 prepare_issue_worktree() {
   local branch=$1
   local task_slug=$2
+  local base_ref=${3:-}
   local worktree_dir
-  local base_ref
 
   worktree_dir=$(issue_worktree_dir "$task_slug")
   mkdir -p "$(dirname "$worktree_dir")"
@@ -56,7 +56,9 @@ prepare_issue_worktree() {
     echo "⚠️ Branch $branch already exists remotely. Reusing it in an issue worktree..." >&2
     git worktree add -b "$branch" "$worktree_dir" "origin/$branch" >/dev/null
   else
-    base_ref=$(issue_worktree_base_ref)
+    if [ -z "$base_ref" ]; then
+      base_ref=$(issue_worktree_base_ref)
+    fi
     git worktree add -b "$branch" "$worktree_dir" "$base_ref" >/dev/null
     echo "🌿 Created issue worktree for branch: $branch" >&2
   fi

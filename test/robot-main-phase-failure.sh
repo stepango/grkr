@@ -7,8 +7,11 @@ trap 'rm -rf "$tmpdir"' EXIT
 cp bin/robot-main.sh "$tmpdir/robot-main.sh"
 cp bin/worker-sync-main.sh "$tmpdir/worker-sync-main.sh"
 cp bin/worker-pick-issue.sh "$tmpdir/worker-pick-issue.sh"
+cp bin/worker-scan-comments.sh "$tmpdir/worker-scan-comments.sh"
+cp bin/worker-handle-comment.sh "$tmpdir/worker-handle-comment.sh"
+cp bin/grkr-comment-workflow.sh "$tmpdir/grkr-comment-workflow.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
-chmod +x "$tmpdir/robot-main.sh" "$tmpdir/worker-sync-main.sh" "$tmpdir/worker-pick-issue.sh" "$tmpdir/doctor.sh"
+chmod +x "$tmpdir/robot-main.sh" "$tmpdir/worker-sync-main.sh" "$tmpdir/worker-pick-issue.sh" "$tmpdir/worker-scan-comments.sh" "$tmpdir/worker-handle-comment.sh" "$tmpdir/doctor.sh"
 
 real_git=$(command -v git)
 mkdir -p "$tmpdir/bin" "$tmpdir/.grkr"

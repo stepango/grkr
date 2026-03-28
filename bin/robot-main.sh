@@ -310,7 +310,24 @@ phase_scan_prs_impl() {
 }
 
 phase_scan_comments_impl() {
-  log_info "scan_and_schedule_comment_commands" "-" "repo/$REPO" "scheduled_jobs=0 worker_logic=pending"
+  local status=0
+
+  if [ "$VALIDATION_OK" -ne 1 ]; then
+    log_warn "scan_and_schedule_comment_commands" "-" "repo/$REPO" "skipped validation_ok=false"
+    return 0
+  fi
+
+  "$SCRIPT_DIR/worker-scan-comments.sh" || status=$?
+
+  case "$status" in
+    0)
+      log_info "scan_and_schedule_comment_commands" "-" "repo/$REPO" "worker_logic=enabled"
+      return 0
+      ;;
+    *)
+      return "$status"
+      ;;
+  esac
 }
 
 phase_pick_issue_impl() {

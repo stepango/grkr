@@ -6,7 +6,7 @@
     "grkr": "bin/grkr"
   },
   "scripts": {
-    "test": "bash test/grkr-smoke.sh"
+    "test": "bash test/grkr-smoke.sh && bash test/grkr-line-limit.sh"
   },
   "keywords": ["cli", "github", "codex", "ai", "coding-agent"],
   "author": "stepango",

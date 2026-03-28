@@ -22,6 +22,8 @@ usage() {
   exit 1
 }
 
+MAX_FILE_LINES=1000
+
 if [ -z "$2" ]; then
   usage
 fi
@@ -69,17 +71,14 @@ check_file_line_limit() {
   local file
   local line_count
   local violations=0
-  while IFS= read -r file; do
+  while IFS= read -r -d '' file; do
     [ -n "$file" ] || continue
-    [ -f "$file" ] || continue
-    line_count=$(wc -l < "$file")
-    if [ "$line_count" -gt 1000 ]; then
-      echo "❌ $file has $line_count lines. Files must be 1000 lines or fewer."
+    line_count=$(git show ":$file" | wc -l | tr -d '[:space:]')
+    if [ "$line_count" -gt "$MAX_FILE_LINES" ]; then
+      echo "❌ $file has $line_count lines. Files must be $MAX_FILE_LINES lines or fewer."
       violations=1
     fi
-  done <<EOF
-$(git diff --cached --name-only --diff-filter=AM)
-EOF
+  done < <(git diff --cached --name-only --diff-filter=ACMR -z)
   return $violations
 }
 

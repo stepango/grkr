@@ -96,6 +96,136 @@ if [ "$VALIDATION_OK" -eq 1 ]; then
   fi
 fi
 
+project_status_updates_enabled() {
+  case "${ENABLE_PROJECT_STATUS_UPDATES:-true}" in
+    false|False|FALSE|0|no|No|NO)
+      return 1
+      ;;
+  esac
+  return 0
+}
+
+issue_project_status_name() {
+  local issue_json=$1
+  local project_status
+
+  project_status=$(printf '%s' "$issue_json" | jq -r --arg project_number "$PROJECT_NUMBER" '
+    (.projectItems // [] | if type == "array" then . else [] end
+      | map(select(((.project.number // .number // "") | tostring) == $project_number))
+      | .[0].status.name) // empty
+  ')
+  if [ -n "$project_status" ]; then
+    printf '%s\n' "$project_status"
+    return 0
+  fi
+
+  printf '%s' "$issue_json" | jq -r '
+    (.projectItems // [] | if type == "array" then . else [] end | .[0].status.name) // empty
+  '
+}
+
+issue_project_item_id() {
+  local issue=$1
+  local issue_json=$2
+  local item_id
+  local items_json
+
+  item_id=$(printf '%s' "$issue_json" | jq -r --arg project_number "$PROJECT_NUMBER" '
+    (.projectItems // [] | if type == "array" then . else [] end
+      | map(select(((.project.number // .number // "") | tostring) == $project_number))
+      | .[0].id) // empty
+  ')
+  if [ -n "$item_id" ]; then
+    printf '%s\n' "$item_id"
+    return 0
+  fi
+
+  item_id=$(printf '%s' "$issue_json" | jq -r '
+    (.projectItems // [] | if type == "array" then . else [] end | .[0].id) // empty
+  ')
+  if [ -n "$item_id" ]; then
+    printf '%s\n' "$item_id"
+    return 0
+  fi
+
+  items_json=$(gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --format json 2>/dev/null || true)
+  [ -n "$items_json" ] || return 0
+
+  printf '%s' "$items_json" | jq -r --arg issue "$issue" '
+    ((.items // .) | if type == "array" then . else [] end
+      | map(select(((.content.number // .content.issue.number // .issue.number // .number // "") | tostring) == $issue))
+      | .[0].id) // empty
+  '
+}
+
+move_issue_to_in_progress() {
+  local issue=$1
+  local issue_json=$2
+  local item_id
+  local current_status
+  local project_json
+  local field_json
+  local project_id
+  local field_id
+  local option_id
+  local edit_output
+
+  if ! project_status_updates_enabled; then
+    return 0
+  fi
+
+  item_id=$(issue_project_item_id "$issue" "$issue_json")
+  if [ -z "$item_id" ]; then
+    echo "⚠️ Issue #$issue is not linked to project #$PROJECT_NUMBER. Continuing without moving it to ${IN_PROGRESS_VALUE:-In Progress}."
+    return 0
+  fi
+
+  current_status=$(issue_project_status_name "$issue_json")
+  if [ "$current_status" = "${IN_PROGRESS_VALUE:-In Progress}" ]; then
+    echo "🚧 Issue #$issue is already in ${IN_PROGRESS_VALUE:-In Progress}."
+    return 0
+  fi
+
+  project_json=$(gh project view "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --format json 2>&1) || {
+    echo "❌ Unable to load project #$PROJECT_NUMBER before starting issue #$issue: $project_json"
+    return 1
+  }
+  project_id=$(printf '%s' "$project_json" | jq -r '.id // .project.id // empty')
+  if [ -z "$project_id" ]; then
+    echo "❌ Unable to determine project id for project #$PROJECT_NUMBER."
+    return 1
+  fi
+
+  field_json=$(gh project field-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --format json 2>&1) || {
+    echo "❌ Unable to load project fields for project #$PROJECT_NUMBER: $field_json"
+    return 1
+  }
+  field_id=$(printf '%s' "$field_json" | jq -r --arg field_name "$STATUS_FIELD_NAME" '
+    ((if type == "object" and has("fields") then .fields else . end) | if type == "array" then . else [] end
+      | map(select(.name == $field_name))
+      | .[0].id) // empty
+  ')
+  option_id=$(printf '%s' "$field_json" | jq -r --arg field_name "$STATUS_FIELD_NAME" --arg option_name "${IN_PROGRESS_VALUE:-In Progress}" '
+    ((if type == "object" and has("fields") then .fields else . end) | if type == "array" then . else [] end
+      | map(select(.name == $field_name))
+      | .[0].options // []
+      | map(select(.name == $option_name))
+      | .[0].id) // empty
+  ')
+
+  if [ -z "$field_id" ] || [ -z "$option_id" ]; then
+    echo "❌ Unable to resolve the \"$STATUS_FIELD_NAME\" option \"${IN_PROGRESS_VALUE:-In Progress}\" for project #$PROJECT_NUMBER."
+    return 1
+  fi
+
+  edit_output=$(gh project item-edit --id "$item_id" --field-id "$field_id" --project-id "$project_id" --single-select-option-id "$option_id" 2>&1) || {
+    echo "❌ Unable to move issue #$issue to ${IN_PROGRESS_VALUE:-In Progress}: $edit_output"
+    return 1
+  }
+
+  echo "🚧 Moved issue #$issue to ${IN_PROGRESS_VALUE:-In Progress}."
+}
+
 check_file_line_limit() {
   local file
   local line_count
@@ -276,7 +406,7 @@ process_issue() {
     return 1
   fi
   echo "📋 Fetching issue #$ISSUE..."
-  ISSUE_JSON=$(gh issue view "$ISSUE" --json title,body,url,number 2>&1)
+  ISSUE_JSON=$(gh issue view "$ISSUE" --json title,body,url,number,projectItems 2>&1)
   if echo "$ISSUE_JSON" | grep -q "Could not resolve"; then
     echo "❌ Issue #$ISSUE not found."
     return 1
@@ -289,6 +419,7 @@ process_issue() {
   BRANCH="issue-$ISSUE"
   CURRENT_ISSUE="$ISSUE"
   ATTACH_ISSUE_LOGS=1
+  move_issue_to_in_progress "$ISSUE" "$ISSUE_JSON" || return 1
   if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
     echo "⚠️ Branch $BRANCH already exists locally. Checking it out..."
     git checkout --ignore-other-worktrees "$BRANCH"
@@ -355,7 +486,7 @@ if [ "$MODE" = "--project" ]; then
       continue
     fi
     echo "🔍 Querying issues in todo state..."
-    TODO_ISSUES=$(gh issue list --state open --json number,title,projectItems | jq -r '.[] | select(.projectItems | any(.status.name == "Todo")) | .number')
+    TODO_ISSUES=$(gh issue list --state open --json number,title,projectItems | jq -r --arg todo "$TODO_VALUE" '.[] | select(.projectItems | any(.status.name == $todo)) | .number')
     for ISSUE in $TODO_ISSUES; do
       echo "📋 Found todo issue #$ISSUE, implementing..."
       process_issue "$ISSUE"

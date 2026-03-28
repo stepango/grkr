@@ -39,6 +39,10 @@ To support refusal, the project must also define a configured **Backlog** state:
 
 If refusal occurs, the issue is moved from `Todo` to `Backlog`.
 
+### 3.4.1 Project In Progress state
+
+When issue execution is about to begin, the issue should be moved from `Todo` to the configured **In Progress** state before the workflow creates or checks out the issue branch.
+
 ### 3.5 Priority field
 
 The project priority field may be either:
@@ -73,4 +77,3 @@ The issue workflow can end in one of these states:
 `refused` is a first-class outcome and is **not** treated as an execution failure.
 
 ---
-

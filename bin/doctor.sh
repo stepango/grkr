@@ -74,6 +74,8 @@ doctor_validate_config() {
     return 1
   }
 
+  IN_PROGRESS_VALUE=${IN_PROGRESS_VALUE:-"In Progress"}
+
   local required_vars="REPO PROJECT_OWNER PROJECT_NUMBER STATUS_FIELD_NAME TODO_VALUE BACKLOG_VALUE PRIORITY_FIELD_NAME"
   local var
   local status=0
@@ -123,6 +125,7 @@ PROJECT_OWNER="$project_owner"
 PROJECT_NUMBER="$project_number"
 STATUS_FIELD_NAME="Status"
 TODO_VALUE="Todo"
+IN_PROGRESS_VALUE="In Progress"
 BACKLOG_VALUE="Backlog"
 PRIORITY_FIELD_NAME="Priority"
 LOOP_INTERVAL_SECS="20"

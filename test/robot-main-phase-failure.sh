@@ -5,8 +5,9 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-robot-main-failure.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
 cp bin/robot-main.sh "$tmpdir/robot-main.sh"
+cp bin/worker-sync-main.sh "$tmpdir/worker-sync-main.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
-chmod +x "$tmpdir/robot-main.sh" "$tmpdir/doctor.sh"
+chmod +x "$tmpdir/robot-main.sh" "$tmpdir/worker-sync-main.sh" "$tmpdir/doctor.sh"
 
 real_git=$(command -v git)
 mkdir -p "$tmpdir/bin" "$tmpdir/.grkr"

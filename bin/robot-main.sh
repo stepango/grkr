@@ -637,6 +637,7 @@ run_phase() {
     log_info "$phase" "-" "repo/$REPO" "phase_finished=true"
   else
     case "$status" in
+      77) failure_class=policy ;;
       78) failure_class=config ;;
       *) failure_class=transient ;;
     esac

@@ -63,6 +63,7 @@ npm test
 - The issue helper posts the research, plan, and test checkpoint files as issue comments and reuses them on rerun when matching checkpoint markers already exist.
 - On success, `progress.json` is updated to `complete` and records the branch URL plus PR URL for the finished issue workflow.
 - The supervisor now keeps a retry backoff registry so repeated transient or policy failures do not hot-loop on the next tick.
+- Supervisor phase failures are classified as policy (`77`), config (`78`), or transient; policy and config failures use a long backoff window to avoid retry hot loops.
 - Cleanup runs every 10 supervisor loops and prunes stale worktrees plus obsolete locks and logs while leaving task folders and checkpoints in place.
 - `grkr --issue <id>` mirrors its launcher log to the GitHub issue as a collapsed details block so the thread stays readable by default.
 - Copy `.grkr/config.sh.example` to `.grkr/config.sh` and edit the values for your repo if you want to manage config manually.

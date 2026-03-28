@@ -1,20 +1,26 @@
 #!/bin/bash
 set -euo pipefail
 
-tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-robot-main-backoff.XXXXXX")
-trap 'rm -rf "$tmpdir"' EXIT
-
-cp bin/robot-main.sh "$tmpdir/robot-main.sh"
-cp bin/worker-sync-main.sh "$tmpdir/worker-sync-main.sh"
-cp bin/worker-pick-issue.sh "$tmpdir/worker-pick-issue.sh"
-cp bin/doctor.sh "$tmpdir/doctor.sh"
-chmod +x "$tmpdir/robot-main.sh" "$tmpdir/worker-sync-main.sh" "$tmpdir/worker-pick-issue.sh" "$tmpdir/doctor.sh"
-
 real_git=$(command -v git)
-mkdir -p "$tmpdir/bin" "$tmpdir/.grkr/state" "$tmpdir/.grkr/locks"
-output_file="$tmpdir/output.log"
 
-cat > "$tmpdir/.grkr/config.sh" <<'EOF'
+run_case() {
+  local exit_code=$1
+  local expected_failure_class=$2
+  local tmpdir
+  local output_file
+
+  tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-robot-main-backoff.XXXXXX")
+  output_file="$tmpdir/output.log"
+
+  cp bin/robot-main.sh "$tmpdir/robot-main.sh"
+  cp bin/worker-sync-main.sh "$tmpdir/worker-sync-main.sh"
+  cp bin/worker-pick-issue.sh "$tmpdir/worker-pick-issue.sh"
+  cp bin/doctor.sh "$tmpdir/doctor.sh"
+  chmod +x "$tmpdir/robot-main.sh" "$tmpdir/worker-sync-main.sh" "$tmpdir/worker-pick-issue.sh" "$tmpdir/doctor.sh"
+
+  mkdir -p "$tmpdir/bin" "$tmpdir/.grkr/state" "$tmpdir/.grkr/locks"
+
+  cat > "$tmpdir/.grkr/config.sh" <<'EOF'
 REPO="stepango/grkr"
 MAIN_BRANCH="main"
 PROJECT_OWNER="stepango"
@@ -26,7 +32,7 @@ PRIORITY_FIELD_NAME="Priority"
 LOOP_INTERVAL_SECS="0"
 EOF
 
-cat > "$tmpdir/bin/gh" <<'EOF'
+  cat > "$tmpdir/bin/gh" <<'EOF'
 #!/bin/bash
 case "$1 $2" in
   'auth status') exit 0 ;;
@@ -37,7 +43,7 @@ case "$1 $2" in
 esac
 EOF
 
-cat > "$tmpdir/bin/codex" <<'EOF'
+  cat > "$tmpdir/bin/codex" <<'EOF'
 #!/bin/bash
 case "${1-}" in
   --help) exit 0 ;;
@@ -45,17 +51,17 @@ case "${1-}" in
 esac
 EOF
 
-cat > "$tmpdir/bin/timeout" <<'EOF'
+  cat > "$tmpdir/bin/timeout" <<'EOF'
 #!/bin/bash
 exit 0
 EOF
 
-cat > "$tmpdir/bin/flock" <<'EOF'
+  cat > "$tmpdir/bin/flock" <<'EOF'
 #!/bin/bash
 exit 0
 EOF
 
-cat > "$tmpdir/bin/git" <<EOF
+  cat > "$tmpdir/bin/git" <<EOF
 #!/bin/bash
 case "\$*" in
   'rev-parse --show-toplevel') printf '%s\n' "$tmpdir" ;;
@@ -67,14 +73,20 @@ case "\$*" in
 esac
 EOF
 
-chmod +x "$tmpdir/bin/gh" "$tmpdir/bin/codex" "$tmpdir/bin/git" "$tmpdir/bin/timeout" "$tmpdir/bin/flock"
+  chmod +x "$tmpdir/bin/gh" "$tmpdir/bin/codex" "$tmpdir/bin/git" "$tmpdir/bin/timeout" "$tmpdir/bin/flock"
 
-(
-  cd "$tmpdir"
-  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_MAX_TICKS=2 GRKR_FAIL_PHASES=scan_and_schedule_comment_commands GRKR_FAIL_PHASE_EXIT_CODE=78 bash "$tmpdir/robot-main.sh" >"$output_file" 2>&1
-)
+  (
+    cd "$tmpdir"
+    PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_MAX_TICKS=2 GRKR_FAIL_PHASES=scan_and_schedule_comment_commands GRKR_FAIL_PHASE_EXIT_CODE="$exit_code" bash "$tmpdir/robot-main.sh" >"$output_file" 2>&1
+  )
 
-grep -F 'phase_failed exit_code=78' "$output_file" >/dev/null
-grep -F 'backoff_active=true' "$output_file" >/dev/null
-[ "$(grep -c 'phase_failed exit_code=78' "$output_file")" = "1" ]
+  grep -F "phase_failed exit_code=$exit_code" "$output_file" >/dev/null
+  grep -F 'backoff_active=true' "$output_file" >/dev/null
+  grep -F "failure_class=$expected_failure_class" "$output_file" >/dev/null
+  [ "$(grep -c "phase_failed exit_code=$exit_code" "$output_file")" = "1" ]
 
+  rm -rf "$tmpdir"
+}
+
+run_case 78 config
+run_case 77 policy

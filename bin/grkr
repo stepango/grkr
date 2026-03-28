@@ -1,12 +1,19 @@
 #!/bin/bash
-if [ -z "${GRKR_DEV:-}" ]; then
-  GRKR_DEV=1 exec curl -fsSL https://raw.githubusercontent.com/stepango/grkr/main/bin/grkr | bash -s -- "$@"
-fi
 set -e
 
-mkdir -p ~/.grkr/logs
-LOGFILE=~/.grkr/logs/grkr-$(date +%Y%m%d-%H%M%S).log
-exec > >(tee -a "$LOGFILE") 2>&1
+mkdir -p "${HOME:-.}/.grkr/logs"
+LOGFILE="${HOME:-.}/.grkr/logs/grkr-$(date +%Y%m%d-%H%M%S).log"
+if command -v tee >/dev/null 2>&1; then
+  LOG_PIPE=$(mktemp "${TMPDIR:-/tmp}/grkr-log.XXXXXX")
+  rm -f "$LOG_PIPE"
+  mkfifo "$LOG_PIPE"
+  tee -a "$LOGFILE" < "$LOG_PIPE" &
+  LOG_TEE_PID=$!
+  trap 'rm -f "$LOG_PIPE"; kill "$LOG_TEE_PID" 2>/dev/null || true' EXIT
+  exec >"$LOG_PIPE" 2>&1
+else
+  exec >>"$LOGFILE" 2>&1
+fi
 
 usage() {
   echo "Usage: grkr --issue <number> | grkr --project <id>"
@@ -57,6 +64,24 @@ if ! command -v jq &> /dev/null; then
 fi
 
 echo "✅ Prerequisites validated."
+
+check_file_line_limit() {
+  local file
+  local line_count
+  local violations=0
+  while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    [ -f "$file" ] || continue
+    line_count=$(wc -l < "$file")
+    if [ "$line_count" -gt 1000 ]; then
+      echo "❌ $file has $line_count lines. Files must be 1000 lines or fewer."
+      violations=1
+    fi
+  done <<EOF
+$(git diff --cached --name-only --diff-filter=AM)
+EOF
+  return $violations
+}
 
 process_issue() {
   local ISSUE=$1
@@ -115,6 +140,10 @@ EOF
     if git diff --cached --quiet; then
       echo "No changes for #$ISSUE"
     else
+      if ! check_file_line_limit; then
+        echo "❌ Commit aborted due to file size limit."
+        return 1
+      fi
       git commit -m "feat: implement #$ISSUE - $TITLE"
       git push -u origin "issue-$ISSUE"
       PR_URL=$(gh pr create --fill)

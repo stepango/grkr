@@ -10,6 +10,9 @@ npm install -g .
 
 # Run for an issue
 grkr --issue 1
+
+# Run the smoke test
+npm test
 ```
 
 ## How it works
@@ -19,6 +22,11 @@ grkr --issue 1
 3. Creates/switch to branch `issue-N`
 4. Runs `codex exec` with a detailed prompt based on the issue
 5. After Codex finishes implementing, you commit and create PR
+
+## Install Notes
+
+- `npm install -g .` installs the local `bin/grkr` launcher into your PATH.
+- `npm test` runs a mocked smoke test that checks the launcher path without needing GitHub access.
 
 ## Requirements
 

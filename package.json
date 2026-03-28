@@ -6,7 +6,7 @@
     "grkr": "bin/grkr"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "bash test/grkr-smoke.sh"
   },
   "keywords": ["cli", "github", "codex", "ai", "coding-agent"],
   "author": "stepango",

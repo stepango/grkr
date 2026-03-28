@@ -42,6 +42,9 @@ repo/
         implementation.log
         test.md
         codex/
+          implementation.log.parts/
+            part-0000
+            part-0001
           research.prompt.md
           plan.prompt.md
           implement.prompt.md
@@ -50,4 +53,3 @@ repo/
 ```
 
 ---
-

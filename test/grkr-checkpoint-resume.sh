@@ -5,6 +5,7 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-checkpoint-resume.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
 cp bin/grkr "$tmpdir/grkr.sh"
+cp bin/grkr-issue-workflow.sh "$tmpdir/grkr-issue-workflow.sh"
 cp bin/grkr-project-status.sh "$tmpdir/grkr-project-status.sh"
 cp bin/grkr-templates.sh "$tmpdir/grkr-templates.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
@@ -115,6 +116,7 @@ case "\${1-} \${2-}" in
     mv "\$comments_tmp" "$comments_json"
     exit 0
     ;;
+  'pr list') printf '[]\n' ;;
   'pr create') echo 'https://example.com/pr/1' ;;
   'project view') printf '{"id":"PROJECT_1"}\n' ;;
   'project field-list') printf '[{"id":"FIELD_STATUS","name":"Status","options":[{"id":"OPTION_TODO","name":"Todo"},{"id":"OPTION_IN_PROGRESS","name":"In progress"},{"id":"OPTION_DONE","name":"Done"}]}]\n' ;;
@@ -126,6 +128,12 @@ EOF
 
 cat > "$tmpdir/bin/codex" <<'EOF'
 #!/bin/bash
+prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-checkpoint-prompt.XXXXXX")
+cat > "$prompt_file"
+if grep -Fq "Reply with exactly one word on the first non-empty line: proceed or refuse." "$prompt_file"; then
+  printf 'proceed\n'
+fi
+rm -f "$prompt_file"
 exit 0
 EOF
 
@@ -145,11 +153,22 @@ case "\$1 \$2" in
   'rev-parse --show-toplevel') printf '%s\n' "$tmpdir" ;;
   'remote get-url') printf 'git@github.com:stepango/grkr.git\n' ;;
   'status --porcelain') exit 0 ;;
+  'show-ref --verify') exit 1 ;;
   'ls-remote --heads') exit 1 ;;
-  'checkout -b') exit 0 ;;
-  'add .') exit 0 ;;
-  'diff --cached --quiet') exit 1 ;;
-  'diff --cached') exit 1 ;;
+  'worktree add')
+    mkdir -p "\${5-}"
+    exit 0
+    ;;
+  'reset ') exit 0 ;;
+  'diff --name-only') printf 'README.md\n' ;;
+  'diff --cached')
+    case "\$3" in
+      --quiet) exit 1 ;;
+      --name-only) exit 0 ;;
+    esac
+    ;;
+  'ls-files --others') exit 0 ;;
+  'add -A') exit 0 ;;
   'commit -m') exit 0 ;;
   'push -u') exit 0 ;;
   *) exec "$real_git" "\$@" ;;
@@ -166,6 +185,7 @@ output_file="$tmpdir/output.log"
 
 grep -F "♻️ Reusing research checkpoint for issue #1 from comment 1111." "$output_file" >/dev/null
 grep -F "♻️ Reusing plan checkpoint for issue #1 from comment 1112." "$output_file" >/dev/null
+grep -F "🚀 Running codex to decide whether to implement the issue..." "$output_file" >/dev/null
 grep -F "📝 Posting test checkpoint for issue #1..." "$output_file" >/dev/null
 grep -F "✅ Moved issue #1 to Done." "$output_file" >/dev/null
 if grep -Fq "<!-- grkr:checkpoint stage=research task=issue-1-test-issue version=1 -->" "$issue_comment_body"; then

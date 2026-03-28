@@ -5,6 +5,7 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-smoke.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
 cp bin/grkr "$tmpdir/grkr.sh"
+cp bin/grkr-issue-workflow.sh "$tmpdir/grkr-issue-workflow.sh"
 cp bin/grkr-project-status.sh "$tmpdir/grkr-project-status.sh"
 cp bin/grkr-templates.sh "$tmpdir/grkr-templates.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
@@ -34,8 +35,8 @@ IN_PROGRESS_VALUE="In Progress"
 DONE_VALUE="Done"
 BACKLOG_VALUE="Backlog"
 PRIORITY_FIELD_NAME="Priority"
-TEST_COMMAND="printf 'test command passed\n'"
-BUILD_COMMAND="printf 'build command passed\n'"
+TEST_COMMAND="mkdir -p .grkr && pwd > .grkr/test-pwd.txt && printf 'test command passed\n'"
+BUILD_COMMAND="mkdir -p .grkr && pwd > .grkr/build-pwd.txt && printf 'build command passed\n'"
 EOF
 
 cat > "$tmpdir/bin/gh" <<EOF
@@ -83,6 +84,7 @@ case "\${1-} \${2-}" in
     mv "\$comments_tmp" "$comments_json"
     exit 0
     ;;
+  'pr list') printf '[]\n' ;;
   'pr create')
     shift 2
     while [ "\$#" -gt 0 ]; do
@@ -112,7 +114,14 @@ EOF
 
 cat > "$tmpdir/bin/codex" <<EOF
 #!/bin/bash
-cat > "$codex_prompt"
+prompt_file=\$(mktemp "${TMPDIR:-/tmp}/grkr-codex-prompt.XXXXXX")
+cat > "\$prompt_file"
+if grep -Fq "Reply with exactly one word on the first non-empty line: proceed or refuse." "\$prompt_file"; then
+  printf 'proceed\n'
+else
+  cat "\$prompt_file" > "$codex_prompt"
+fi
+rm -f "\$prompt_file"
 exit 0
 EOF
 
@@ -133,9 +142,39 @@ case "\$1 \$2" in
   'rev-parse --show-toplevel') printf '%s\n' "$tmpdir" ;;
   'remote get-url') printf 'git@github.com:stepango/grkr.git\n' ;;
   'status --porcelain') exit 0 ;;
+  'show-ref --verify')
+    if [ "\${4-}" = "refs/heads/issue-1" ]; then
+      exit 1
+    fi
+    if [ "\${4-}" = "refs/remotes/origin/main" ]; then
+      exit 1
+    fi
+    exit 1
+    ;;
   'ls-remote --heads') exit 1 ;;
-  'checkout -b') exit 0 ;;
-  'add .') exit 0 ;;
+  'worktree add')
+    mkdir -p "\${5-}"
+    exit 0
+    ;;
+  'reset ') exit 0 ;;
+  'diff --name-only')
+    printf 'README.md\n'
+    ;;
+  'diff --cached')
+    case "\$3" in
+      --name-only)
+        if [ "\${4-}" = "--diff-filter=ACMR" ]; then
+          exit 0
+        fi
+        exit 0
+        ;;
+      --quiet)
+        exit 1
+        ;;
+    esac
+    ;;
+  'ls-files --others') exit 0 ;;
+  'add -A') exit 0 ;;
   'diff --cached --quiet') exit 1 ;;
   'diff --cached') exit 1 ;;
   'commit -m') exit 0 ;;
@@ -153,12 +192,14 @@ output_file="$tmpdir/output.log"
 )
 
 grep -F "✅ Startup validation passed." "$output_file" >/dev/null
+grep -F "🚀 Running codex to decide whether to implement the issue..." "$output_file" >/dev/null
 grep -F "🚀 Running codex to implement the issue..." "$output_file" >/dev/null
 grep -F "✅ codex has finished implement the issue." "$output_file" >/dev/null
 grep -F "✅ PR created: https://example.com/pr/1" "$output_file" >/dev/null
+grep -F "🌿 Created issue worktree for branch: issue-1" "$output_file" >/dev/null
 grep -F "🚧 Moved issue #1 to In Progress." "$output_file" >/dev/null
-grep -F "🧪 Running verification command for issue #1: printf 'build command passed\n'" "$output_file" >/dev/null
-grep -F "🧪 Running verification command for issue #1: printf 'test command passed\n'" "$output_file" >/dev/null
+grep -F "🧪 Running verification command for issue #1: mkdir -p .grkr && pwd > .grkr/build-pwd.txt && printf 'build command passed\n'" "$output_file" >/dev/null
+grep -F "🧪 Running verification command for issue #1: mkdir -p .grkr && pwd > .grkr/test-pwd.txt && printf 'test command passed\n'" "$output_file" >/dev/null
 grep -F "📝 Posting research checkpoint for issue #1..." "$output_file" >/dev/null
 grep -F "📝 Posting plan checkpoint for issue #1..." "$output_file" >/dev/null
 grep -F "📝 Posting test checkpoint for issue #1..." "$output_file" >/dev/null
@@ -170,6 +211,8 @@ grep -F "Functional testing performed" "$pr_body" >/dev/null
 grep -F "Fixes #1" "$pr_body" >/dev/null
 grep -F "Issue: [#1](https://example.com)" "$pr_body" >/dev/null
 task_dir="$tmpdir/.grkr/tasks/issue-1-test-issue"
+worktree_dir="$tmpdir/.grkr/worktrees/issue-1-test-issue"
+worktree_realpath=$(cd "$worktree_dir" && pwd)
 [ -d "$task_dir" ]
 grep -F "<!-- grkr:checkpoint stage=research task=issue-1-test-issue version=1 -->" "$task_dir/research.md" >/dev/null
 grep -F "### Problem statement" "$task_dir/research.md" >/dev/null
@@ -180,12 +223,16 @@ grep -F "### Implementation plan" "$task_dir/plan.md" >/dev/null
 grep -F "## Refusal assessment" "$task_dir/plan.md" >/dev/null
 grep -F "<!-- grkr:checkpoint stage=test task=issue-1-test-issue version=1 -->" "$task_dir/test.md" >/dev/null
 grep -F "### Commands run" "$task_dir/test.md" >/dev/null
-grep -F "\`printf 'build command passed\\n'\`" "$task_dir/test.md" >/dev/null
-grep -F "\`printf 'test command passed\\n'\`" "$task_dir/test.md" >/dev/null
+grep -F "build command passed" "$task_dir/test.md" >/dev/null
+grep -F "test command passed" "$task_dir/test.md" >/dev/null
 grep -F "Overall result: PASS" "$task_dir/test.md" >/dev/null
 grep -F "### Recommendation" "$task_dir/test.md" >/dev/null
 grep -F "ready" "$task_dir/test.md" >/dev/null
 [ -f "$task_dir/implementation.log" ]
+[ -f "$worktree_dir/.grkr/build-pwd.txt" ]
+[ -f "$worktree_dir/.grkr/test-pwd.txt" ]
+grep -Fx "$worktree_realpath" "$worktree_dir/.grkr/build-pwd.txt" >/dev/null
+grep -Fx "$worktree_realpath" "$worktree_dir/.grkr/test-pwd.txt" >/dev/null
 jq -e '.task_slug == "issue-1-test-issue"' "$task_dir/progress.json" >/dev/null
 jq -e '.status == "complete"' "$task_dir/progress.json" >/dev/null
 jq -e '.stages.research.status == "done" and .stages.research.comment_id == 1000' "$task_dir/progress.json" >/dev/null
@@ -214,16 +261,19 @@ grep -F "Detailed description of the task" "$codex_prompt" >/dev/null
 grep -F "Implementation plan details" "$codex_prompt" >/dev/null
 grep -F "Testing results" "$codex_prompt" >/dev/null
 grep -F "Functional testing performed" "$codex_prompt" >/dev/null
+grep -F "Apply code changes in the issue worktree only." "$codex_prompt" >/dev/null
+grep -F "Stage only the files relevant to the issue." "$codex_prompt" >/dev/null
+grep -F "Issue worktree: $tmpdir/.grkr/worktrees/issue-1-test-issue" "$codex_prompt" >/dev/null
 grep -F "No file may exceed 1000 lines." "$codex_prompt" >/dev/null
 grep -F "Keep every changed file within the repository's per-file line limit." "$codex_prompt" >/dev/null
-grep -F ".grkr/tasks/issue-1-test-issue/research.md" "$codex_prompt" >/dev/null
-grep -F ".grkr/tasks/issue-1-test-issue/plan.md" "$codex_prompt" >/dev/null
+grep -F "$tmpdir/.grkr/tasks/issue-1-test-issue/research.md" "$codex_prompt" >/dev/null
+grep -F "$tmpdir/.grkr/tasks/issue-1-test-issue/plan.md" "$codex_prompt" >/dev/null
 
 project_edit_line=$(grep -n 'gh project item-edit --id ITEM_1 --field-id FIELD_STATUS --project-id PROJECT_1 --single-select-option-id OPTION_IN_PROGRESS' "$command_log" | head -n1 | cut -d: -f1)
-branch_create_line=$(grep -n 'git checkout -b issue-1' "$command_log" | head -n1 | cut -d: -f1)
+worktree_create_line=$(grep -n 'git worktree add -b issue-1' "$command_log" | head -n1 | cut -d: -f1)
 done_edit_line=$(grep -n 'gh project item-edit --id ITEM_1 --field-id FIELD_STATUS --project-id PROJECT_1 --single-select-option-id OPTION_DONE' "$command_log" | head -n1 | cut -d: -f1)
 [ -n "$project_edit_line" ]
-[ -n "$branch_create_line" ]
+[ -n "$worktree_create_line" ]
 [ -n "$done_edit_line" ]
-[ "$project_edit_line" -lt "$branch_create_line" ]
-[ "$branch_create_line" -lt "$done_edit_line" ]
+[ "$worktree_create_line" -lt "$project_edit_line" ]
+[ "$project_edit_line" -lt "$done_edit_line" ]

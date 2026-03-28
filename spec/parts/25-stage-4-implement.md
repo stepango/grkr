@@ -17,6 +17,8 @@ Codex modifies files in the issue worktree and implementation logs are stored in
 .grkr/tasks/<slug>/implementation.log
 ```
 
+If the transcript would exceed the repository line limit, `implementation.log` becomes a manifest and the full output is sharded into `codex/implementation.log.parts/`.
+
 ### 21.3 Constraints
 
 The implementation prompt must instruct Codex to:

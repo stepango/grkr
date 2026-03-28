@@ -6,8 +6,9 @@ trap 'rm -rf "$tmpdir"' EXIT
 
 cp bin/robot-main.sh "$tmpdir/robot-main.sh"
 cp bin/worker-sync-main.sh "$tmpdir/worker-sync-main.sh"
+cp bin/worker-pick-issue.sh "$tmpdir/worker-pick-issue.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
-chmod +x "$tmpdir/robot-main.sh" "$tmpdir/worker-sync-main.sh" "$tmpdir/doctor.sh"
+chmod +x "$tmpdir/robot-main.sh" "$tmpdir/worker-sync-main.sh" "$tmpdir/worker-pick-issue.sh" "$tmpdir/doctor.sh"
 
 real_git=$(command -v git)
 mkdir -p "$tmpdir/bin" "$tmpdir/.grkr/state" "$tmpdir/.grkr/locks"
@@ -42,6 +43,9 @@ cat > "$tmpdir/bin/gh" <<'EOF'
 #!/bin/bash
 case "$1 $2" in
   'auth status') exit 0 ;;
+  'api user') printf 'robot\n' ;;
+  'project item-list') printf '{"items":[]}\n' ;;
+  'project field-list') printf '[]\n' ;;
   *) exit 0 ;;
 esac
 EOF
@@ -99,6 +103,7 @@ grep -F 'phase=sync_main' "$tmpdir/.grkr/logs/loop.log" >/dev/null
 grep -F 'phase=scan_and_schedule_comment_commands' "$tmpdir/.grkr/logs/loop.log" >/dev/null
 grep -F 'phase_failed exit_code=64' "$tmpdir/.grkr/logs/loop.log" >/dev/null
 grep -F 'phase=pick_and_schedule_issue_execution' "$tmpdir/.grkr/logs/loop.log" >/dev/null
+grep -F 'candidate=none' "$tmpdir/.grkr/logs/loop.log" >/dev/null
 grep -F 'sleep_secs=0' "$tmpdir/.grkr/logs/loop.log" >/dev/null
 
 grep -F 'fetch' "$git_log" >/dev/null

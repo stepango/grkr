@@ -222,6 +222,10 @@ purge_stale_lock_files() {
   log_info "cleanup_stale_worktrees" "-" "repo/$REPO" "purged_stale_locks=$purged"
 }
 
+active_issue_execution_count() {
+  jq '[keys[]? | select(test("^issue:[0-9]+:execution$"))] | length' "$ACTIVE_JOBS_FILE"
+}
+
 phase_should_fail() {
   case ",${GRKR_FAIL_PHASES:-}," in
     *,"$1",*)
@@ -310,7 +314,42 @@ phase_scan_comments_impl() {
 }
 
 phase_pick_issue_impl() {
-  log_info "pick_and_schedule_issue_execution" "-" "repo/$REPO" "scheduled_jobs=0 worker_logic=pending"
+  local active_execution_count
+  local selection_file
+  local status=0
+
+  if [ "$VALIDATION_OK" -ne 1 ]; then
+    log_warn "pick_and_schedule_issue_execution" "-" "repo/$REPO" "skipped validation_ok=false"
+    return 0
+  fi
+
+  active_execution_count=$(active_issue_execution_count) || {
+    log_error "pick_and_schedule_issue_execution" "-" "repo/$REPO" "active_jobs_state_invalid=true"
+    return 1
+  }
+
+  if [ "$active_execution_count" -gt 0 ]; then
+    log_info "pick_and_schedule_issue_execution" "-" "repo/$REPO" "scheduled_jobs=0 active_issue_execution=true"
+    return 0
+  fi
+
+  selection_file=$(mktemp "${TMPDIR:-/tmp}/grkr-pick-issue.XXXXXX")
+  "$SCRIPT_DIR/worker-pick-issue.sh" > "$selection_file" || status=$?
+
+  if [ "$status" -ne 0 ]; then
+    rm -f "$selection_file"
+    return "$status"
+  fi
+
+  . "$selection_file"
+  rm -f "$selection_file"
+
+  if [ "${SELECTED:-0}" != "1" ]; then
+    log_info "pick_and_schedule_issue_execution" "-" "repo/$REPO" "scheduled_jobs=0 candidate=none"
+    return 0
+  fi
+
+  log_info "pick_and_schedule_issue_execution" "$JOB_KEY" "issue/$ISSUE_NUMBER" "scheduled_jobs=0 selected_issue=$ISSUE_NUMBER task_slug=$TASK_SLUG scheduling=pending"
 }
 
 phase_reap_impl() {

@@ -15,6 +15,7 @@ gh_log="$tmpdir/gh.log"
 issue_comment_body="$tmpdir/issue-comment-body.log"
 pr_body="$tmpdir/pr-body.log"
 codex_prompt="$tmpdir/codex-prompt.log"
+command_log="$tmpdir/commands.log"
 mkdir -p "$tmpdir/.grkr"
 
 cat > "$tmpdir/.grkr/config.sh" <<'EOF'
@@ -23,6 +24,7 @@ PROJECT_OWNER="stepango"
 PROJECT_NUMBER="1"
 STATUS_FIELD_NAME="Status"
 TODO_VALUE="Todo"
+IN_PROGRESS_VALUE="In Progress"
 BACKLOG_VALUE="Backlog"
 PRIORITY_FIELD_NAME="Priority"
 EOF
@@ -30,9 +32,10 @@ EOF
 cat > "$tmpdir/bin/gh" <<EOF
 #!/bin/bash
 printf '%s\n' "\$*" >> "$gh_log"
+printf 'gh %s\n' "\$*" >> "$command_log"
 case "\${1-} \${2-}" in
   'auth status') exit 0 ;;
-  'issue view') printf '{"title":"Test issue","body":"Body","url":"https://example.com","number":1}\n' ;;
+  'issue view') printf '{"title":"Test issue","body":"Body","url":"https://example.com","number":1,"projectItems":[{"id":"ITEM_1","number":1,"status":{"name":"Todo"}}]}\n' ;;
   'issue comment')
     shift 2
     while [ "\$#" -gt 0 ]; do
@@ -71,6 +74,9 @@ case "\${1-} \${2-}" in
     done
     echo 'https://example.com/pr/1'
     ;;
+  'project view') printf '{"id":"PROJECT_1"}\n' ;;
+  'project field-list') printf '[{"id":"FIELD_STATUS","name":"Status","options":[{"id":"OPTION_TODO","name":"Todo"},{"id":"OPTION_IN_PROGRESS","name":"In Progress"}]}]\n' ;;
+  'project item-edit') exit 0 ;;
   'issue edit') exit 0 ;;
   *) exit 0 ;;
 esac
@@ -94,6 +100,7 @@ EOF
 
 cat > "$tmpdir/bin/git" <<EOF
 #!/bin/bash
+printf 'git %s\n' "\$*" >> "$command_log"
 case "\$1 \$2" in
   'rev-parse --show-toplevel') printf '%s\n' "$tmpdir" ;;
   'remote get-url') printf 'git@github.com:stepango/grkr.git\n' ;;
@@ -121,6 +128,7 @@ grep -F "✅ Startup validation passed." "$output_file" >/dev/null
 grep -F "🚀 Running codex to implement the issue..." "$output_file" >/dev/null
 grep -F "✅ codex has finished implementing the changes." "$output_file" >/dev/null
 grep -F "✅ PR created: https://example.com/pr/1" "$output_file" >/dev/null
+grep -F "🚧 Moved issue #1 to In Progress." "$output_file" >/dev/null
 grep -F "## Detailed description of the task" "$pr_body" >/dev/null
 grep -F "## Implementation plan details" "$pr_body" >/dev/null
 grep -F "## Testing results" "$pr_body" >/dev/null
@@ -137,3 +145,9 @@ grep -F "Detailed description of the task" "$codex_prompt" >/dev/null
 grep -F "Implementation plan details" "$codex_prompt" >/dev/null
 grep -F "Testing results" "$codex_prompt" >/dev/null
 grep -F "Functional testing performed" "$codex_prompt" >/dev/null
+
+project_edit_line=$(grep -n 'gh project item-edit --id ITEM_1 --field-id FIELD_STATUS --project-id PROJECT_1 --single-select-option-id OPTION_IN_PROGRESS' "$command_log" | head -n1 | cut -d: -f1)
+branch_create_line=$(grep -n 'git checkout -b issue-1' "$command_log" | head -n1 | cut -d: -f1)
+[ -n "$project_edit_line" ]
+[ -n "$branch_create_line" ]
+[ "$project_edit_line" -lt "$branch_create_line" ]

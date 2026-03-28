@@ -45,6 +45,7 @@ fix(robot): implement #123 stabilize cache invalidation
 
 Default behavior:
 
+- move the configured project item to `In Progress`
 - push issue branch
 - create or update a PR for that branch
 - link the issue in the PR body
@@ -64,4 +65,3 @@ When that happens:
 This prevents half-finished silent failures.
 
 ---
-

@@ -21,7 +21,7 @@ npm test
 2. Fetches issue details using `gh issue view`
 3. Creates/switch to branch `issue-N`
 4. Runs `codex exec` with a detailed prompt based on the issue
-5. After Codex finishes implementing, you commit and create PR
+5. After Codex finishes implementing, grkr commits, pushes, and opens a PR that links the issue
 
 ## Install Notes
 

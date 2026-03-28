@@ -5,6 +5,7 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-checkpoint-resume.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
 cp bin/grkr "$tmpdir/grkr.sh"
+cp bin/grkr-templates.sh "$tmpdir/grkr-templates.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
 chmod +x "$tmpdir/grkr.sh"
 chmod +x "$tmpdir/doctor.sh"
@@ -24,8 +25,11 @@ PROJECT_NUMBER="1"
 STATUS_FIELD_NAME="Status"
 TODO_VALUE="Todo"
 IN_PROGRESS_VALUE="In Progress"
+DONE_VALUE="Done"
 BACKLOG_VALUE="Backlog"
 PRIORITY_FIELD_NAME="Priority"
+TEST_COMMAND="printf 'test command passed\n'"
+BUILD_COMMAND="printf 'build command passed\n'"
 EOF
 
 cat > "$comments_json" <<'EOF'
@@ -112,7 +116,7 @@ case "\${1-} \${2-}" in
     ;;
   'pr create') echo 'https://example.com/pr/1' ;;
   'project view') printf '{"id":"PROJECT_1"}\n' ;;
-  'project field-list') printf '[{"id":"FIELD_STATUS","name":"Status","options":[{"id":"OPTION_TODO","name":"Todo"},{"id":"OPTION_IN_PROGRESS","name":"In Progress"}]}]\n' ;;
+  'project field-list') printf '[{"id":"FIELD_STATUS","name":"Status","options":[{"id":"OPTION_TODO","name":"Todo"},{"id":"OPTION_IN_PROGRESS","name":"In Progress"},{"id":"OPTION_DONE","name":"Done"}]}]\n' ;;
   'project item-edit') exit 0 ;;
   'issue edit') exit 0 ;;
   *) exit 0 ;;
@@ -161,12 +165,20 @@ output_file="$tmpdir/output.log"
 
 grep -F "♻️ Reusing research checkpoint for issue #1 from comment 1111." "$output_file" >/dev/null
 grep -F "♻️ Reusing plan checkpoint for issue #1 from comment 1112." "$output_file" >/dev/null
+grep -F "📝 Posting test checkpoint for issue #1..." "$output_file" >/dev/null
+grep -F "✅ Moved issue #1 to Done." "$output_file" >/dev/null
 if grep -Fq "<!-- grkr:checkpoint stage=research task=issue-1-test-issue version=1 -->" "$issue_comment_body"; then
   exit 1
 fi
 if grep -Fq "<!-- grkr:checkpoint stage=plan task=issue-1-test-issue version=1 -->" "$issue_comment_body"; then
   exit 1
 fi
+grep -F "<!-- grkr:checkpoint stage=test task=issue-1-test-issue version=1 -->" "$issue_comment_body" >/dev/null
+grep -F "## Completion summary" "$issue_comment_body" >/dev/null
 grep -F "<summary>Execution log</summary>" "$issue_comment_body" >/dev/null
 jq -e '.stages.research.comment_id == 1111' "$tmpdir/.grkr/tasks/issue-1-test-issue/progress.json" >/dev/null
 jq -e '.stages.plan.comment_id == 1112' "$tmpdir/.grkr/tasks/issue-1-test-issue/progress.json" >/dev/null
+jq -e '.stages.test.comment_id == 1113' "$tmpdir/.grkr/tasks/issue-1-test-issue/progress.json" >/dev/null
+jq -e '.status == "complete"' "$tmpdir/.grkr/tasks/issue-1-test-issue/progress.json" >/dev/null
+jq -e '.branch_url == "https://github.com/stepango/grkr/tree/issue-1"' "$tmpdir/.grkr/tasks/issue-1-test-issue/progress.json" >/dev/null
+jq -e '.pr_url == "https://example.com/pr/1"' "$tmpdir/.grkr/tasks/issue-1-test-issue/progress.json" >/dev/null

@@ -9,6 +9,8 @@ LOGFILE="${HOME:-.}/.grkr/logs/grkr-$(date +%Y%m%d-%H%M%S).log"
 CURRENT_ISSUE=""
 CURRENT_PROMPT_FILE=""
 ATTACH_ISSUE_LOGS=0
+PR_URL=""
+BRANCH_URL=""
 if command -v tee >/dev/null 2>&1; then
   LOG_PIPE=$(mktemp "${TMPDIR:-/tmp}/grkr-log.XXXXXX")
   rm -f "$LOG_PIPE"
@@ -19,7 +21,6 @@ if command -v tee >/dev/null 2>&1; then
 else
   exec >>"$LOGFILE" 2>&1
 fi
-
 usage() {
   echo "Usage: grkr init <project-id> | grkr --issue <number> | grkr --project <id>"
   echo "Example: grkr init 42"
@@ -32,6 +33,7 @@ MAX_FILE_LINES=1000
 MAX_PR_BODY_CHARS=60000
 VALIDATION_OK=0
 TASKS_DIR=""
+. "$SCRIPT_DIR/grkr-templates.sh"
 
 MODE=${1:-}
 case "$MODE" in
@@ -159,9 +161,13 @@ issue_project_item_id() {
   '
 }
 
-move_issue_to_in_progress() {
+move_issue_to_project_status() {
   local issue=$1
   local issue_json=$2
+  local target_status=$3
+  local missing_item_message=$4
+  local already_message=$5
+  local moved_message=$6
   local item_id
   local current_status
   local project_json
@@ -177,13 +183,13 @@ move_issue_to_in_progress() {
 
   item_id=$(issue_project_item_id "$issue" "$issue_json")
   if [ -z "$item_id" ]; then
-    echo "⚠️ Issue #$issue is not linked to project #$PROJECT_NUMBER. Continuing without moving it to ${IN_PROGRESS_VALUE:-In Progress}."
+    echo "$missing_item_message"
     return 0
   fi
 
   current_status=$(issue_project_status_name "$issue_json")
-  if [ "$current_status" = "${IN_PROGRESS_VALUE:-In Progress}" ]; then
-    echo "🚧 Issue #$issue is already in ${IN_PROGRESS_VALUE:-In Progress}."
+  if [ "$current_status" = "$target_status" ]; then
+    echo "$already_message"
     return 0
   fi
 
@@ -206,7 +212,7 @@ move_issue_to_in_progress() {
       | map(select(.name == $field_name))
       | .[0].id) // empty
   ')
-  option_id=$(printf '%s' "$field_json" | jq -r --arg field_name "$STATUS_FIELD_NAME" --arg option_name "${IN_PROGRESS_VALUE:-In Progress}" '
+  option_id=$(printf '%s' "$field_json" | jq -r --arg field_name "$STATUS_FIELD_NAME" --arg option_name "$target_status" '
     ((if type == "object" and has("fields") then .fields else . end) | if type == "array" then . else [] end
       | map(select(.name == $field_name))
       | .[0].options // []
@@ -215,30 +221,70 @@ move_issue_to_in_progress() {
   ')
 
   if [ -z "$field_id" ] || [ -z "$option_id" ]; then
-    echo "❌ Unable to resolve the \"$STATUS_FIELD_NAME\" option \"${IN_PROGRESS_VALUE:-In Progress}\" for project #$PROJECT_NUMBER."
+    echo "❌ Unable to resolve the \"$STATUS_FIELD_NAME\" option \"$target_status\" for project #$PROJECT_NUMBER."
     return 1
   fi
 
   edit_output=$(gh project item-edit --id "$item_id" --field-id "$field_id" --project-id "$project_id" --single-select-option-id "$option_id" 2>&1) || {
-    echo "❌ Unable to move issue #$issue to ${IN_PROGRESS_VALUE:-In Progress}: $edit_output"
+    echo "❌ Unable to move issue #$issue to $target_status: $edit_output"
     return 1
   }
 
-  echo "🚧 Moved issue #$issue to ${IN_PROGRESS_VALUE:-In Progress}."
+  echo "$moved_message"
+}
+
+move_issue_to_in_progress() {
+  local issue=$1
+  local issue_json=$2
+  local target_status=${IN_PROGRESS_VALUE:-In Progress}
+
+  move_issue_to_project_status \
+    "$issue" \
+    "$issue_json" \
+    "$target_status" \
+    "⚠️ Issue #$issue is not linked to project #$PROJECT_NUMBER. Continuing without moving it to $target_status." \
+    "🚧 Issue #$issue is already in $target_status." \
+    "🚧 Moved issue #$issue to $target_status."
+}
+
+move_issue_to_done() {
+  local issue=$1
+  local issue_json=$2
+  local target_status=${DONE_VALUE:-Done}
+
+  move_issue_to_project_status \
+    "$issue" \
+    "$issue_json" \
+    "$target_status" \
+    "⚠️ Issue #$issue is not linked to project #$PROJECT_NUMBER. Continuing without moving it to $target_status." \
+    "✅ Issue #$issue is already in $target_status." \
+    "✅ Moved issue #$issue to $target_status."
+}
+
+collect_file_line_limit_violations() {
+  local file
+  local line_count
+
+  while IFS= read -r -d '' file; do
+    [ -n "$file" ] || continue
+    line_count=$(git show ":$file" | wc -l | tr -d '[:space:]')
+    if [ "$line_count" -gt "$MAX_FILE_LINES" ]; then
+      printf '%s\t%s\n' "$file" "$line_count"
+    fi
+  done < <(git diff --cached --name-only --diff-filter=ACMR -z)
 }
 
 check_file_line_limit() {
   local file
   local line_count
   local violations=0
-  while IFS= read -r -d '' file; do
+
+  while IFS="$(printf '\t')" read -r file line_count; do
     [ -n "$file" ] || continue
-    line_count=$(git show ":$file" | wc -l | tr -d '[:space:]')
-    if [ "$line_count" -gt "$MAX_FILE_LINES" ]; then
-      echo "❌ $file has $line_count lines. Files must be $MAX_FILE_LINES lines or fewer."
-      violations=1
-    fi
-  done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+    echo "❌ $file has $line_count lines. Files must be $MAX_FILE_LINES lines or fewer."
+    violations=1
+  done < <(collect_file_line_limit_violations)
+
   return $violations
 }
 
@@ -376,6 +422,48 @@ update_task_progress_stage() {
   mv "$tmp_file" "$progress_file"
 }
 
+mark_task_progress_failed() {
+  local progress_file=$1
+  local stage=$2
+  local now
+  local tmp_file
+
+  now=$(timestamp_utc)
+  tmp_file=$(mktemp "${TMPDIR:-/tmp}/grkr-progress.XXXXXX")
+  jq \
+    --arg stage "$stage" \
+    --arg updated_at "$now" '
+    .status = "failed"
+    | .updated_at = $updated_at
+    | .stages[$stage].status = "failed"
+  ' "$progress_file" > "$tmp_file"
+  mv "$tmp_file" "$progress_file"
+}
+
+mark_task_progress_complete() {
+  local progress_file=$1
+  local branch_url=$2
+  local pr_url=$3
+  local now
+  local tmp_file
+
+  now=$(timestamp_utc)
+  tmp_file=$(mktemp "${TMPDIR:-/tmp}/grkr-progress.XXXXXX")
+  jq \
+    --arg branch_url "$branch_url" \
+    --arg pr_url "$pr_url" \
+    --arg updated_at "$now" '
+    .status = "complete"
+    | .decision = "proceed"
+    | .updated_at = $updated_at
+    | .stages.implement_or_refuse.status = "done"
+    | .stages.test.status = "done"
+    | .branch_url = $branch_url
+    | .pr_url = $pr_url
+  ' "$progress_file" > "$tmp_file"
+  mv "$tmp_file" "$progress_file"
+}
+
 write_task_meta_env() {
   local task_dir=$1
   local issue=$2
@@ -402,129 +490,6 @@ write_issue_context_file() {
 
   context_file="$task_dir/issue-context.json"
   printf '%s' "$issue_json" | jq '.' > "$context_file"
-}
-
-write_research_checkpoint_file() {
-  local file=$1
-  local issue=$2
-  local title=$3
-  local body=$4
-  local url=$5
-  local task_slug=$6
-
-  cat > "$file" <<EOF
-$(checkpoint_marker research "$task_slug")
-
-## Research checkpoint
-
-### Problem statement
-
-Issue #$issue requests the following work:
-
-$title
-
-Source issue: $url
-
-$body
-
-### Current system behavior
-
-- \`grkr --issue $issue\` fetches issue metadata, optionally moves the project item to \`${IN_PROGRESS_VALUE:-In Progress}\`, checks out or creates \`issue-$issue\`, runs Codex once for implementation, then commits, pushes, and opens a pull request.
-- The current workflow does not create per-issue task folders or persist research and plan checkpoints that can be resumed on rerun.
-
-### Relevant files/modules
-
-- \`bin/grkr\`
-- \`README.md\`
-- \`test/grkr-smoke.sh\`
-
-### Assumptions
-
-- The new checkpoint stages should run inside the existing single-issue helper before the later implementation step.
-- Checkpoint comments should use the machine-detectable marker format from the split spec.
-- Re-running the same issue should reuse the existing task folder and avoid duplicate checkpoint comments.
-
-### Unknowns
-
-- Whether a later worktree-based issue executor will keep the current branch naming or replace it with task-slug worktrees.
-- Whether later stages will regenerate checkpoint content with Codex instead of the shell-generated scaffolding used here.
-
-### Risks
-
-- Duplicate checkpoint comments if marker matching is too loose.
-- Local checkpoint files drifting from the issue thread if execution stops after writing the file but before posting the comment.
-- Regressing the current branch and PR flow while adding staged issue state.
-
-### Inferred acceptance criteria
-
-- Create \`.grkr/tasks/$task_slug/\` for the issue.
-- Write \`research.md\`, \`plan.md\`, and \`progress.json\` under that task folder.
-- Post the research and plan checkpoints as issue comments.
-- Resume cleanly when matching checkpoint comments already exist.
-EOF
-}
-
-write_plan_checkpoint_file() {
-  local file=$1
-  local issue=$2
-  local title=$3
-  local task_slug=$4
-
-  cat > "$file" <<EOF
-$(checkpoint_marker plan "$task_slug")
-
-## Plan checkpoint
-
-Issue #$issue: $title
-
-### Implementation plan
-
-1. Derive the issue task slug and create the per-issue directory under \`.grkr/tasks/$task_slug/\`.
-2. Persist issue metadata and initialize \`progress.json\` with research and plan stages set to pending.
-3. Generate each checkpoint Markdown file when it is missing, then post it as an issue comment unless a matching checkpoint comment already exists.
-4. Reuse matching checkpoint comments on rerun so the workflow resumes without duplicate research or plan posts.
-5. Continue into the existing implementation flow after the two checkpoint stages complete.
-
-### Files likely to change
-
-- \`bin/grkr\`
-- \`README.md\`
-- \`package.json\`
-- \`test/grkr-smoke.sh\`
-- \`test/grkr-checkpoint-resume.sh\`
-
-### Migration or data concerns
-
-- Existing issue branches may already exist without any task folder; the first rerun must create the missing task state without disturbing branch reuse.
-- The new task artifacts live under \`.grkr/tasks/\` and do not require repository data migrations.
-
-### Test strategy
-
-- Extend the mocked issue flow test to assert task artifact creation and checkpoint comment posting.
-- Add a resume test that preloads matching checkpoint comments and verifies the launcher reuses them without reposting.
-- Run \`npm test\`.
-
-### Rollback strategy
-
-- Revert the launcher, test, and documentation changes.
-- Delete the generated \`.grkr/tasks/$task_slug/\` directory for any affected local runs if the checkpoint workflow needs to be removed.
-
-### Out-of-scope items
-
-- The implement-or-refuse decision gate.
-- Refusal checkpointing and Backlog transitions.
-- The later test-stage checkpoint.
-
-## Refusal assessment
-
-- Is the issue implementable now? Yes. The requested scope is limited to creating and resuming the research and plan checkpoint stages in the current shell launcher.
-- If not, why not? Not applicable.
-- Does the issue need clarification? No; the required files, comment behavior, and resume expectation are explicit in the issue and spec slices.
-- Does it need breakdown into smaller tasks? No; the next decision-gate and refusal work is already split into later issues.
-- Are dependencies missing? No new external dependency is required beyond the existing \`gh\`, \`jq\`, and \`codex\` tooling.
-- Is required design or product input absent? No; the checkpoint content and progress structure are specified.
-- Would implementation be too risky or too broad for an autonomous agent? No; the change is focused to the issue launcher, its tests, and the README.
-EOF
 }
 
 ensure_checkpoint_stage() {
@@ -581,6 +546,192 @@ ensure_checkpoint_stage() {
   update_task_progress_stage "$progress_file" "$stage" "done" "$comment_id"
 }
 
+build_command_list() {
+  local command_count=0
+
+  if [ -n "${BUILD_COMMAND:-}" ]; then
+    printf '%s\n' "$BUILD_COMMAND"
+    command_count=$((command_count + 1))
+  fi
+
+  if [ -n "${TEST_COMMAND:-}" ]; then
+    printf '%s\n' "$TEST_COMMAND"
+    command_count=$((command_count + 1))
+  fi
+
+  if [ "$command_count" -eq 0 ]; then
+    printf '%s\n' "npm test"
+  fi
+}
+
+cleanup_test_result_logs() {
+  local results_file=$1
+  local log_file
+
+  [ -f "$results_file" ] || return 0
+  while IFS="$(printf '\t')" read -r _ _ log_file; do
+    [ -n "$log_file" ] || continue
+    rm -f "$log_file"
+  done < "$results_file"
+}
+
+write_test_checkpoint_file() {
+  local checkpoint_file=$1
+  local issue=$2
+  local title=$3
+  local task_slug=$4
+  local commands_file=$5
+  local results_file=$6
+  local recommendation=$7
+  local overall_result=$8
+  local total_commands=$9
+  local passed_commands=${10}
+  local failed_commands=${11}
+
+  {
+    printf '%s\n\n' "$(checkpoint_marker test "$task_slug")"
+    printf '## Test checkpoint\n\n'
+    printf 'Issue #%s: %s\n\n' "$issue" "$title"
+
+    printf '### Commands run\n\n'
+    while IFS= read -r command; do
+      [ -n "$command" ] || continue
+      printf -- '- `%s`\n' "$command"
+    done < "$commands_file"
+    printf '\n'
+
+    printf '### Pass/fail summary\n\n'
+    printf -- '- Overall result: %s\n' "$overall_result"
+    printf -- '- Commands passed: %s/%s\n' "$passed_commands" "$total_commands"
+    if [ "$failed_commands" -gt 0 ]; then
+      printf -- '- Commands failed: %s\n' "$failed_commands"
+    fi
+    while IFS="$(printf '\t')" read -r status command _; do
+      [ -n "$command" ] || continue
+      printf -- '- `%s`: %s\n' "$command" "$status"
+    done < "$results_file"
+    printf '\n'
+
+    printf '### Output excerpts\n\n'
+    while IFS="$(printf '\t')" read -r status command log_file; do
+      [ -n "$command" ] || continue
+      printf '#### `%s`\n\n' "$command"
+      printf '```text\n'
+      if [ -s "$log_file" ]; then
+        sed -n '1,20p' "$log_file"
+        if [ "$(wc -l < "$log_file" | tr -d '[:space:]')" -gt 20 ]; then
+          printf '...\n'
+        fi
+      else
+        printf '(no output)\n'
+      fi
+      printf '```\n\n'
+    done < "$results_file"
+
+    printf '### Remaining risks\n\n'
+    if [ "$failed_commands" -gt 0 ]; then
+      printf -- '- At least one configured verification command failed; inspect the command output above before merging.\n'
+    fi
+    printf -- '- The checkpoint covers only the configured local verification commands; GitHub-side checks and broader manual validation may still be pending.\n\n'
+
+    printf '### Recommendation\n\n'
+    printf '%s\n' "$recommendation"
+  } > "$checkpoint_file"
+}
+
+ensure_test_checkpoint() {
+  local issue=$1
+  local issue_json=$2
+  local task_slug=$3
+  local task_dir=$4
+  local title=$5
+  local progress_file=$6
+  local checkpoint_file
+  local comment_id
+  local comment_body
+  local refreshed_comments_json
+  local command_list_file
+  local results_file
+  local command
+  local log_file
+  local status
+  local recommendation="ready"
+  local overall_result="PASS"
+  local total_commands=0
+  local passed_commands=0
+  local failed_commands=0
+
+  checkpoint_file="$task_dir/test.md"
+  comment_id=$(checkpoint_comment_id_from_json "$issue_json" test "$task_slug")
+
+  if [ -f "$checkpoint_file" ] && [ -n "$comment_id" ]; then
+    echo "♻️ Reusing test checkpoint for issue #$issue from comment $comment_id."
+    update_task_progress_stage "$progress_file" test "done" "$comment_id"
+    return 0
+  fi
+
+  if [ -n "$comment_id" ] && [ ! -f "$checkpoint_file" ]; then
+    comment_body=$(checkpoint_comment_body_from_json "$issue_json" test "$task_slug")
+    if [ -n "$comment_body" ]; then
+      printf '%s\n' "$comment_body" > "$checkpoint_file"
+      echo "♻️ Restored test checkpoint for issue #$issue from comment $comment_id."
+      update_task_progress_stage "$progress_file" test "done" "$comment_id"
+      return 0
+    fi
+  fi
+
+  command_list_file=$(mktemp "${TMPDIR:-/tmp}/grkr-test-commands.XXXXXX")
+  results_file=$(mktemp "${TMPDIR:-/tmp}/grkr-test-results.XXXXXX")
+  build_command_list > "$command_list_file"
+
+  while IFS= read -r command; do
+    [ -n "$command" ] || continue
+    total_commands=$((total_commands + 1))
+    log_file=$(mktemp "${TMPDIR:-/tmp}/grkr-test-output.XXXXXX")
+    echo "🧪 Running verification command for issue #$issue: $command"
+    if bash -lc "$command" > "$log_file" 2>&1; then
+      status="PASS"
+      passed_commands=$((passed_commands + 1))
+    else
+      status="FAIL"
+      failed_commands=$((failed_commands + 1))
+      overall_result="FAIL"
+      recommendation="needs follow-up"
+    fi
+    printf '%s\t%s\t%s\n' "$status" "$command" "$log_file" >> "$results_file"
+  done < "$command_list_file"
+
+  write_test_checkpoint_file \
+    "$checkpoint_file" \
+    "$issue" \
+    "$title" \
+    "$task_slug" \
+    "$command_list_file" \
+    "$results_file" \
+    "$recommendation" \
+    "$overall_result" \
+    "$total_commands" \
+    "$passed_commands" \
+    "$failed_commands"
+
+  echo "📝 Posting test checkpoint for issue #$issue..."
+  gh issue comment "$issue" --body-file "$checkpoint_file" >/dev/null
+  refreshed_comments_json=$(fetch_issue_comments_json "$issue")
+  comment_id=$(checkpoint_comment_id_from_json "$refreshed_comments_json" test "$task_slug")
+
+  if [ "$failed_commands" -gt 0 ]; then
+    update_task_progress_stage "$progress_file" test "failed" "$comment_id"
+    cleanup_test_result_logs "$results_file"
+    rm -f "$command_list_file" "$results_file"
+    mark_task_progress_failed "$progress_file" test
+    return 1
+  fi
+
+  update_task_progress_stage "$progress_file" test "done" "$comment_id"
+  cleanup_test_result_logs "$results_file"
+  rm -f "$command_list_file" "$results_file"
+}
+
 summarize_text() {
   local text=$1
   local max_chars=$2
@@ -599,71 +750,6 @@ summarize_text() {
           }
         }
       '
-}
-
-write_default_pr_body() {
-  local pr_body_file=$1
-  local body=$2
-  local title=$3
-
-  cat > "$pr_body_file" << EOF
-## Detailed description of the task
-
-$title
-
-$body
-
-## Implementation plan details
-
-- Review the issue and repository context.
-- Make the smallest focused change needed.
-- Verify the change with the available automated tests.
-
-## Testing results
-
-- Functional testing performed: the launcher completed the issue workflow and created this PR.
-EOF
-}
-
-write_compact_pr_body() {
-  local pr_body_file=$1
-  local body=$2
-  local title=$3
-  local short_title
-  local short_body
-
-  short_title=$(summarize_text "$title" 200)
-  short_body=$(summarize_text "$body" 4000)
-
-  cat > "$pr_body_file" << EOF
-## Detailed description of the task
-
-$short_title
-
-$short_body
-
-## Implementation plan details
-
-- The full Codex-generated summary exceeded GitHub's PR body size limit and was replaced with this compact summary.
-- See the issue discussion, commit history, and local grkr logs for the complete implementation details.
-
-## Testing results
-
-- Review the local grkr logs for the full Codex test output when needed.
-EOF
-}
-
-append_issue_footer() {
-  local pr_body_file=$1
-  local issue=$2
-  local url=$3
-
-  cat >> "$pr_body_file" << EOF
-
-Fixes #$issue
-
-Issue: [#$issue]($url)
-EOF
 }
 
 ensure_pr_body_limit() {
@@ -707,6 +793,65 @@ extract_codex_pr_body() {
   ensure_pr_body_limit "$pr_body_file" "$body" "$title" "$issue" "$url"
 }
 
+run_codex_prompt() {
+  local prompt_file=$1
+  local output_file=$2
+  local phase_label=$3
+  local mode=${4:-replace}
+  local run_output_file
+
+  run_output_file=$(mktemp "${TMPDIR:-/tmp}/grkr-codex-output.XXXXXX")
+  echo "🚀 Running codex to $phase_label..."
+  echo "Prompt saved to $prompt_file for reference."
+  codex exec --full-auto --cd "$(pwd)" < "$prompt_file" >"$run_output_file" 2>&1
+  cat "$run_output_file"
+  echo ""
+
+  if [ "$mode" = "append" ] && [ -f "$output_file" ]; then
+    {
+      printf '\n[grkr %s]\n\n' "$phase_label"
+      cat "$run_output_file"
+    } >> "$output_file"
+    rm -f "$run_output_file"
+  else
+    mv "$run_output_file" "$output_file"
+  fi
+
+  echo "✅ codex has finished $phase_label."
+}
+
+ensure_publishable_file_sizes() {
+  local issue=$1
+  local title=$2
+  local task_slug=$3
+  local prompt_file=$4
+  local codex_output_file=$5
+  local violations
+
+  git add .
+  if git diff --cached --quiet; then
+    return 0
+  fi
+
+  violations=$(collect_file_line_limit_violations)
+  if [ -z "$violations" ]; then
+    return 0
+  fi
+
+  check_file_line_limit
+  echo "🔧 Staged files exceed the $MAX_FILE_LINES-line limit. Asking codex to refactor before publish."
+  write_line_limit_fix_prompt "$prompt_file" "$issue" "$title" "$task_slug" "$violations"
+  run_codex_prompt "$prompt_file" "$codex_output_file" "remediate file line-limit violations" append
+
+  git add .
+  if check_file_line_limit; then
+    return 0
+  fi
+
+  echo "❌ Commit aborted due to file size limit."
+  return 1
+}
+
 publish_issue_changes() {
   local ISSUE=$1
   local TITLE=$2
@@ -729,6 +874,7 @@ publish_issue_changes() {
 
   git commit -m "feat: implement #$ISSUE - $TITLE"
   git push -u origin "issue-$ISSUE"
+  BRANCH_URL="https://github.com/$REPO/tree/issue-$ISSUE"
   PR_BODY_FILE=$(mktemp "${TMPDIR:-/tmp}/grkr-pr-body.XXXXXX")
   extract_codex_pr_body "$CODEX_OUTPUT_FILE" "$PR_BODY_FILE" "$BODY" "$TITLE" "$ISSUE" "$URL"
   PR_URL=$(gh pr create --title "$TITLE" --body-file "$PR_BODY_FILE")
@@ -738,6 +884,24 @@ publish_issue_changes() {
   rm -f "$PR_BODY_FILE"
 }
 
+post_completion_comment() {
+  local issue=$1
+  local title=$2
+  local branch_url=$3
+  local pr_url=$4
+
+  gh issue comment "$issue" --body "$(cat <<EOF
+## Completion summary
+
+Issue #$issue: $title
+
+- Recommendation: ready
+- Branch: $branch_url
+- PR: $pr_url
+EOF
+)" >/dev/null
+}
+
 process_issue() {
   local ISSUE=$1
   local prompt_file
@@ -745,6 +909,7 @@ process_issue() {
   local TASK_SLUG
   local TASK_DIR
   local PROGRESS_FILE
+  local codex_output_file
   if [ "$VALIDATION_OK" -ne 1 ]; then
     echo "⚠️ Validation failed; skipping issue #$ISSUE."
     return 1
@@ -787,49 +952,22 @@ process_issue() {
   fi
   prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-prompt.XXXXXX")
   CURRENT_PROMPT_FILE="$prompt_file"
-  cat > "$prompt_file" << EOF
-Implement the GitHub issue described below using the Codex coding agent best practices.
-
-**Issue #$ISSUE: $TITLE**
-**URL:** $URL
-
-**Description:**
-$BODY
-
-**Checkpoint files:**
-- .grkr/tasks/$TASK_SLUG/research.md
-- .grkr/tasks/$TASK_SLUG/plan.md
-
-**Expected final response:**
-## Detailed description of the task
-## Implementation plan details
-## Testing results
-- Functional testing performed
-
----
-
-**Instructions for you:**
-1. First explore the codebase using available tools (grep, glob, read, etc.) to understand the current structure and conventions.
-2. Follow the project's code style, naming conventions, and architecture.
-3. Make minimal, focused changes.
-4. Do not add comments unless specifically asked.
-5. After changes, run linting and tests if available (use the bash tool).
-6. Be concise in your responses.
-7. When done, the changes should fully address the issue.
-
-Begin by analyzing the project.
-EOF
-  echo "🚀 Running codex to implement the issue..."
-  echo "Prompt saved to $prompt_file for reference."
-  codex_output_file=$(mktemp "${TMPDIR:-/tmp}/grkr-codex.XXXXXX")
-  codex exec --full-auto --cd "$(pwd)" < "$prompt_file" >"$codex_output_file" 2>&1
-  cat "$codex_output_file"
-  echo ""
-  echo "✅ codex has finished implementing the changes."
-  publish_issue_changes "$ISSUE" "$TITLE" "$URL" "$BODY" "$codex_output_file"
+  write_issue_prompt_file "$prompt_file" "$ISSUE" "$TITLE" "$URL" "$BODY" "$TASK_SLUG"
+  codex_output_file="$TASK_DIR/implementation.log"
+  run_codex_prompt "$prompt_file" "$codex_output_file" "implement the issue"
+  ensure_publishable_file_sizes "$ISSUE" "$TITLE" "$TASK_SLUG" "$prompt_file" "$codex_output_file" || return 1
+  ensure_test_checkpoint "$ISSUE" "$ISSUE_JSON" "$TASK_SLUG" "$TASK_DIR" "$TITLE" "$PROGRESS_FILE" || return 1
+  if ! publish_issue_changes "$ISSUE" "$TITLE" "$URL" "$BODY" "$codex_output_file"; then
+    echo "⚠️ Issue #$ISSUE changes were not published."
+    return 1
+  fi
+  mark_task_progress_complete "$PROGRESS_FILE" "$BRANCH_URL" "$PR_URL"
+  if ! move_issue_to_done "$ISSUE" "$ISSUE_JSON"; then
+    echo "⚠️ Issue #$ISSUE implementation succeeded, but the project status could not be moved to ${DONE_VALUE:-Done}."
+  fi
+  post_completion_comment "$ISSUE" "$TITLE" "$BRANCH_URL" "$PR_URL"
   rm -f "$prompt_file"
   CURRENT_PROMPT_FILE=""
-  rm -f "$codex_output_file"
   ATTACH_ISSUE_LOGS=0
   attach_issue_logs
 }
@@ -848,7 +986,9 @@ if [ "$MODE" = "--project" ]; then
     TODO_ISSUES=$(gh issue list --state open --json number,title,projectItems | jq -r --arg todo "$TODO_VALUE" '.[] | select(.projectItems | any(.status.name == $todo)) | .number')
     for ISSUE in $TODO_ISSUES; do
       echo "📋 Found todo issue #$ISSUE, implementing..."
-      process_issue "$ISSUE"
+      if ! process_issue "$ISSUE"; then
+        echo "⚠️ Issue #$ISSUE failed during processing. Continuing to the next issue."
+      fi
     done
     echo "⏳ Sleeping 30 seconds..."
     sleep 30

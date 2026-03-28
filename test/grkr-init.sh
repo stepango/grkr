@@ -5,6 +5,7 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-init.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
 cp bin/grkr "$tmpdir/grkr.sh"
+cp bin/grkr-templates.sh "$tmpdir/grkr-templates.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
 chmod +x "$tmpdir/grkr.sh"
 chmod +x "$tmpdir/doctor.sh"
@@ -36,4 +37,7 @@ grep -F 'MAIN_BRANCH="main"' "$tmpdir/.grkr/config.sh" >/dev/null
 grep -F 'PROJECT_OWNER="stepango"' "$tmpdir/.grkr/config.sh" >/dev/null
 grep -F 'PROJECT_NUMBER="42"' "$tmpdir/.grkr/config.sh" >/dev/null
 grep -F 'IN_PROGRESS_VALUE="In Progress"' "$tmpdir/.grkr/config.sh" >/dev/null
+grep -F 'DONE_VALUE="Done"' "$tmpdir/.grkr/config.sh" >/dev/null
+grep -F 'TEST_COMMAND="npm test"' "$tmpdir/.grkr/config.sh" >/dev/null
+grep -F 'BUILD_COMMAND=""' "$tmpdir/.grkr/config.sh" >/dev/null
 grep -F 'LOOP_INTERVAL_SECS="20"' "$tmpdir/.grkr/config.sh" >/dev/null

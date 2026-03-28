@@ -31,6 +31,7 @@ usage() {
 MAX_FILE_LINES=1000
 MAX_PR_BODY_CHARS=60000
 VALIDATION_OK=0
+TASKS_DIR=""
 
 MODE=${1:-}
 case "$MODE" in
@@ -241,6 +242,345 @@ check_file_line_limit() {
   return $violations
 }
 
+timestamp_utc() {
+  date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+slugify_text() {
+  printf '%s' "$1" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed 's/[^a-z0-9]/-/g; s/-\{2,\}/-/g; s/^-//; s/-$//' \
+    | cut -c1-80
+}
+
+task_slug_for_issue() {
+  local issue=$1
+  local title=$2
+  local title_slug
+
+  title_slug=$(slugify_text "$title")
+  [ -n "$title_slug" ] || title_slug="task"
+  printf 'issue-%s-%s\n' "$issue" "$title_slug"
+}
+
+checkpoint_marker() {
+  local stage=$1
+  local task_slug=$2
+
+  printf '<!-- grkr:checkpoint stage=%s task=%s version=1 -->' "$stage" "$task_slug"
+}
+
+fetch_issue_comments_json() {
+  local issue=$1
+  local comments_json
+
+  comments_json=$(gh issue view "$issue" --comments --json comments 2>/dev/null || true)
+  [ -n "$comments_json" ] || comments_json='{"comments":[]}'
+  printf '%s\n' "$comments_json"
+}
+
+checkpoint_comment_id_from_json() {
+  local issue_json=$1
+  local stage=$2
+  local task_slug=$3
+  local marker
+
+  marker=$(checkpoint_marker "$stage" "$task_slug")
+  printf '%s' "$issue_json" | jq -r --arg marker "$marker" '
+    ((.comments // []) | if type == "array" then . else [] end
+      | map(select((.body // "") | contains($marker)))
+      | last
+      | .id) // empty
+  '
+}
+
+checkpoint_comment_body_from_json() {
+  local issue_json=$1
+  local stage=$2
+  local task_slug=$3
+  local marker
+
+  marker=$(checkpoint_marker "$stage" "$task_slug")
+  printf '%s' "$issue_json" | jq -r --arg marker "$marker" '
+    ((.comments // []) | if type == "array" then . else [] end
+      | map(select((.body // "") | contains($marker)))
+      | last
+      | .body) // empty
+  '
+}
+
+ensure_task_progress_file() {
+  local progress_file=$1
+  local issue=$2
+  local project_item_id=$3
+  local task_slug=$4
+  local branch=$5
+  local now
+  local tmp_file
+
+  [ -f "$progress_file" ] && return 0
+
+  now=$(timestamp_utc)
+  tmp_file=$(mktemp "${TMPDIR:-/tmp}/grkr-progress.XXXXXX")
+  jq -n \
+    --argjson issue_number "$issue" \
+    --arg project_item_id "$project_item_id" \
+    --arg task_slug "$task_slug" \
+    --arg branch "$branch" \
+    --arg started_at "$now" \
+    --arg updated_at "$now" '
+    {
+      issue_number: $issue_number,
+      task_slug: $task_slug,
+      branch: $branch,
+      status: "planning",
+      decision: "undecided",
+      stages: {
+        research: {status: "pending"},
+        plan: {status: "pending"},
+        implement_or_refuse: {status: "pending"},
+        test: {status: "pending"}
+      },
+      started_at: $started_at,
+      updated_at: $updated_at
+    }
+    | if $project_item_id == "" then . else . + {project_item_id: $project_item_id} end
+  ' > "$tmp_file"
+  mv "$tmp_file" "$progress_file"
+}
+
+update_task_progress_stage() {
+  local progress_file=$1
+  local stage=$2
+  local status=$3
+  local comment_id=$4
+  local now
+  local tmp_file
+
+  now=$(timestamp_utc)
+  tmp_file=$(mktemp "${TMPDIR:-/tmp}/grkr-progress.XXXXXX")
+  jq \
+    --arg stage "$stage" \
+    --arg status "$status" \
+    --arg comment_id "$comment_id" \
+    --arg updated_at "$now" '
+    .status = "planning"
+    | .updated_at = $updated_at
+    | .stages[$stage].status = $status
+    | if $comment_id == "" then
+        del(.stages[$stage].comment_id)
+      else
+        .stages[$stage].comment_id = ($comment_id | tonumber? // .)
+      end
+  ' "$progress_file" > "$tmp_file"
+  mv "$tmp_file" "$progress_file"
+}
+
+write_task_meta_env() {
+  local task_dir=$1
+  local issue=$2
+  local task_slug=$3
+  local branch=$4
+  local url=$5
+  local project_item_id=$6
+  local meta_file
+
+  meta_file="$task_dir/meta.env"
+  {
+    printf 'ISSUE_NUMBER=%q\n' "$issue"
+    printf 'TASK_SLUG=%q\n' "$task_slug"
+    printf 'BRANCH=%q\n' "$branch"
+    printf 'ISSUE_URL=%q\n' "$url"
+    printf 'PROJECT_ITEM_ID=%q\n' "$project_item_id"
+  } > "$meta_file"
+}
+
+write_issue_context_file() {
+  local task_dir=$1
+  local issue_json=$2
+  local context_file
+
+  context_file="$task_dir/issue-context.json"
+  printf '%s' "$issue_json" | jq '.' > "$context_file"
+}
+
+write_research_checkpoint_file() {
+  local file=$1
+  local issue=$2
+  local title=$3
+  local body=$4
+  local url=$5
+  local task_slug=$6
+
+  cat > "$file" <<EOF
+$(checkpoint_marker research "$task_slug")
+
+## Research checkpoint
+
+### Problem statement
+
+Issue #$issue requests the following work:
+
+$title
+
+Source issue: $url
+
+$body
+
+### Current system behavior
+
+- \`grkr --issue $issue\` fetches issue metadata, optionally moves the project item to \`${IN_PROGRESS_VALUE:-In Progress}\`, checks out or creates \`issue-$issue\`, runs Codex once for implementation, then commits, pushes, and opens a pull request.
+- The current workflow does not create per-issue task folders or persist research and plan checkpoints that can be resumed on rerun.
+
+### Relevant files/modules
+
+- \`bin/grkr\`
+- \`README.md\`
+- \`test/grkr-smoke.sh\`
+
+### Assumptions
+
+- The new checkpoint stages should run inside the existing single-issue helper before the later implementation step.
+- Checkpoint comments should use the machine-detectable marker format from the split spec.
+- Re-running the same issue should reuse the existing task folder and avoid duplicate checkpoint comments.
+
+### Unknowns
+
+- Whether a later worktree-based issue executor will keep the current branch naming or replace it with task-slug worktrees.
+- Whether later stages will regenerate checkpoint content with Codex instead of the shell-generated scaffolding used here.
+
+### Risks
+
+- Duplicate checkpoint comments if marker matching is too loose.
+- Local checkpoint files drifting from the issue thread if execution stops after writing the file but before posting the comment.
+- Regressing the current branch and PR flow while adding staged issue state.
+
+### Inferred acceptance criteria
+
+- Create \`.grkr/tasks/$task_slug/\` for the issue.
+- Write \`research.md\`, \`plan.md\`, and \`progress.json\` under that task folder.
+- Post the research and plan checkpoints as issue comments.
+- Resume cleanly when matching checkpoint comments already exist.
+EOF
+}
+
+write_plan_checkpoint_file() {
+  local file=$1
+  local issue=$2
+  local title=$3
+  local task_slug=$4
+
+  cat > "$file" <<EOF
+$(checkpoint_marker plan "$task_slug")
+
+## Plan checkpoint
+
+Issue #$issue: $title
+
+### Implementation plan
+
+1. Derive the issue task slug and create the per-issue directory under \`.grkr/tasks/$task_slug/\`.
+2. Persist issue metadata and initialize \`progress.json\` with research and plan stages set to pending.
+3. Generate each checkpoint Markdown file when it is missing, then post it as an issue comment unless a matching checkpoint comment already exists.
+4. Reuse matching checkpoint comments on rerun so the workflow resumes without duplicate research or plan posts.
+5. Continue into the existing implementation flow after the two checkpoint stages complete.
+
+### Files likely to change
+
+- \`bin/grkr\`
+- \`README.md\`
+- \`package.json\`
+- \`test/grkr-smoke.sh\`
+- \`test/grkr-checkpoint-resume.sh\`
+
+### Migration or data concerns
+
+- Existing issue branches may already exist without any task folder; the first rerun must create the missing task state without disturbing branch reuse.
+- The new task artifacts live under \`.grkr/tasks/\` and do not require repository data migrations.
+
+### Test strategy
+
+- Extend the mocked issue flow test to assert task artifact creation and checkpoint comment posting.
+- Add a resume test that preloads matching checkpoint comments and verifies the launcher reuses them without reposting.
+- Run \`npm test\`.
+
+### Rollback strategy
+
+- Revert the launcher, test, and documentation changes.
+- Delete the generated \`.grkr/tasks/$task_slug/\` directory for any affected local runs if the checkpoint workflow needs to be removed.
+
+### Out-of-scope items
+
+- The implement-or-refuse decision gate.
+- Refusal checkpointing and Backlog transitions.
+- The later test-stage checkpoint.
+
+## Refusal assessment
+
+- Is the issue implementable now? Yes. The requested scope is limited to creating and resuming the research and plan checkpoint stages in the current shell launcher.
+- If not, why not? Not applicable.
+- Does the issue need clarification? No; the required files, comment behavior, and resume expectation are explicit in the issue and spec slices.
+- Does it need breakdown into smaller tasks? No; the next decision-gate and refusal work is already split into later issues.
+- Are dependencies missing? No new external dependency is required beyond the existing \`gh\`, \`jq\`, and \`codex\` tooling.
+- Is required design or product input absent? No; the checkpoint content and progress structure are specified.
+- Would implementation be too risky or too broad for an autonomous agent? No; the change is focused to the issue launcher, its tests, and the README.
+EOF
+}
+
+ensure_checkpoint_stage() {
+  local stage=$1
+  local issue=$2
+  local issue_json=$3
+  local task_slug=$4
+  local task_dir=$5
+  local title=$6
+  local body=$7
+  local url=$8
+  local progress_file=$9
+  local checkpoint_file
+  local comment_id
+  local comment_body
+  local refreshed_comments_json
+
+  checkpoint_file="$task_dir/$stage.md"
+  comment_id=$(checkpoint_comment_id_from_json "$issue_json" "$stage" "$task_slug")
+
+  if [ -f "$checkpoint_file" ] && [ -n "$comment_id" ]; then
+    echo "♻️ Reusing $stage checkpoint for issue #$issue from comment $comment_id."
+    update_task_progress_stage "$progress_file" "$stage" "done" "$comment_id"
+    return 0
+  fi
+
+  if [ -n "$comment_id" ] && [ ! -f "$checkpoint_file" ]; then
+    comment_body=$(checkpoint_comment_body_from_json "$issue_json" "$stage" "$task_slug")
+    if [ -n "$comment_body" ]; then
+      printf '%s\n' "$comment_body" > "$checkpoint_file"
+      echo "♻️ Restored $stage checkpoint for issue #$issue from comment $comment_id."
+      update_task_progress_stage "$progress_file" "$stage" "done" "$comment_id"
+      return 0
+    fi
+  fi
+
+  case "$stage" in
+    research)
+      write_research_checkpoint_file "$checkpoint_file" "$issue" "$title" "$body" "$url" "$task_slug"
+      ;;
+    plan)
+      write_plan_checkpoint_file "$checkpoint_file" "$issue" "$title" "$task_slug"
+      ;;
+    *)
+      echo "❌ Unsupported checkpoint stage: $stage"
+      return 1
+      ;;
+  esac
+
+  echo "📝 Posting $stage checkpoint for issue #$issue..."
+  gh issue comment "$issue" --body-file "$checkpoint_file" >/dev/null
+  refreshed_comments_json=$(fetch_issue_comments_json "$issue")
+  comment_id=$(checkpoint_comment_id_from_json "$refreshed_comments_json" "$stage" "$task_slug")
+  update_task_progress_stage "$progress_file" "$stage" "done" "$comment_id"
+}
+
 summarize_text() {
   local text=$1
   local max_chars=$2
@@ -401,12 +741,16 @@ publish_issue_changes() {
 process_issue() {
   local ISSUE=$1
   local prompt_file
+  local PROJECT_ITEM_ID
+  local TASK_SLUG
+  local TASK_DIR
+  local PROGRESS_FILE
   if [ "$VALIDATION_OK" -ne 1 ]; then
     echo "⚠️ Validation failed; skipping issue #$ISSUE."
     return 1
   fi
   echo "📋 Fetching issue #$ISSUE..."
-  ISSUE_JSON=$(gh issue view "$ISSUE" --json title,body,url,number,projectItems 2>&1)
+  ISSUE_JSON=$(gh issue view "$ISSUE" --comments --json title,body,url,number,projectItems,comments 2>&1)
   if echo "$ISSUE_JSON" | grep -q "Could not resolve"; then
     echo "❌ Issue #$ISSUE not found."
     return 1
@@ -414,11 +758,22 @@ process_issue() {
   TITLE=$(echo "$ISSUE_JSON" | jq -r '.title')
   BODY=$(echo "$ISSUE_JSON" | jq -r '.body // "No description provided."')
   URL=$(echo "$ISSUE_JSON" | jq -r '.url')
+  TASKS_DIR="$GRKR_ROOT/.grkr/tasks"
+  TASK_SLUG=$(task_slug_for_issue "$ISSUE" "$TITLE")
+  TASK_DIR="$TASKS_DIR/$TASK_SLUG"
+  PROGRESS_FILE="$TASK_DIR/progress.json"
   echo "📝 Issue: $TITLE"
   echo "🔗 $URL"
   BRANCH="issue-$ISSUE"
   CURRENT_ISSUE="$ISSUE"
   ATTACH_ISSUE_LOGS=1
+  PROJECT_ITEM_ID=$(issue_project_item_id "$ISSUE" "$ISSUE_JSON")
+  mkdir -p "$TASK_DIR"
+  write_task_meta_env "$TASK_DIR" "$ISSUE" "$TASK_SLUG" "$BRANCH" "$URL" "$PROJECT_ITEM_ID"
+  write_issue_context_file "$TASK_DIR" "$ISSUE_JSON"
+  ensure_task_progress_file "$PROGRESS_FILE" "$ISSUE" "$PROJECT_ITEM_ID" "$TASK_SLUG" "$BRANCH"
+  ensure_checkpoint_stage research "$ISSUE" "$ISSUE_JSON" "$TASK_SLUG" "$TASK_DIR" "$TITLE" "$BODY" "$URL" "$PROGRESS_FILE" || return 1
+  ensure_checkpoint_stage plan "$ISSUE" "$ISSUE_JSON" "$TASK_SLUG" "$TASK_DIR" "$TITLE" "$BODY" "$URL" "$PROGRESS_FILE" || return 1
   move_issue_to_in_progress "$ISSUE" "$ISSUE_JSON" || return 1
   if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
     echo "⚠️ Branch $BRANCH already exists locally. Checking it out..."
@@ -440,6 +795,10 @@ Implement the GitHub issue described below using the Codex coding agent best pra
 
 **Description:**
 $BODY
+
+**Checkpoint files:**
+- .grkr/tasks/$TASK_SLUG/research.md
+- .grkr/tasks/$TASK_SLUG/plan.md
 
 **Expected final response:**
 ## Detailed description of the task

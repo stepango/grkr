@@ -101,7 +101,10 @@ publish_issue_changes() {
 
   git commit -m "feat: implement #$ISSUE - $TITLE"
   git push -u origin "issue-$ISSUE"
-  PR_URL=$(gh pr create --fill --body "Issue: $URL")
+  PR_BODY="Fixes #$ISSUE
+
+Issue: $URL"
+  PR_URL=$(gh pr create --fill --body "$PR_BODY")
   echo "✅ PR created: $PR_URL"
   gh issue edit "$ISSUE" --add-label "implemented" || true
   gh issue edit "$ISSUE" --remove-label "todo" || true

@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+. "$SCRIPT_DIR/doctor.sh"
+
 mkdir -p "${HOME:-.}/.grkr/logs"
 LOGFILE="${HOME:-.}/.grkr/logs/grkr-$(date +%Y%m%d-%H%M%S).log"
 if command -v tee >/dev/null 2>&1; then
@@ -23,6 +26,11 @@ usage() {
 }
 
 MAX_FILE_LINES=1000
+VALIDATION_OK=0
+
+if doctor_validate; then
+  VALIDATION_OK=1
+fi
 
 if [ -z "$2" ]; then
   usage
@@ -37,35 +45,12 @@ else
   usage
 fi
 
-# Prerequisites
-echo "🔍 Validating prerequisites..."
-
-if ! command -v gh &> /dev/null; then
-  echo "❌ GitHub CLI (gh) is not installed. Please install it."
-  exit 1
+if [ "$VALIDATION_OK" -eq 1 ]; then
+  if [ -n "$(git status --porcelain)" ]; then
+    echo "❌ Working directory is not clean. Commit or stash changes first."
+    exit 1
+  fi
 fi
-
-if ! gh auth status &> /dev/null; then
-  echo "❌ Not authenticated with GitHub. Run: gh auth login"
-  exit 1
-fi
-
-if [ -n "$(git status --porcelain)" ]; then
-  echo "❌ Working directory is not clean. Commit or stash changes first."
-  exit 1
-fi
-
-if ! command -v codex &> /dev/null; then
-  echo "❌ codex is not in PATH. Please install it."
-  exit 1
-fi
-
-if ! command -v jq &> /dev/null; then
-  echo "❌ jq is required for JSON parsing. Please install it."
-  exit 1
-fi
-
-echo "✅ Prerequisites validated."
 
 check_file_line_limit() {
   local file
@@ -113,6 +98,10 @@ Issue: [#$ISSUE]($URL)"
 process_issue() {
   local ISSUE=$1
   local prompt_file
+  if [ "$VALIDATION_OK" -ne 1 ]; then
+    echo "⚠️ Validation failed; skipping issue #$ISSUE."
+    return 1
+  fi
   echo "📋 Fetching issue #$ISSUE..."
   ISSUE_JSON=$(gh issue view "$ISSUE" --json title,body,url,number 2>&1)
   if echo "$ISSUE_JSON" | grep -q "Could not resolve"; then
@@ -168,6 +157,12 @@ if [ "$MODE" = "--project" ]; then
   PROJECT="$ID"
   echo "🔄 Starting infinite loop watcher for project $PROJECT..."
   while true; do
+    if [ "$VALIDATION_OK" -ne 1 ]; then
+      echo "⚠️ Validation failed; skipping mutating operations."
+      echo "⏳ Sleeping 30 seconds..."
+      sleep 30
+      continue
+    fi
     echo "🔍 Querying issues in todo state..."
     TODO_ISSUES=$(gh issue list --state open --json number,title,projectItems | jq -r '.[] | select(.projectItems | any(.status.name == "Todo")) | .number')
     for ISSUE in $TODO_ISSUES; do

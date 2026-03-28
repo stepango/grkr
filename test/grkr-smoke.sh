@@ -5,11 +5,24 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-smoke.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
 cp bin/grkr "$tmpdir/grkr.sh"
+cp bin/doctor.sh "$tmpdir/doctor.sh"
 chmod +x "$tmpdir/grkr.sh"
+chmod +x "$tmpdir/doctor.sh"
 
 real_git=$(command -v git)
 mkdir -p "$tmpdir/bin"
 gh_log="$tmpdir/gh.log"
+mkdir -p "$tmpdir/.grkr"
+
+cat > "$tmpdir/.grkr/config.sh" <<'EOF'
+REPO="stepango/grkr"
+PROJECT_OWNER="stepango"
+PROJECT_NUMBER="1"
+STATUS_FIELD_NAME="Status"
+TODO_VALUE="Todo"
+BACKLOG_VALUE="Backlog"
+PRIORITY_FIELD_NAME="Priority"
+EOF
 
 cat > "$tmpdir/bin/gh" <<EOF
 #!/bin/bash
@@ -28,9 +41,21 @@ cat > "$tmpdir/bin/codex" <<'EOF'
 exit 0
 EOF
 
+cat > "$tmpdir/bin/timeout" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+
+cat > "$tmpdir/bin/flock" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+
 cat > "$tmpdir/bin/git" <<EOF
 #!/bin/bash
 case "\$1 \$2" in
+  'rev-parse --show-toplevel') printf '%s\n' "$tmpdir" ;;
+  'remote get-url') printf 'git@github.com:stepango/grkr.git\n' ;;
   'status --porcelain') exit 0 ;;
   'ls-remote --heads') exit 1 ;;
   'checkout -b') exit 0 ;;
@@ -43,12 +68,15 @@ case "\$1 \$2" in
 esac
 EOF
 
-chmod +x "$tmpdir/bin/gh" "$tmpdir/bin/codex" "$tmpdir/bin/git"
+chmod +x "$tmpdir/bin/gh" "$tmpdir/bin/codex" "$tmpdir/bin/git" "$tmpdir/bin/timeout" "$tmpdir/bin/flock"
 
 output_file="$tmpdir/output.log"
-PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" bash "$tmpdir/grkr.sh" --issue 1 >"$output_file" 2>&1
+(
+  cd "$tmpdir"
+  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" bash "$tmpdir/grkr.sh" --issue 1 >"$output_file" 2>&1
+)
 
-grep -F "✅ Prerequisites validated." "$output_file" >/dev/null
+grep -F "✅ Startup validation passed." "$output_file" >/dev/null
 grep -F "🚀 Running codex to implement the issue..." "$output_file" >/dev/null
 grep -F "✅ codex has finished implementing the changes." "$output_file" >/dev/null
 grep -F "✅ PR created: https://example.com/pr/1" "$output_file" >/dev/null

@@ -154,6 +154,11 @@ Implement the GitHub issue described below using the Codex coding agent best pra
 **Description:**
 $BODY
 
+**Expected final response:**
+- Detailed description of the task
+- Implementation plan details
+- Testing results, including functional testing performed
+
 ---
 
 **Instructions for you:**

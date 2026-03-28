@@ -13,6 +13,7 @@ real_git=$(command -v git)
 mkdir -p "$tmpdir/bin"
 gh_log="$tmpdir/gh.log"
 issue_comment_body="$tmpdir/issue-comment-body.log"
+codex_prompt="$tmpdir/codex-prompt.log"
 mkdir -p "$tmpdir/.grkr"
 
 cat > "$tmpdir/.grkr/config.sh" <<'EOF'
@@ -56,8 +57,9 @@ case "\$1 \$2" in
 esac
 EOF
 
-cat > "$tmpdir/bin/codex" <<'EOF'
+cat > "$tmpdir/bin/codex" <<EOF
 #!/bin/bash
+cat > "$codex_prompt"
 exit 0
 EOF
 
@@ -104,3 +106,6 @@ grep -F "Fixes #1" "$gh_log" >/dev/null
 grep -F "Issue: [#1](https://example.com)" "$gh_log" >/dev/null
 grep -F "🚀 Running codex to implement the issue..." "$issue_comment_body" >/dev/null
 grep -F "✅ PR created: https://example.com/pr/1" "$issue_comment_body" >/dev/null
+grep -F "Detailed description of the task" "$codex_prompt" >/dev/null
+grep -F "Implementation plan details" "$codex_prompt" >/dev/null
+grep -F "Testing results, including functional testing performed" "$codex_prompt" >/dev/null

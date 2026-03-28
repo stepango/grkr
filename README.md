@@ -8,6 +8,9 @@ AI-powered CLI that reads a GitHub issue and uses Codex to implement the changes
 # Install globally
 npm install -g .
 
+# Create the config for this repo and project
+grkr init 42
+
 # Run for an issue
 grkr --issue 1
 
@@ -26,7 +29,9 @@ npm test
 ## Install Notes
 
 - `npm install -g .` installs the local `bin/grkr` launcher into your PATH.
-- `npm test` runs a mocked smoke test that checks the launcher path without needing GitHub access.
+- `npm test` refreshes the split spec files under `spec/parts/` and runs the mocked shell tests without needing GitHub access.
+- Copy `.grkr/config.sh.example` to `.grkr/config.sh` and edit the values for your repo if you want to manage config manually.
+- `grkr init <id>` will create `.grkr/config.sh` for the current `origin` remote and project id you pass in.
 
 ## Requirements
 

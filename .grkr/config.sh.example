@@ -1,0 +1,10 @@
+REPO="owner/repo"
+MAIN_BRANCH="main"
+
+PROJECT_OWNER="owner-or-org"
+PROJECT_NUMBER="12"
+
+STATUS_FIELD_NAME="Status"
+TODO_VALUE="Todo"
+BACKLOG_VALUE="Backlog"
+PRIORITY_FIELD_NAME="Priority"

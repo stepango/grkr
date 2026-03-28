@@ -21,7 +21,8 @@ else
 fi
 
 usage() {
-  echo "Usage: grkr --issue <number> | grkr --project <id>"
+  echo "Usage: grkr init <project-id> | grkr --issue <number> | grkr --project <id>"
+  echo "Example: grkr init 42"
   echo "Example: grkr --issue 1"
   echo "Example: grkr --project 42"
   exit 1
@@ -29,6 +30,21 @@ usage() {
 
 MAX_FILE_LINES=1000
 VALIDATION_OK=0
+
+MODE=${1:-}
+case "$MODE" in
+  init)
+    [ -n "${2:-}" ] || usage
+    ID="$2"
+    ;;
+  --issue|--project)
+    [ -n "${2:-}" ] || usage
+    ID="$2"
+    ;;
+  *)
+    usage
+    ;;
+esac
 
 attach_issue_logs() {
   local issue=${CURRENT_ISSUE:-}
@@ -48,25 +64,25 @@ cleanup_on_exit() {
 
 trap cleanup_on_exit EXIT
 
-if doctor_validate; then
+if [ "$MODE" = "init" ]; then
+  doctor_init
+  if doctor_create_config "$ID"; then
+    echo "✅ Created config: $GRKR_CONFIG_FILE"
+    exit 0
+  fi
+  exit 1
+fi
+
+if doctor_validate "$MODE" "$ID"; then
   VALIDATION_OK=1
 fi
 
-if [ -z "$2" ]; then
-  usage
-fi
-MODE="$1"
-ID="$2"
 if [ "$MODE" = "--issue" ]; then
   ISSUE="$ID"
-elif [ "$MODE" = "--project" ]; then
-  :
-else
-  usage
 fi
 
 if [ "$VALIDATION_OK" -eq 1 ]; then
-  if [ -n "$(git status --porcelain)" ]; then
+  if [ -n "$(git status --porcelain --untracked-files=all | grep -vE '^.. \.grkr(/|$)')" ]; then
     echo "❌ Working directory is not clean. Commit or stash changes first."
     exit 1
   fi

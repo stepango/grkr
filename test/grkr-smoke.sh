@@ -120,6 +120,21 @@ if grep -Fq "Reply with exactly one word on the first non-empty line: proceed or
   printf 'proceed\n'
 else
   cat "\$prompt_file" > "$codex_prompt"
+  cat <<'OUT'
+## Detailed description of the task
+
+Implemented the requested issue workflow updates.
+
+Issue: [#1](https://example.com)
+
+## Implementation plan details
+
+- Made focused script and test updates.
+
+## Testing results
+
+- Functional testing performed
+OUT
 fi
 rm -f "\$prompt_file"
 exit 0
@@ -209,6 +224,10 @@ grep -F "## Implementation plan details" "$pr_body" >/dev/null
 grep -F "## Testing results" "$pr_body" >/dev/null
 grep -F "Functional testing performed" "$pr_body" >/dev/null
 grep -F "Fixes #1" "$pr_body" >/dev/null
+if [ "$(grep -c '^Fixes #1$' "$pr_body")" -ne 1 ]; then
+  echo "expected a single Fixes footer in PR body"
+  exit 1
+fi
 if grep -Fq "Issue: [#1](https://example.com)" "$pr_body"; then
   echo "unexpected duplicate issue mention in PR body"
   exit 1

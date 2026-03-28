@@ -635,9 +635,38 @@ ensure_pr_body_limit() {
     write_compact_pr_body "$pr_body_file" "$body" "$title"
   fi
 
+  normalize_pr_issue_mentions "$pr_body_file" "$issue"
   if ! grep -Fq "Fixes #$issue" "$pr_body_file"; then
     append_issue_footer "$pr_body_file" "$issue" "$url"
   fi
+}
+
+normalize_pr_issue_mentions() {
+  local pr_body_file=$1
+  local issue=$2
+  local tmp_file
+
+  tmp_file=$(mktemp "${TMPDIR:-/tmp}/grkr-pr-body-normalize.XXXXXX")
+  awk -v issue="$issue" '
+    BEGIN {
+      fixes_seen = 0
+    }
+    {
+      if ($0 ~ ("^[[:space:]]*Issue:[[:space:]]*\\[#" issue "\\]\\([^)]*\\)[[:space:]]*$")) {
+        next
+      }
+      if ($0 ~ ("^[[:space:]]*[Ff]ixes[[:space:]]*#" issue "[[:space:]]*$")) {
+        if (fixes_seen == 1) {
+          next
+        }
+        fixes_seen = 1
+        print "Fixes #" issue
+        next
+      }
+      print
+    }
+  ' "$pr_body_file" > "$tmp_file"
+  mv "$tmp_file" "$pr_body_file"
 }
 
 extract_codex_pr_body() {

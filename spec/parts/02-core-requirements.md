@@ -49,7 +49,7 @@ If processing fails:
 
 For issue execution:
 
-- `research`, `plan`, and `test` stages must each write a Markdown file locally under `.grkr/<task-name>/`
+- `research`, `plan`, and `test` stages must each write a Markdown file locally under `.grkr/tasks/<task-name>/`
 - those Markdown files must also be posted to the issue as comments
 - the local artifacts must allow execution to resume from checkpoints after interruption or failure
 
@@ -78,4 +78,3 @@ The main loop must survive:
 A failed worker must not terminate the supervisor loop.
 
 ---
-

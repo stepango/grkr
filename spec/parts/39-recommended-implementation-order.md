@@ -1,5 +1,10 @@
 ## 31. Recommended implementation order
 
+Status snapshot:
+
+- The current codebase largely covers items 1 through 5.
+- Items 6 through 12 remain the forward-looking backlog described by this spec.
+
 1. `doctor.sh`
 2. supervisor loop + logging + locks
 3. sync-main worker

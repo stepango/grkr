@@ -2,7 +2,11 @@
 
 All checkpoint comments must be machine-detectable.
 
-### 23.1 Research
+Examples:
 
-```markdown
-<!-- grkr:checkpoint stage=research task=issue-123-add-search-index version=1 -->
+- [28-research-checkpoint.md](./28-research-checkpoint.md)
+- [29-plan-checkpoint.md](./29-plan-checkpoint.md)
+- [30-implementation-refused.md](./30-implementation-refused.md)
+- [31-test-checkpoint.md](./31-test-checkpoint.md)
+
+---

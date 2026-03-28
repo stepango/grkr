@@ -24,12 +24,15 @@ load_runtime_config() {
   WORKTREES_DIR="$GRKR_DIR/worktrees"
   TASKS_DIR="$GRKR_DIR/tasks"
   ACTIVE_JOBS_FILE="$STATE_DIR/active_jobs.json"
+  PHASE_BACKOFF_FILE="$STATE_DIR/phase_backoff.json"
   PROCESSED_COMMENTS_FILE="$STATE_DIR/processed_comments.json"
   PROJECT_CACHE_FILE="$STATE_DIR/project_cache.json"
   PR_CACHE_FILE="$STATE_DIR/pr_cache.json"
   LAST_COMMENT_SCAN_FILE="$STATE_DIR/last_comment_scan_at"
   MAIN_LOG_FILE="$LOGS_DIR/main.log"
   LOOP_LOG_FILE="$LOGS_DIR/loop.log"
+  COMPLETED_WORKTREE_TTL_SECS=${COMPLETED_WORKTREE_TTL_SECS:-3600}
+  FAILED_WORKTREE_TTL_SECS=${FAILED_WORKTREE_TTL_SECS:-86400}
   VALIDATION_OK=0
 }
 
@@ -81,6 +84,7 @@ ensure_runtime_layout() {
   mkdir -p "$STATE_DIR" "$LOCKS_DIR" "$LOGS_DIR" "$JOB_LOGS_DIR" "$WORKTREES_DIR" "$TASKS_DIR"
   touch "$MAIN_LOG_FILE" "$LOOP_LOG_FILE" "$LOCKS_DIR/main.lock" "$LOCKS_DIR/comments.lock" "$LOCKS_DIR/prs.lock" "$LOCKS_DIR/issues.lock"
   [ -f "$ACTIVE_JOBS_FILE" ] || printf '{}\n' > "$ACTIVE_JOBS_FILE"
+  [ -f "$PHASE_BACKOFF_FILE" ] || printf '{}\n' > "$PHASE_BACKOFF_FILE"
   [ -f "$PROCESSED_COMMENTS_FILE" ] || printf '[]\n' > "$PROCESSED_COMMENTS_FILE"
   [ -f "$PROJECT_CACHE_FILE" ] || printf '{}\n' > "$PROJECT_CACHE_FILE"
   [ -f "$PR_CACHE_FILE" ] || printf '{}\n' > "$PR_CACHE_FILE"
@@ -197,6 +201,227 @@ EOF
   fi
 }
 
+file_mtime_epoch() {
+  local file=$1
+
+  if stat -c %Y "$file" >/dev/null 2>&1; then
+    stat -c %Y "$file"
+  else
+    stat -f %m "$file"
+  fi
+}
+
+phase_backoff_delay_loops() {
+  local attempt=$1
+  local loop_interval=${LOOP_INTERVAL_SECS:-20}
+  local cap_loops
+
+  if [ "$loop_interval" -gt 0 ]; then
+    cap_loops=$((3600 / loop_interval))
+  else
+    cap_loops=3600
+  fi
+  [ "$cap_loops" -gt 0 ] || cap_loops=1
+
+  case "$attempt" in
+    1) printf '%s\n' 1 ;;
+    2) printf '%s\n' 3 ;;
+    3) printf '%s\n' 10 ;;
+    *) printf '%s\n' "$cap_loops" ;;
+  esac
+}
+
+phase_backoff_lookup() {
+  local phase=$1
+  local entry
+
+  entry=$(jq -c --arg phase "$phase" '.[$phase] // empty' "$PHASE_BACKOFF_FILE" 2>/dev/null) || return 1
+  [ -n "$entry" ] || return 1
+  printf '%s\n' "$entry"
+}
+
+phase_backoff_active() {
+  local phase=$1
+  local entry
+  local retry_after_loop
+  local retry_after_at
+
+  entry=$(phase_backoff_lookup "$phase") || return 1
+  retry_after_loop=$(printf '%s' "$entry" | jq -r '.retry_after_loop // empty')
+  retry_after_at=$(printf '%s' "$entry" | jq -r '.retry_after_at // empty')
+
+  if [ -n "$retry_after_loop" ] && [ "$LOOP_COUNT" -lt "$retry_after_loop" ]; then
+    return 0
+  fi
+
+  if [ -n "$retry_after_loop" ]; then
+    return 1
+  fi
+
+  if [ -n "$retry_after_at" ] && [ "$(date +%s)" -lt "$retry_after_at" ]; then
+    return 0
+  fi
+
+  return 1
+}
+
+phase_backoff_record() {
+  local phase=$1
+  local exit_code=$2
+  local failure_class=$3
+  local entry
+  local attempt=1
+  local delay_loops
+  local delay_secs
+  local retry_after_loop
+  local retry_after_at
+  local now_epoch
+  local now
+  local tmp_file
+
+  entry=$(phase_backoff_lookup "$phase" || true)
+  if [ -n "$entry" ]; then
+    attempt=$(printf '%s' "$entry" | jq -r '.attempt // 0')
+    attempt=$((attempt + 1))
+  fi
+
+  delay_loops=$(phase_backoff_delay_loops "$attempt")
+  case "$failure_class" in
+    policy|config)
+      if [ "${LOOP_INTERVAL_SECS:-20}" -gt 0 ]; then
+        delay_loops=$((3600 / LOOP_INTERVAL_SECS))
+      else
+        delay_loops=3600
+      fi
+      ;;
+  esac
+  [ "$delay_loops" -gt 0 ] || delay_loops=1
+
+  delay_secs=$((delay_loops * ${LOOP_INTERVAL_SECS:-20}))
+  if [ "$delay_secs" -le 0 ]; then
+    delay_secs=$delay_loops
+  fi
+
+  retry_after_loop=$((LOOP_COUNT + delay_loops))
+  now_epoch=$(date +%s)
+  retry_after_at=$((now_epoch + delay_secs))
+  now=$(timestamp_utc)
+  tmp_file=$(mktemp "${TMPDIR:-/tmp}/grkr-phase-backoff.XXXXXX")
+  jq \
+    --arg phase "$phase" \
+    --arg failure_class "$failure_class" \
+    --arg updated_at "$now" \
+    --argjson attempt "$attempt" \
+    --argjson last_exit_code "$exit_code" \
+    --argjson retry_after_loop "$retry_after_loop" \
+    --argjson retry_after_at "$retry_after_at" \
+    --argjson last_failed_loop "$LOOP_COUNT" '
+    .[$phase] = {
+      attempt: $attempt,
+      failure_class: $failure_class,
+      last_exit_code: $last_exit_code,
+      retry_after_loop: $retry_after_loop,
+      retry_after_at: $retry_after_at,
+      last_failed_loop: $last_failed_loop,
+      updated_at: $updated_at
+    }
+  ' "$PHASE_BACKOFF_FILE" > "$tmp_file"
+  mv "$tmp_file" "$PHASE_BACKOFF_FILE"
+}
+
+phase_backoff_clear() {
+  local phase=$1
+  local tmp_file
+
+  tmp_file=$(mktemp "${TMPDIR:-/tmp}/grkr-phase-backoff.XXXXXX")
+  jq --arg phase "$phase" 'del(.[$phase])' "$PHASE_BACKOFF_FILE" > "$tmp_file"
+  mv "$tmp_file" "$PHASE_BACKOFF_FILE"
+}
+
+compact_processed_comment_state() {
+  local tmp_file
+
+  if ! jq -e 'type == "array"' "$PROCESSED_COMMENTS_FILE" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  tmp_file=$(mktemp "${TMPDIR:-/tmp}/grkr-processed-comments.XXXXXX")
+  jq 'unique' "$PROCESSED_COMMENTS_FILE" > "$tmp_file"
+  mv "$tmp_file" "$PROCESSED_COMMENTS_FILE"
+}
+
+cleanup_task_worktrees() {
+  local now_epoch
+  local worktree_dir
+  local task_slug
+  local progress_file
+  local status
+  local progress_mtime
+  local worktree_mtime
+  local age_secs
+  local removed_refused=0
+  local removed_completed=0
+  local removed_failed=0
+  local removed_orphaned=0
+  local removed_job_logs=0
+  local issue_number
+  local job_log
+
+  now_epoch=$(date +%s)
+  while IFS= read -r -d '' worktree_dir; do
+    [ -d "$worktree_dir" ] || continue
+    task_slug=$(basename "$worktree_dir")
+    progress_file="$TASKS_DIR/$task_slug/progress.json"
+
+    if [ ! -f "$progress_file" ]; then
+      worktree_mtime=$(file_mtime_epoch "$worktree_dir")
+      age_secs=$((now_epoch - worktree_mtime))
+      if [ "$age_secs" -ge "$FAILED_WORKTREE_TTL_SECS" ]; then
+        rm -rf "$worktree_dir"
+        removed_orphaned=$((removed_orphaned + 1))
+      fi
+      continue
+    fi
+
+    status=$(jq -r '.status // empty' "$progress_file" 2>/dev/null || true)
+    progress_mtime=$(file_mtime_epoch "$progress_file")
+    age_secs=$((now_epoch - progress_mtime))
+
+    case "$status" in
+      refused)
+        rm -rf "$worktree_dir"
+        removed_refused=$((removed_refused + 1))
+        ;;
+      complete)
+        if [ "$age_secs" -ge "$COMPLETED_WORKTREE_TTL_SECS" ]; then
+          rm -rf "$worktree_dir"
+          removed_completed=$((removed_completed + 1))
+        fi
+        ;;
+      failed)
+        if [ "$age_secs" -ge "$FAILED_WORKTREE_TTL_SECS" ]; then
+          rm -rf "$worktree_dir"
+          removed_failed=$((removed_failed + 1))
+        fi
+        ;;
+    esac
+
+    if [ ! -d "$worktree_dir" ]; then
+      issue_number=$(jq -r '.issue_number // empty' "$progress_file" 2>/dev/null || true)
+      if [ -n "$issue_number" ]; then
+        job_log=$(job_log_file "issue:${issue_number}:execution")
+        if [ -f "$job_log" ]; then
+          rm -f "$job_log"
+          removed_job_logs=$((removed_job_logs + 1))
+        fi
+      fi
+    fi
+  done < <(find "$WORKTREES_DIR" -mindepth 1 -maxdepth 1 -type d -print0)
+
+  compact_processed_comment_state
+  log_info "cleanup_stale_worktrees" "-" "repo/$REPO" "purged_completed_worktrees=$removed_completed purged_failed_worktrees=$removed_failed purged_refused_worktrees=$removed_refused purged_orphaned_worktrees=$removed_orphaned purged_job_logs=$removed_job_logs"
+}
+
 purge_stale_lock_files() {
   local purged=0
   local lock_file
@@ -251,7 +476,7 @@ run_phase_with_lock() {
   shift 2
 
   if phase_should_fail "$phase"; then
-    return 64
+    return "${GRKR_FAIL_PHASE_EXIT_CODE:-64}"
   fi
 
   if [ "$VALIDATION_OK" -ne 1 ]; then
@@ -363,13 +588,26 @@ phase_cleanup_impl() {
   fi
 
   purge_stale_lock_files
+  cleanup_task_worktrees
 }
 
 run_phase() {
   local phase=$1
   local status=0
+  local failure_class=transient
+  local backoff_entry
 
   log_info "$phase" "-" "repo/$REPO" "phase_started=true"
+  if phase_backoff_active "$phase"; then
+    backoff_entry=$(phase_backoff_lookup "$phase" || true)
+    if [ -n "$backoff_entry" ]; then
+      log_info "$phase" "-" "repo/$REPO" "backoff_active=true $(printf '%s' "$backoff_entry" | jq -r 'to_entries | map("\(.key)=\(.value|tostring)") | join(" ")')"
+    else
+      log_info "$phase" "-" "repo/$REPO" "backoff_active=true"
+    fi
+    return 0
+  fi
+
   case "$phase" in
     sync_main)
       run_phase_command phase_sync_main_impl || status=$?
@@ -395,8 +633,14 @@ run_phase() {
   esac
 
   if [ "$status" -eq 0 ]; then
+    phase_backoff_clear "$phase"
     log_info "$phase" "-" "repo/$REPO" "phase_finished=true"
   else
+    case "$status" in
+      78) failure_class=config ;;
+      *) failure_class=transient ;;
+    esac
+    phase_backoff_record "$phase" "$status" "$failure_class"
     log_error "$phase" "-" "repo/$REPO" "phase_failed exit_code=$status"
   fi
 }

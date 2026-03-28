@@ -2,7 +2,7 @@
 
 AI-powered CLI that reads a GitHub issue and uses Codex to implement the changes.
 
-Current implementation status: the checkpointed issue flow now runs research, plan, a decision gate, isolated implementation in a dedicated issue worktree, test, and completion, along with the supervisor skeleton, main-branch sync, and project issue selection. PR conflict automation, `@:robot:` comment handling, refusal flow, and the remaining worker worktree flows are still planned follow-up work.
+Current implementation status: the checkpointed issue flow now runs research, plan, a decision gate, isolated implementation in a dedicated issue worktree, test, and completion, and the supervisor now recovers stale jobs, backs off repeated failures, and prunes stale worktrees and locks on schedule. PR conflict automation, `@:robot:` comment handling, refusal flow, and the remaining worker worktree flows are still planned follow-up work.
 
 ## Usage
 
@@ -27,7 +27,7 @@ npm test
 
 1. `robot-main.sh` creates the `.grkr` runtime layout, validates prerequisites, and runs the ordered supervisor phases on the configured interval
 2. The first supervisor phase delegates to `worker-sync-main.sh`, which takes `.grkr/locks/main.lock`, fetches `origin/$MAIN_BRANCH` with pruning, checks out the configured main branch, and hard-resets the supervisor checkout to `origin/$MAIN_BRANCH`
-3. The supervisor writes structured loop logs to `.grkr/logs/main.log` and `.grkr/logs/loop.log`, keeps per-job logs under `.grkr/logs/jobs/`, recovers stale jobs from `.grkr/state/active_jobs.json`, and keeps later phases running when an earlier phase fails
+3. The supervisor writes structured loop logs to `.grkr/logs/main.log` and `.grkr/logs/loop.log`, keeps per-job logs under `.grkr/logs/jobs/`, recovers stale jobs from `.grkr/state/active_jobs.json`, applies per-phase backoff for repeated failures, and keeps later phases running when an earlier phase fails
 4. Phase 4 delegates to `worker-pick-issue.sh`, which reads the configured GitHub Project live, filters Todo issues assigned to the authenticated bot in the configured repo, excludes active issue jobs, orders candidates by priority and age, and emits the stable `issue:<n>:execution` job key plus task slug for the top match
 5. `grkr --issue <n>` remains the focused single-issue helper that fetches issue details using `gh issue view`
 6. The issue helper creates or reuses `.grkr/tasks/<issue-slug>/`, writes `research.md`, `plan.md`, and `progress.json`, and posts the research and plan checkpoints back to the issue
@@ -41,6 +41,7 @@ npm test
 14. On successful completion, the issue helper posts a short completion summary, optionally moves the project item to `Done`, and mirrors the local run log back to the issue inside a collapsed details block
 15. If the generated PR description is too large for GitHub, `grkr` replaces it with a compact summary before creating the PR
 16. In `grkr --project <id>` mode, a failed issue run is logged and the watcher continues with later issues and later loop iterations
+17. Periodic cleanup removes stale worktrees, purges obsolete locks and completed artifacts, and keeps task folders plus checkpoints intact for refused or resumed issues
 
 ## Install Notes
 
@@ -61,6 +62,8 @@ npm test
 - `grkr --issue <id>` now keeps per-issue checkpoint state under `.grkr/tasks/<issue-slug>/`, including `research.md`, `plan.md`, `implementation.log`, `test.md`, and `progress.json`; large implementation transcripts are sharded into `codex/implementation.log.parts/` with `implementation.log` left as the stable entrypoint.
 - The issue helper posts the research, plan, and test checkpoint files as issue comments and reuses them on rerun when matching checkpoint markers already exist.
 - On success, `progress.json` is updated to `complete` and records the branch URL plus PR URL for the finished issue workflow.
+- The supervisor now keeps a retry backoff registry so repeated transient or policy failures do not hot-loop on the next tick.
+- Cleanup runs every 10 supervisor loops and prunes stale worktrees plus obsolete locks and logs while leaving task folders and checkpoints in place.
 - `grkr --issue <id>` mirrors its launcher log to the GitHub issue as a collapsed details block so the thread stays readable by default.
 - Copy `.grkr/config.sh.example` to `.grkr/config.sh` and edit the values for your repo if you want to manage config manually.
 - `grkr init <id>` will create `.grkr/config.sh` for the current `origin` remote and project id you pass in.

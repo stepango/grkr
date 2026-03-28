@@ -5,6 +5,7 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-branch-exists.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
 cp bin/grkr "$tmpdir/grkr.sh"
+cp bin/grkr-templates.sh "$tmpdir/grkr-templates.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
 chmod +x "$tmpdir/grkr.sh"
 chmod +x "$tmpdir/doctor.sh"
@@ -22,6 +23,7 @@ STATUS_FIELD_NAME="Status"
 TODO_VALUE="Todo"
 BACKLOG_VALUE="Backlog"
 PRIORITY_FIELD_NAME="Priority"
+TEST_COMMAND="printf 'test command passed\n'"
 EOF
 
 cat > "$tmpdir/bin/gh" <<EOF

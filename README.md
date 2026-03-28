@@ -2,7 +2,7 @@
 
 AI-powered CLI that reads a GitHub issue and uses Codex to implement the changes.
 
-Current implementation status: the checkpointed issue flow, supervisor skeleton, main-branch sync, and project issue selection are implemented. PR conflict automation, `@:robot:` comment handling, refusal flow, test checkpoints, and full worktree isolation are still planned follow-up work.
+Current implementation status: the checkpointed issue flow through research, plan, implementation, test, and completion is implemented, along with the supervisor skeleton, main-branch sync, and project issue selection. PR conflict automation, `@:robot:` comment handling, refusal flow, and full worktree isolation are still planned follow-up work.
 
 ## Usage
 
@@ -34,9 +34,12 @@ npm test
 7. If matching checkpoint comments already exist, the issue helper reuses those comments and resumes without reposting duplicate research or plan checkpoints
 8. Before it checks out or creates `issue-N`, the issue helper moves the configured project item to `In Progress` when it can resolve that project item
 9. The issue helper reuses branch `issue-N` when it already exists locally or remotely, otherwise creates it
-10. After Codex finishes implementing, `grkr` posts the local run log back to the issue inside a collapsed details block
-11. `grkr` then commits, pushes, and opens a PR that links the issue
-12. If the generated PR description is too large for GitHub, `grkr` replaces it with a compact summary before creating the PR
+10. Codex output is stored in `.grkr/tasks/<issue-slug>/implementation.log`; if the staged diff would leave any file over the 1000-line limit, `grkr` immediately runs one Codex refactor pass before moving on
+11. After the implementation is publishable, `grkr` runs the configured build and test commands, writes `.grkr/tasks/<issue-slug>/test.md`, and posts the test checkpoint back to the issue
+12. `grkr` then commits, pushes, opens a PR that links the issue, records the branch and PR URLs in `progress.json`, and marks the issue workflow complete
+13. On successful completion, the issue helper posts a short completion summary, optionally moves the project item to `Done`, and mirrors the local run log back to the issue inside a collapsed details block
+14. If the generated PR description is too large for GitHub, `grkr` replaces it with a compact summary before creating the PR
+15. In `grkr --project <id>` mode, a failed issue run is logged and the watcher continues with later issues and later loop iterations
 
 ## Install Notes
 
@@ -45,11 +48,15 @@ npm test
 - `worker-sync-main.sh` is the phase-1 supervisor worker; it always returns the main checkout to the configured `MAIN_BRANCH` before later phases run.
 - `worker-pick-issue.sh` is the phase-4 selector; it emits shell-safe key/value output for the next Todo issue candidate, including `JOB_KEY` and `TASK_SLUG`.
 - `grkr init <id>` also writes `IN_PROGRESS_VALUE="In Progress"` so issue execution can move a project item out of Todo before branching.
+- `grkr init <id>` also writes `DONE_VALUE="Done"` plus default `TEST_COMMAND` and `BUILD_COMMAND` entries so the test stage has explicit verification commands.
 - `npm test` refreshes the spec index from the split files under `spec/parts/` and runs the mocked shell tests without needing GitHub access.
 - `grkr --issue <id>` automatically shrinks oversized Codex-generated PR bodies so `gh pr create` stays under GitHub's 65536-character body limit.
+- `grkr --issue <id>` includes the per-file 1000-line rule in the Codex prompt and will trigger one immediate Codex refactor pass when staged changes still violate that limit.
+- `grkr --project <id>` treats per-issue failures as recoverable so the long-running watcher does not exit after one bad issue.
 - `grkr --issue <id>` warns when the working directory is dirty, then continues so intentionally staged or unstaged local changes can be included.
-- `grkr --issue <id>` now keeps per-issue checkpoint state under `.grkr/tasks/<issue-slug>/`, including `research.md`, `plan.md`, and `progress.json`.
-- The issue helper posts the research and plan checkpoint files as issue comments and reuses them on rerun when matching checkpoint markers already exist.
+- `grkr --issue <id>` now keeps per-issue checkpoint state under `.grkr/tasks/<issue-slug>/`, including `research.md`, `plan.md`, `implementation.log`, `test.md`, and `progress.json`.
+- The issue helper posts the research, plan, and test checkpoint files as issue comments and reuses them on rerun when matching checkpoint markers already exist.
+- On success, `progress.json` is updated to `complete` and records the branch URL plus PR URL for the finished issue workflow.
 - `grkr --issue <id>` mirrors its launcher log to the GitHub issue as a collapsed details block so the thread stays readable by default.
 - Copy `.grkr/config.sh.example` to `.grkr/config.sh` and edit the values for your repo if you want to manage config manually.
 - `grkr init <id>` will create `.grkr/config.sh` for the current `origin` remote and project id you pass in.

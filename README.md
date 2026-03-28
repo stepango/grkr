@@ -29,7 +29,7 @@ npm test
 ## Install Notes
 
 - `npm install -g .` installs the local `bin/grkr` launcher into your PATH.
-- `npm test` refreshes the split spec files under `spec/parts/` and runs the mocked shell tests without needing GitHub access.
+- `npm test` refreshes the spec index from the split files under `spec/parts/` and runs the mocked shell tests without needing GitHub access.
 - Copy `.grkr/config.sh.example` to `.grkr/config.sh` and edit the values for your repo if you want to manage config manually.
 - `grkr init <id>` will create `.grkr/config.sh` for the current `origin` remote and project id you pass in.
 

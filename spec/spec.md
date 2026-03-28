@@ -2,7 +2,7 @@
 
 Canonical source:
 
-- [spec/source.md](./source.md)
+- `spec/parts/`
 
 Generated context slices:
 
@@ -47,4 +47,4 @@ Generated context slices:
 - [spec/parts/38-acceptance-criteria.md](./parts/38-acceptance-criteria.md)
 - [spec/parts/39-recommended-implementation-order.md](./parts/39-recommended-implementation-order.md)
 
-The `spec/parts/` directory is refreshed from `spec/source.md` by `scripts/sync-spec.sh`.
+The `spec/parts/` directory is the source of truth. Run `scripts/sync-spec.sh` to regenerate this index.

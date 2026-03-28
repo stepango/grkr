@@ -103,8 +103,8 @@ publish_issue_changes() {
   git push -u origin "issue-$ISSUE"
   PR_BODY="Fixes #$ISSUE
 
-Issue: $URL"
-  PR_URL=$(gh pr create --fill --body "$PR_BODY")
+Issue: [#$ISSUE]($URL)"
+  PR_URL=$(gh pr create --title "$TITLE" --body "$PR_BODY")
   echo "✅ PR created: $PR_URL"
   gh issue edit "$ISSUE" --add-label "implemented" || true
   gh issue edit "$ISSUE" --remove-label "todo" || true

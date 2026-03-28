@@ -53,4 +53,4 @@ grep -F "🚀 Running codex to implement the issue..." "$output_file" >/dev/null
 grep -F "✅ codex has finished implementing the changes." "$output_file" >/dev/null
 grep -F "✅ PR created: https://example.com/pr/1" "$output_file" >/dev/null
 grep -F "Fixes #1" "$gh_log" >/dev/null
-grep -F "Issue: https://example.com" "$gh_log" >/dev/null
+grep -F "Issue: [#1](https://example.com)" "$gh_log" >/dev/null

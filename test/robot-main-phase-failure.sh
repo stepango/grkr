@@ -6,8 +6,9 @@ trap 'rm -rf "$tmpdir"' EXIT
 
 cp bin/robot-main.sh "$tmpdir/robot-main.sh"
 cp bin/worker-sync-main.sh "$tmpdir/worker-sync-main.sh"
+cp bin/worker-pick-issue.sh "$tmpdir/worker-pick-issue.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
-chmod +x "$tmpdir/robot-main.sh" "$tmpdir/worker-sync-main.sh" "$tmpdir/doctor.sh"
+chmod +x "$tmpdir/robot-main.sh" "$tmpdir/worker-sync-main.sh" "$tmpdir/worker-pick-issue.sh" "$tmpdir/doctor.sh"
 
 real_git=$(command -v git)
 mkdir -p "$tmpdir/bin" "$tmpdir/.grkr"
@@ -28,6 +29,9 @@ cat > "$tmpdir/bin/gh" <<'EOF'
 #!/bin/bash
 case "$1 $2" in
   'auth status') exit 0 ;;
+  'api user') printf 'robot\n' ;;
+  'project item-list') printf '{"items":[]}\n' ;;
+  'project field-list') printf '[]\n' ;;
   *) exit 0 ;;
 esac
 EOF

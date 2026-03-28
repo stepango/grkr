@@ -29,3 +29,17 @@ It must contain:
 `plan.md` must include a section:
 
 ```markdown
+## Refusal assessment
+```
+
+Use the questions defined in [21-refusal-assessment.md](./21-refusal-assessment.md).
+
+### 18.4 Issue checkpoint comment
+
+Post `plan.md` as an issue comment.
+
+### 18.5 Resume rule
+
+If `plan.md` exists and matching checkpoint comment exists, skip this stage unless forced.
+
+---

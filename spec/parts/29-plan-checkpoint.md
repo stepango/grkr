@@ -1,8 +1,9 @@
 ## Plan checkpoint
+
+```markdown
+<!-- grkr:checkpoint stage=plan task=issue-123-add-search-index version=1 -->
+## Plan checkpoint
 ...
 ```
 
-### 23.3 Refusal
-
-```markdown
-<!-- grkr:checkpoint stage=refusal task=issue-123-add-search-index version=1 -->
+---

@@ -2,6 +2,8 @@
 
 AI-powered CLI that reads a GitHub issue and uses Codex to implement the changes.
 
+Current implementation status: the checkpointed issue flow, supervisor skeleton, main-branch sync, and project issue selection are implemented. PR conflict automation, `@:robot:` comment handling, refusal flow, test checkpoints, and full worktree isolation are still planned follow-up work.
+
 ## Usage
 
 ```bash

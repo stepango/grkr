@@ -32,5 +32,7 @@ output_file="$tmpdir/output.log"
 
 grep -F "✅ Created config: $tmpdir/.grkr/config.sh" "$output_file" >/dev/null
 grep -F 'REPO="stepango/grkr"' "$tmpdir/.grkr/config.sh" >/dev/null
+grep -F 'MAIN_BRANCH="main"' "$tmpdir/.grkr/config.sh" >/dev/null
 grep -F 'PROJECT_OWNER="stepango"' "$tmpdir/.grkr/config.sh" >/dev/null
 grep -F 'PROJECT_NUMBER="42"' "$tmpdir/.grkr/config.sh" >/dev/null
+grep -F 'LOOP_INTERVAL_SECS="20"' "$tmpdir/.grkr/config.sh" >/dev/null

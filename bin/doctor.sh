@@ -20,7 +20,7 @@ doctor_require_tool() {
 
 doctor_validate_tools() {
   local status=0
-  for tool in jq git gh; do
+  for tool in jq git gh timeout flock; do
     doctor_require_tool "$tool" || status=1
   done
   return "$status"
@@ -118,12 +118,14 @@ doctor_write_default_config() {
 
   cat > "$GRKR_CONFIG_FILE" <<EOF
 REPO="$remote_slug"
+MAIN_BRANCH="main"
 PROJECT_OWNER="$project_owner"
 PROJECT_NUMBER="$project_number"
 STATUS_FIELD_NAME="Status"
 TODO_VALUE="Todo"
 BACKLOG_VALUE="Backlog"
 PRIORITY_FIELD_NAME="Priority"
+LOOP_INTERVAL_SECS="20"
 EOF
 }
 

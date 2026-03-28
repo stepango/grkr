@@ -1,14 +1,14 @@
 {
   "name": "grkr",
   "version": "0.1.0",
-  "description": "AI-powered CLI that reads a GitHub issue and uses opencode to implement the changes.",
+  "description": "AI-powered CLI that reads a GitHub issue and uses Codex to implement the changes.",
   "bin": {
     "grkr": "bin/grkr"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["cli", "github", "opencode", "ai", "coding-agent"],
+  "keywords": ["cli", "github", "codex", "ai", "coding-agent"],
   "author": "stepango",
   "license": "MIT"
 }

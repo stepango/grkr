@@ -46,8 +46,8 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 1
 fi
 
-if ! command -v opencode &> /dev/null; then
-  echo "❌ opencode is not in PATH. Please install it."
+if ! command -v codex &> /dev/null; then
+  echo "❌ codex is not in PATH. Please install it."
   exit 1
 fi
 
@@ -60,6 +60,7 @@ echo "✅ Prerequisites validated."
 
 process_issue() {
   local ISSUE=$1
+  local prompt_file
   echo "📋 Fetching issue #$ISSUE..."
   ISSUE_JSON=$(gh issue view "$ISSUE" --json title,body,url,number 2>&1)
   if echo "$ISSUE_JSON" | grep -q "Could not resolve"; then
@@ -74,13 +75,15 @@ process_issue() {
   BRANCH="issue-$ISSUE"
   if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
     echo "⚠️ Branch $BRANCH already exists remotely. Checking it out..."
-    git checkout "$BRANCH"
+    git checkout --ignore-other-worktrees "$BRANCH"
   else
     git checkout -b "$BRANCH"
     echo "🌿 Created and switched to branch: $BRANCH"
   fi
-  cat > /tmp/grkr-prompt.md << EOF
-Implement the GitHub issue described below using the opencode coding agent best practices.
+  prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-prompt.XXXXXX")
+  trap 'rm -f "$prompt_file"' RETURN
+  cat > "$prompt_file" << EOF
+Implement the GitHub issue described below using the Codex coding agent best practices.
 
 **Issue #$ISSUE: $TITLE**
 **URL:** $URL
@@ -101,11 +104,11 @@ $BODY
 
 Begin by analyzing the project.
 EOF
-  echo "🚀 Running opencode to implement the issue..."
-  echo "Prompt saved to /tmp/grkr-prompt.md for reference."
-  opencode run --title "Implement GitHub issue #$ISSUE: $TITLE" "$(cat /tmp/grkr-prompt.md)"
+  echo "🚀 Running codex to implement the issue..."
+  echo "Prompt saved to $prompt_file for reference."
+  codex exec --full-auto --cd "$(pwd)" < "$prompt_file"
   echo ""
-  echo "✅ opencode has finished implementing the changes."
+  echo "✅ codex has finished implementing the changes."
   if [ "$MODE" = "--project" ]; then
     echo "🔄 Auto-committing, pushing and creating PR..."
     git add .
@@ -128,7 +131,6 @@ EOF
     echo ""
     echo "You can run 'grkr --issue $ISSUE' again if more changes are needed."
   fi
-  rm -f /tmp/grkr-prompt.md
 }
 
 if [ "$MODE" = "--project" ]; then

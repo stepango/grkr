@@ -1,15 +1,33 @@
 #!/bin/bash
 set -e
 
+resolve_script_path() {
+  local source_path=$1
+  local source_dir
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+  while [ -L "$source_path" ]; do
+    source_dir=$(cd "$(dirname "$source_path")" && pwd)
+    source_path=$(readlink "$source_path")
+    case "$source_path" in
+      /*) ;;
+      *) source_path="$source_dir/$source_path" ;;
+    esac
+  done
+
+  printf '%s\n' "$source_path"
+}
+
+SCRIPT_PATH=$(resolve_script_path "${BASH_SOURCE[0]}")
+SCRIPT_DIR=$(cd "$(dirname "$SCRIPT_PATH")" && pwd)
 . "$SCRIPT_DIR/doctor.sh"
 . "$SCRIPT_DIR/grkr-project-status.sh"
+. "$SCRIPT_DIR/grkr-issue-workflow.sh"
 
 mkdir -p "${HOME:-.}/.grkr/logs"
 LOGFILE="${HOME:-.}/.grkr/logs/grkr-$(date +%Y%m%d-%H%M%S).log"
 CURRENT_ISSUE=""
 CURRENT_PROMPT_FILE=""
+CURRENT_ISSUE_WORKTREE=""
 ATTACH_ISSUE_LOGS=0
 PR_URL=""
 BRANCH_URL=""
@@ -107,11 +125,11 @@ collect_file_line_limit_violations() {
 
   while IFS= read -r -d '' file; do
     [ -n "$file" ] || continue
-    line_count=$(git show ":$file" | wc -l | tr -d '[:space:]')
+    line_count=$(git_in_issue_context show ":$file" | wc -l | tr -d '[:space:]')
     if [ "$line_count" -gt "$MAX_FILE_LINES" ]; then
       printf '%s\t%s\n' "$file" "$line_count"
     fi
-  done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+  done < <(git_in_issue_context diff --cached --name-only --diff-filter=ACMR -z)
 }
 
 check_file_line_limit() {
@@ -500,6 +518,7 @@ ensure_test_checkpoint() {
   local total_commands=0
   local passed_commands=0
   local failed_commands=0
+  local worktree_shell_path
 
   checkpoint_file="$task_dir/test.md"
   comment_id=$(checkpoint_comment_id_from_json "$issue_json" test "$task_slug")
@@ -529,7 +548,18 @@ ensure_test_checkpoint() {
     total_commands=$((total_commands + 1))
     log_file=$(mktemp "${TMPDIR:-/tmp}/grkr-test-output.XXXXXX")
     echo "🧪 Running verification command for issue #$issue: $command"
-    if bash -lc "$command" > "$log_file" 2>&1; then
+    if [ -n "${CURRENT_ISSUE_WORKTREE:-}" ]; then
+      worktree_shell_path=$(printf '%q' "$CURRENT_ISSUE_WORKTREE")
+      if bash -lc "cd $worktree_shell_path && $command" > "$log_file" 2>&1; then
+        status="PASS"
+        passed_commands=$((passed_commands + 1))
+      else
+        status="FAIL"
+        failed_commands=$((failed_commands + 1))
+        overall_result="FAIL"
+        recommendation="needs follow-up"
+      fi
+    elif bash -lc "$command" > "$log_file" 2>&1; then
       status="PASS"
       passed_commands=$((passed_commands + 1))
     else
@@ -618,11 +648,11 @@ extract_codex_pr_body() {
   local issue=$5
   local url=$6
 
-  if [ -s "$codex_output_file" ]; then
-    awk '
+  if [ -s "$codex_output_file" ] || task_log_is_sharded "$codex_output_file"; then
+    emit_task_log_stream "$codex_output_file" | awk '
       /^## / {found=1}
       found {print}
-    ' "$codex_output_file" > "$pr_body_file"
+    ' > "$pr_body_file"
     if [ -s "$pr_body_file" ]; then
       ensure_pr_body_limit "$pr_body_file" "$body" "$title" "$issue" "$url"
       return 0
@@ -638,25 +668,17 @@ run_codex_prompt() {
   local output_file=$2
   local phase_label=$3
   local mode=${4:-replace}
+  local workdir=${5:-$(pwd)}
   local run_output_file
 
   run_output_file=$(mktemp "${TMPDIR:-/tmp}/grkr-codex-output.XXXXXX")
   echo "🚀 Running codex to $phase_label..."
   echo "Prompt saved to $prompt_file for reference."
-  codex exec --full-auto --cd "$(pwd)" < "$prompt_file" >"$run_output_file" 2>&1
+  codex exec --full-auto --cd "$workdir" < "$prompt_file" >"$run_output_file" 2>&1
   cat "$run_output_file"
   echo ""
 
-  if [ "$mode" = "append" ] && [ -f "$output_file" ]; then
-    {
-      printf '\n[grkr %s]\n\n' "$phase_label"
-      cat "$run_output_file"
-    } >> "$output_file"
-    rm -f "$run_output_file"
-  else
-    mv "$run_output_file" "$output_file"
-  fi
-
+  persist_task_log_output "$run_output_file" "$output_file" "$phase_label" "$mode"
   echo "✅ codex has finished $phase_label."
 }
 
@@ -668,8 +690,8 @@ ensure_publishable_file_sizes() {
   local codex_output_file=$5
   local violations
 
-  git add .
-  if git diff --cached --quiet; then
+  stage_relevant_issue_files
+  if git_in_issue_context diff --cached --quiet; then
     return 0
   fi
 
@@ -681,9 +703,9 @@ ensure_publishable_file_sizes() {
   check_file_line_limit
   echo "🔧 Staged files exceed the $MAX_FILE_LINES-line limit. Asking codex to refactor before publish."
   write_line_limit_fix_prompt "$prompt_file" "$issue" "$title" "$task_slug" "$violations"
-  run_codex_prompt "$prompt_file" "$codex_output_file" "remediate file line-limit violations" append
+  run_codex_prompt "$prompt_file" "$codex_output_file" "remediate file line-limit violations" append "${CURRENT_ISSUE_WORKTREE:-$(pwd)}"
 
-  git add .
+  stage_relevant_issue_files
   if check_file_line_limit; then
     return 0
   fi
@@ -698,11 +720,14 @@ publish_issue_changes() {
   local URL=$3
   local BODY=$4
   local CODEX_OUTPUT_FILE=$5
+  local BRANCH=$6
   local PR_BODY_FILE
+  local pr_list_json
+  local pr_number
 
   echo "🔄 Auto-committing, pushing and creating PR..."
-  git add .
-  if git diff --cached --quiet; then
+  stage_relevant_issue_files
+  if git_in_issue_context diff --cached --quiet; then
     echo "No changes for #$ISSUE"
     return 0
   fi
@@ -712,13 +737,21 @@ publish_issue_changes() {
     return 1
   fi
 
-  git commit -m "feat: implement #$ISSUE - $TITLE"
-  git push -u origin "issue-$ISSUE"
-  BRANCH_URL="https://github.com/$REPO/tree/issue-$ISSUE"
+  git_in_issue_context commit -m "feat: implement #$ISSUE - $TITLE"
+  git_in_issue_context push -u origin "$BRANCH"
+  BRANCH_URL="https://github.com/$REPO/tree/$BRANCH"
   PR_BODY_FILE=$(mktemp "${TMPDIR:-/tmp}/grkr-pr-body.XXXXXX")
   extract_codex_pr_body "$CODEX_OUTPUT_FILE" "$PR_BODY_FILE" "$BODY" "$TITLE" "$ISSUE" "$URL"
-  PR_URL=$(gh pr create --title "$TITLE" --body-file "$PR_BODY_FILE")
-  echo "✅ PR created: $PR_URL"
+  pr_list_json=$(gh pr list --head "$BRANCH" --json number,url 2>/dev/null || true)
+  pr_number=$(printf '%s' "$pr_list_json" | jq -r '.[0].number // empty')
+  if [ -n "$pr_number" ]; then
+    gh pr edit "$pr_number" --title "$TITLE" --body-file "$PR_BODY_FILE" >/dev/null
+    PR_URL=$(printf '%s' "$pr_list_json" | jq -r '.[0].url // empty')
+    echo "✅ PR updated: $PR_URL"
+  else
+    PR_URL=$(gh pr create --title "$TITLE" --body-file "$PR_BODY_FILE")
+    echo "✅ PR created: $PR_URL"
+  fi
   gh issue edit "$ISSUE" --add-label "implemented" || true
   gh issue edit "$ISSUE" --remove-label "todo" || true
   rm -f "$PR_BODY_FILE"
@@ -744,6 +777,10 @@ EOF
 
 process_issue() {
   local ISSUE=$1
+  local decision
+  local decision_output_file
+  local decision_prompt_file
+  local ISSUE_WORKTREE_DIR
   local prompt_file
   local PROJECT_ITEM_ID
   local TASK_SLUG
@@ -779,28 +816,41 @@ process_issue() {
   ensure_task_progress_file "$PROGRESS_FILE" "$ISSUE" "$PROJECT_ITEM_ID" "$TASK_SLUG" "$BRANCH"
   ensure_checkpoint_stage research "$ISSUE" "$ISSUE_JSON" "$TASK_SLUG" "$TASK_DIR" "$TITLE" "$BODY" "$URL" "$PROGRESS_FILE" || return 1
   ensure_checkpoint_stage plan "$ISSUE" "$ISSUE_JSON" "$TASK_SLUG" "$TASK_DIR" "$TITLE" "$BODY" "$URL" "$PROGRESS_FILE" || return 1
-  move_issue_to_in_progress "$ISSUE" "$ISSUE_JSON" || return 1
-  if git show-ref --verify --quiet "refs/heads/$BRANCH"; then
-    echo "⚠️ Branch $BRANCH already exists locally. Checking it out..."
-    git checkout --ignore-other-worktrees "$BRANCH"
-  elif git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
-    echo "⚠️ Branch $BRANCH already exists remotely. Checking it out..."
-    git checkout --ignore-other-worktrees -t "origin/$BRANCH"
-  else
-    git checkout -b "$BRANCH"
-    echo "🌿 Created and switched to branch: $BRANCH"
+  ISSUE_WORKTREE_DIR=$(prepare_issue_worktree "$BRANCH" "$TASK_SLUG") || return 1
+  decision_prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-decision-prompt.XXXXXX")
+  decision_output_file=$(mktemp "${TMPDIR:-/tmp}/grkr-decision-output.XXXXXX")
+  write_decision_prompt_file "$decision_prompt_file" "$ISSUE" "$TITLE" "$URL" "$BODY" "$TASK_SLUG" "$ISSUE_WORKTREE_DIR"
+  run_implementation_decision_gate "$ISSUE" "$PROGRESS_FILE" "$decision_prompt_file" "$decision_output_file" "$ISSUE_WORKTREE_DIR" || {
+    rm -f "$decision_prompt_file" "$decision_output_file"
+    return 1
+  }
+  decision=$IMPLEMENTATION_DECISION
+  rm -f "$decision_prompt_file" "$decision_output_file"
+  if [ "$decision" != "proceed" ]; then
+    echo "⏸️ Decision gate returned $decision for issue #$ISSUE. Skipping implementation."
+    return 1
   fi
+  move_issue_to_in_progress "$ISSUE" "$ISSUE_JSON" || return 1
+  CURRENT_ISSUE_WORKTREE="$ISSUE_WORKTREE_DIR"
   prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-prompt.XXXXXX")
   CURRENT_PROMPT_FILE="$prompt_file"
-  write_issue_prompt_file "$prompt_file" "$ISSUE" "$TITLE" "$URL" "$BODY" "$TASK_SLUG"
+  write_issue_prompt_file "$prompt_file" "$ISSUE" "$TITLE" "$URL" "$BODY" "$TASK_SLUG" "$ISSUE_WORKTREE_DIR"
   codex_output_file="$TASK_DIR/implementation.log"
-  run_codex_prompt "$prompt_file" "$codex_output_file" "implement the issue"
-  ensure_publishable_file_sizes "$ISSUE" "$TITLE" "$TASK_SLUG" "$prompt_file" "$codex_output_file" || return 1
-  ensure_test_checkpoint "$ISSUE" "$ISSUE_JSON" "$TASK_SLUG" "$TASK_DIR" "$TITLE" "$PROGRESS_FILE" || return 1
-  if ! publish_issue_changes "$ISSUE" "$TITLE" "$URL" "$BODY" "$codex_output_file"; then
+  run_codex_prompt "$prompt_file" "$codex_output_file" "implement the issue" replace "$ISSUE_WORKTREE_DIR"
+  ensure_publishable_file_sizes "$ISSUE" "$TITLE" "$TASK_SLUG" "$prompt_file" "$codex_output_file" || {
+    CURRENT_ISSUE_WORKTREE=""
+    return 1
+  }
+  ensure_test_checkpoint "$ISSUE" "$ISSUE_JSON" "$TASK_SLUG" "$TASK_DIR" "$TITLE" "$PROGRESS_FILE" || {
+    CURRENT_ISSUE_WORKTREE=""
+    return 1
+  }
+  if ! publish_issue_changes "$ISSUE" "$TITLE" "$URL" "$BODY" "$codex_output_file" "$BRANCH"; then
+    CURRENT_ISSUE_WORKTREE=""
     echo "⚠️ Issue #$ISSUE changes were not published."
     return 1
   fi
+  CURRENT_ISSUE_WORKTREE=""
   mark_task_progress_complete "$PROGRESS_FILE" "$BRANCH_URL" "$PR_URL"
   if ! move_issue_to_done "$ISSUE" "$ISSUE_JSON"; then
     echo "⚠️ Issue #$ISSUE implementation succeeded, but the project status could not be moved to ${DONE_VALUE:-Done}."

@@ -121,6 +121,41 @@ Issue #$issue: $title
 EOF
 }
 
+write_decision_prompt_file() {
+  local file=$1
+  local issue=$2
+  local title=$3
+  local url=$4
+  local body=$5
+  local task_slug=$6
+  local worktree_dir=$7
+
+  cat > "$file" <<EOF
+Decide whether the GitHub issue below should proceed to implementation now.
+
+Reply with exactly one word on the first non-empty line: proceed or refuse.
+
+Only reply with proceed when the issue is sufficiently specified, bounded, and ready for one autonomous implementation pass.
+
+**Issue #$issue: $title**
+**URL:** $url
+
+**Description:**
+$body
+
+**Checkpoint files:**
+- $GRKR_ROOT/.grkr/tasks/$task_slug/research.md
+- $GRKR_ROOT/.grkr/tasks/$task_slug/plan.md
+
+**Repository context:**
+- Issue worktree: $worktree_dir
+- Repository root: $GRKR_ROOT
+- Main repo policy: keep changed files at $MAX_FILE_LINES lines or fewer.
+
+If you choose refuse, you may add a short explanation after the first line.
+EOF
+}
+
 write_issue_prompt_file() {
   local file=$1
   local issue=$2
@@ -128,6 +163,7 @@ write_issue_prompt_file() {
   local url=$4
   local body=$5
   local task_slug=$6
+  local worktree_dir=$7
 
   cat > "$file" <<EOF
 Implement the GitHub issue described below using the Codex coding agent best practices.
@@ -138,9 +174,15 @@ Implement the GitHub issue described below using the Codex coding agent best pra
 **Description:**
 $body
 
+**Execution context:**
+- Issue worktree: $worktree_dir
+- Repository root: $GRKR_ROOT
+- Apply code changes in the issue worktree only.
+- The shell runner records your terminal output in $GRKR_ROOT/.grkr/tasks/$task_slug/implementation.log and may shard large transcripts into $GRKR_ROOT/.grkr/tasks/$task_slug/codex/implementation.log.parts/.
+
 **Checkpoint files:**
-- .grkr/tasks/$task_slug/research.md
-- .grkr/tasks/$task_slug/plan.md
+- $GRKR_ROOT/.grkr/tasks/$task_slug/research.md
+- $GRKR_ROOT/.grkr/tasks/$task_slug/plan.md
 
 **Repository constraints:**
 - No file may exceed $MAX_FILE_LINES lines.
@@ -159,10 +201,13 @@ $body
 2. Follow the project's code style, naming conventions, and architecture.
 3. Make minimal, focused changes.
 4. Do not add comments unless specifically asked.
-5. Keep every changed file within the repository's per-file line limit.
-6. After changes, run linting and tests if available (use the bash tool).
-7. Be concise in your responses.
-8. When done, the changes should fully address the issue.
+5. Follow the plan from the checkpoint files and minimize unrelated edits.
+6. Run the configured build and test commands as part of the implementation work.
+7. Stage only the files relevant to the issue.
+8. Keep every changed file within the repository's per-file line limit.
+9. After changes, run linting and tests if available (use the bash tool).
+10. Be concise in your responses.
+11. When done, the changes should fully address the issue.
 
 Begin by analyzing the project.
 EOF

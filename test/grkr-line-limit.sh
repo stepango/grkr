@@ -5,6 +5,7 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-line-limit.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
 cp bin/grkr "$tmpdir/grkr.sh"
+cp bin/grkr-issue-workflow.sh "$tmpdir/grkr-issue-workflow.sh"
 cp bin/grkr-project-status.sh "$tmpdir/grkr-project-status.sh"
 cp bin/grkr-templates.sh "$tmpdir/grkr-templates.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
@@ -40,6 +41,7 @@ case "$1 $2" in
   'issue list') printf '[{"number":1,"projectItems":[{"status":{"name":"Todo"}}]}]\n' ;;
   'issue view') printf '{"title":"Test issue","body":"Body","url":"https://example.com","number":1,"projectItems":[{"status":{"name":"Todo"}}],"comments":[]}\n' ;;
   'issue comment') exit 0 ;;
+  'pr list') printf '[]\n' ;;
   'pr create') echo 'https://example.com/pr/1' ;;
   'issue edit') exit 0 ;;
   *) exit 0 ;;
@@ -59,9 +61,19 @@ cat > "\$prompt_file"
 printf -- '--- prompt %s ---\n' "\$calls" >> "$codex_prompt_log"
 cat "\$prompt_file" >> "$codex_prompt_log"
 printf '\n' >> "$codex_prompt_log"
-if [ "\$calls" -eq 2 ]; then
+if grep -Fq "Reply with exactly one word on the first non-empty line: proceed or refuse." "\$prompt_file"; then
+  printf 'proceed\n'
+elif [ "\$calls" -eq 3 ]; then
+  printf 'refactor pass complete\n'
   sed -n '1,999p' "$big_file" > "$big_file.fixed"
   mv "$big_file.fixed" "$big_file"
+else
+  printf '## Detailed description of the task\n'
+  i=1
+  while [ "\$i" -le 1005 ]; do
+    printf 'implementation line %s\n' "\$i"
+    i=\$((i + 1))
+  done
 fi
 rm -f "\$prompt_file"
 exit 0
@@ -79,18 +91,36 @@ EOF
 
 cat > "$tmpdir/bin/git" <<EOF
 #!/bin/bash
-case "\$*" in
+case "\$1 \$2" in
   'rev-parse --show-toplevel') printf '%s\n' "$tmpdir" ;;
-  'remote get-url origin') printf 'git@github.com:stepango/grkr.git\n' ;;
+  'remote get-url') printf 'git@github.com:stepango/grkr.git\n' ;;
   'status --porcelain') exit 0 ;;
-  'ls-remote --heads origin issue-1') exit 1 ;;
-  'checkout -b issue-1') exit 0 ;;
-  'add .') exit 0 ;;
-  'diff --cached --name-only --diff-filter=ACMR -z') printf '%s\0' "$big_file" ;;
-  'diff --cached --quiet') exit 1 ;;
-  "show :$big_file") cat "$big_file" ;;
-  'commit -m feat: implement #1 - Test issue') exit 0 ;;
-  'push -u origin issue-1') exit 0 ;;
+  'show-ref --verify') exit 1 ;;
+  'ls-remote --heads') exit 1 ;;
+  'worktree add')
+    mkdir -p "\${5-}"
+    exit 0
+    ;;
+  'reset ') exit 0 ;;
+  'diff --name-only') printf 'big-file.md\n' ;;
+  'diff --cached')
+    case "\$3" in
+      --name-only)
+        if [ "\${4-}" = "--diff-filter=ACMR" ]; then
+          printf 'big-file.md\0'
+        fi
+        exit 0
+        ;;
+      --quiet)
+        exit 1
+        ;;
+    esac
+    ;;
+  'ls-files --others') exit 0 ;;
+  'add -A') exit 0 ;;
+  'show :big-file.md') cat "$big_file" ;;
+  'commit -m') exit 0 ;;
+  'push -u') exit 0 ;;
   *) exec "$real_git" "\$@" ;;
 esac
 EOF
@@ -98,6 +128,7 @@ EOF
 chmod +x "$tmpdir/bin/gh" "$tmpdir/bin/codex" "$tmpdir/bin/git" "$tmpdir/bin/timeout" "$tmpdir/bin/flock"
 
 output_file="$tmpdir/output.log"
+task_dir="$tmpdir/.grkr/tasks/issue-1-test-issue"
 (
   cd "$tmpdir"
   PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" bash "$tmpdir/grkr.sh" --project 1 >"$output_file" 2>&1 &
@@ -125,4 +156,10 @@ grep -F "✅ PR created: https://example.com/pr/1" "$output_file" >/dev/null
 ! grep -F "Commit aborted due to file size limit." "$output_file" >/dev/null
 grep -F "No file may exceed 1000 lines." "$codex_prompt_log" >/dev/null
 grep -F "still violates the repository file-size policy" "$codex_prompt_log" >/dev/null
-[ "$(cat "$codex_call_count")" = "2" ]
+[ -f "$task_dir/implementation.log" ]
+grep -F "# Sharded Codex Output" "$task_dir/implementation.log" >/dev/null
+grep -F 'codex/implementation.log.parts/part-0000' "$task_dir/implementation.log" >/dev/null
+[ -f "$task_dir/codex/implementation.log.parts/part-0000" ]
+[ -f "$task_dir/codex/implementation.log.parts/part-0001" ]
+[ "$(wc -l < "$task_dir/codex/implementation.log.parts/part-0000" | tr -d '[:space:]')" = "1000" ]
+[ "$(cat "$codex_call_count")" = "3" ]

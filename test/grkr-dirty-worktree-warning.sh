@@ -5,6 +5,7 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-dirty-worktree.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
 cp bin/grkr "$tmpdir/grkr.sh"
+cp bin/grkr-issue-workflow.sh "$tmpdir/grkr-issue-workflow.sh"
 cp bin/grkr-project-status.sh "$tmpdir/grkr-project-status.sh"
 cp bin/grkr-templates.sh "$tmpdir/grkr-templates.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
@@ -31,6 +32,7 @@ cat > "$tmpdir/bin/gh" <<'EOF'
 case "$1 $2" in
   'auth status') exit 0 ;;
   'issue view') printf '{"title":"Dirty worktree issue","body":"Body","url":"https://example.com/issues/1","number":1}\n' ;;
+  'pr list') printf '[]\n' ;;
   'pr create') echo 'https://example.com/pr/1' ;;
   'issue edit') exit 0 ;;
   'issue comment') exit 0 ;;
@@ -40,6 +42,12 @@ EOF
 
 cat > "$tmpdir/bin/codex" <<'EOF'
 #!/bin/bash
+prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-dirty-prompt.XXXXXX")
+cat > "$prompt_file"
+if grep -Fq "Reply with exactly one word on the first non-empty line: proceed or refuse." "$prompt_file"; then
+  printf 'proceed\n'
+fi
+rm -f "$prompt_file"
 exit 0
 EOF
 
@@ -59,11 +67,22 @@ case "\$1 \$2" in
   'rev-parse --show-toplevel') printf '%s\n' "$tmpdir" ;;
   'remote get-url') printf 'git@github.com:stepango/grkr.git\n' ;;
   'status --porcelain') printf ' M README.md\n' ;;
+  'show-ref --verify') exit 1 ;;
   'ls-remote --heads') exit 1 ;;
-  'checkout -b') exit 0 ;;
-  'add .') exit 0 ;;
-  'diff --cached --quiet') exit 1 ;;
-  'diff --cached') exit 1 ;;
+  'worktree add')
+    mkdir -p "\${5-}"
+    exit 0
+    ;;
+  'reset ') exit 0 ;;
+  'diff --name-only') printf 'README.md\n' ;;
+  'diff --cached')
+    case "\$3" in
+      --quiet) exit 1 ;;
+      --name-only) exit 0 ;;
+    esac
+    ;;
+  'ls-files --others') exit 0 ;;
+  'add -A') exit 0 ;;
   'commit -m') exit 0 ;;
   'push -u') exit 0 ;;
   *) exec "$real_git" "\$@" ;;

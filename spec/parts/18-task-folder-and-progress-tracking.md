@@ -23,6 +23,8 @@ Files:
 - `test.md`
 - `progress.json`
 
+When `implementation.log` would exceed the per-file line limit, keep it as a manifest and store the full transcript in numbered parts under `codex/implementation.log.parts/`.
+
 Example `progress.json`:
 
 ```json
@@ -60,4 +62,3 @@ If refusal happens:
 ```
 
 ---
-

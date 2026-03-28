@@ -13,6 +13,8 @@ real_git=$(command -v git)
 mkdir -p "$tmpdir/bin"
 gh_log="$tmpdir/gh.log"
 issue_comment_body="$tmpdir/issue-comment-body.log"
+pr_body="$tmpdir/pr-body.log"
+codex_prompt="$tmpdir/codex-prompt.log"
 mkdir -p "$tmpdir/.grkr"
 
 cat > "$tmpdir/.grkr/config.sh" <<'EOF'
@@ -28,7 +30,7 @@ EOF
 cat > "$tmpdir/bin/gh" <<EOF
 #!/bin/bash
 printf '%s\n' "\$*" >> "$gh_log"
-case "\$1 \$2" in
+case "\${1-} \${2-}" in
   'auth status') exit 0 ;;
   'issue view') printf '{"title":"Test issue","body":"Body","url":"https://example.com","number":1}\n' ;;
   'issue comment')
@@ -50,14 +52,33 @@ case "\$1 \$2" in
     done
     exit 0
     ;;
-  'pr create') echo 'https://example.com/pr/1' ;;
+  'pr create')
+    shift 2
+    while [ "\$#" -gt 0 ]; do
+      case "\$1" in
+        --body-file)
+          cat "\$2" >> "$pr_body"
+          shift 2
+          ;;
+        --body)
+          printf '%s\n' "\$2" >> "$pr_body"
+          shift 2
+          ;;
+        *)
+          shift
+          ;;
+      esac
+    done
+    echo 'https://example.com/pr/1'
+    ;;
   'issue edit') exit 0 ;;
   *) exit 0 ;;
 esac
 EOF
 
-cat > "$tmpdir/bin/codex" <<'EOF'
+cat > "$tmpdir/bin/codex" <<EOF
 #!/bin/bash
+cat > "$codex_prompt"
 exit 0
 EOF
 
@@ -100,7 +121,15 @@ grep -F "✅ Startup validation passed." "$output_file" >/dev/null
 grep -F "🚀 Running codex to implement the issue..." "$output_file" >/dev/null
 grep -F "✅ codex has finished implementing the changes." "$output_file" >/dev/null
 grep -F "✅ PR created: https://example.com/pr/1" "$output_file" >/dev/null
-grep -F "Fixes #1" "$gh_log" >/dev/null
-grep -F "Issue: [#1](https://example.com)" "$gh_log" >/dev/null
+grep -F "## Detailed description of the task" "$pr_body" >/dev/null
+grep -F "## Implementation plan details" "$pr_body" >/dev/null
+grep -F "## Testing results" "$pr_body" >/dev/null
+grep -F "Functional testing performed" "$pr_body" >/dev/null
+grep -F "Fixes #1" "$pr_body" >/dev/null
+grep -F "Issue: [#1](https://example.com)" "$pr_body" >/dev/null
 grep -F "🚀 Running codex to implement the issue..." "$issue_comment_body" >/dev/null
 grep -F "✅ PR created: https://example.com/pr/1" "$issue_comment_body" >/dev/null
+grep -F "Detailed description of the task" "$codex_prompt" >/dev/null
+grep -F "Implementation plan details" "$codex_prompt" >/dev/null
+grep -F "Testing results" "$codex_prompt" >/dev/null
+grep -F "Functional testing performed" "$codex_prompt" >/dev/null

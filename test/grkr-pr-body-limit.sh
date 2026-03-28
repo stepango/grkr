@@ -68,6 +68,7 @@ if grep -Fq "Reply with exactly one word on the first non-empty line: proceed or
 else
   printf '## Detailed description of the task\n\n'
   awk 'BEGIN { for (i = 0; i < 70000; i++) printf "A"; printf "\n\n## Implementation plan details\n\n- Step\n\n## Testing results\n\n- Functional testing performed\n" }'
+  printf '\nIssue: https://example.com/issues/1\n'
 fi
 rm -f "$prompt_file"
 EOF
@@ -123,6 +124,10 @@ grep -F "exceeded GitHub's PR body size limit" "$pr_body" >/dev/null
 grep -F "Fixes #1" "$pr_body" >/dev/null
 if grep -Fq "Issue: [#1](https://example.com/issues/1)" "$pr_body"; then
   echo "unexpected duplicate issue mention in PR body"
+  exit 1
+fi
+if grep -Fq "Issue: https://example.com/issues/1" "$pr_body"; then
+  echo "unexpected duplicate issue URL mention in PR body"
   exit 1
 fi
 [ "$(wc -m < "$pr_body" | tr -d '[:space:]')" -le 65536 ]

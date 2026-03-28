@@ -125,7 +125,7 @@ else
 
 Implemented the requested issue workflow updates.
 
-Issue: [#1](https://example.com)
+Issue: #1 (https://example.com).
 
 ## Implementation plan details
 
@@ -228,7 +228,7 @@ if [ "$(grep -c '^Fixes #1$' "$pr_body")" -ne 1 ]; then
   echo "expected a single Fixes footer in PR body"
   exit 1
 fi
-if grep -Fq "Issue: [#1](https://example.com)" "$pr_body"; then
+if grep -Fq "Issue: #1 (https://example.com)." "$pr_body"; then
   echo "unexpected duplicate issue mention in PR body"
   exit 1
 fi

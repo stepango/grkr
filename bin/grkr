@@ -49,9 +49,17 @@ esac
 
 attach_issue_logs() {
   local issue=${CURRENT_ISSUE:-}
+  local comment_file
   [ -n "$issue" ] || return 0
   [ -f "$LOGFILE" ] || return 0
-  gh issue comment "$issue" --body-file "$LOGFILE" >/dev/null 2>&1 || true
+  comment_file=$(mktemp "${TMPDIR:-/tmp}/grkr-issue-log.XXXXXX") || return 0
+  {
+    printf '<details>\n<summary>Execution log</summary>\n\n```text\n'
+    cat "$LOGFILE"
+    printf '\n```\n</details>\n'
+  } > "$comment_file"
+  gh issue comment "$issue" --body-file "$comment_file" >/dev/null 2>&1 || true
+  rm -f "$comment_file"
 }
 
 cleanup_on_exit() {

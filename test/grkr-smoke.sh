@@ -127,8 +127,12 @@ grep -F "## Testing results" "$pr_body" >/dev/null
 grep -F "Functional testing performed" "$pr_body" >/dev/null
 grep -F "Fixes #1" "$pr_body" >/dev/null
 grep -F "Issue: [#1](https://example.com)" "$pr_body" >/dev/null
+grep -F "<details>" "$issue_comment_body" >/dev/null
+grep -F "<summary>Execution log</summary>" "$issue_comment_body" >/dev/null
+grep -F '```text' "$issue_comment_body" >/dev/null
 grep -F "🚀 Running codex to implement the issue..." "$issue_comment_body" >/dev/null
 grep -F "✅ PR created: https://example.com/pr/1" "$issue_comment_body" >/dev/null
+grep -F "</details>" "$issue_comment_body" >/dev/null
 grep -F "Detailed description of the task" "$codex_prompt" >/dev/null
 grep -F "Implementation plan details" "$codex_prompt" >/dev/null
 grep -F "Testing results" "$codex_prompt" >/dev/null

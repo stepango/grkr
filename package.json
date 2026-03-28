@@ -3,10 +3,12 @@
   "version": "0.1.0",
   "description": "AI-powered CLI that reads a GitHub issue and uses Codex to implement the changes.",
   "bin": {
-    "grkr": "bin/grkr"
+    "grkr": "bin/grkr",
+    "doctor.sh": "bin/doctor.sh"
   },
   "scripts": {
-    "test": "bash test/grkr-smoke.sh && bash test/grkr-line-limit.sh"
+    "sync:spec": "bash scripts/sync-spec.sh",
+    "test": "bash scripts/sync-spec.sh && bash test/grkr-init.sh && bash test/grkr-smoke.sh && bash test/grkr-line-limit.sh"
   },
   "keywords": ["cli", "github", "codex", "ai", "coding-agent"],
   "author": "stepango",

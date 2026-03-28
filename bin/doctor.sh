@@ -20,7 +20,7 @@ doctor_require_tool() {
 
 doctor_validate_tools() {
   local status=0
-  for tool in jq timeout flock git gh; do
+  for tool in jq git gh; do
     doctor_require_tool "$tool" || status=1
   done
   return "$status"
@@ -86,6 +86,58 @@ doctor_validate_config() {
   return "$status"
 }
 
+doctor_write_default_config() {
+  local project_number=$1
+  local remote_url
+  local remote_slug
+  local project_owner
+  local config_dir
+
+  if [ -z "$project_number" ]; then
+    doctor_fail "PROJECT_NUMBER is required to create $GRKR_CONFIG_FILE."
+    return 1
+  fi
+
+  remote_url=$(git remote get-url origin 2>/dev/null) || {
+    doctor_fail "Unable to read git remote origin."
+    return 1
+  }
+
+  remote_slug=$(doctor_normalize_repo_slug "$remote_url") || {
+    doctor_fail "Unsupported origin remote URL: $remote_url"
+    return 1
+  }
+
+  project_owner=${remote_slug%%/*}
+  config_dir=$(dirname "$GRKR_CONFIG_FILE")
+
+  mkdir -p "$config_dir" || {
+    doctor_fail "Unable to create $config_dir."
+    return 1
+  }
+
+  cat > "$GRKR_CONFIG_FILE" <<EOF
+REPO="$remote_slug"
+PROJECT_OWNER="$project_owner"
+PROJECT_NUMBER="$project_number"
+STATUS_FIELD_NAME="Status"
+TODO_VALUE="Todo"
+BACKLOG_VALUE="Backlog"
+PRIORITY_FIELD_NAME="Priority"
+EOF
+}
+
+doctor_create_config() {
+  local project_number=$1
+
+  if [ -f "$GRKR_CONFIG_FILE" ]; then
+    doctor_fail "Config file already exists: $GRKR_CONFIG_FILE"
+    return 1
+  fi
+
+  doctor_write_default_config "$project_number"
+}
+
 doctor_validate_repo_remote() {
   local remote_url
   remote_url=$(git remote get-url origin 2>/dev/null) || {
@@ -135,8 +187,15 @@ doctor_validate() {
   doctor_validate_tools || status=1
   doctor_validate_gh_auth || status=1
   doctor_validate_codex || status=1
-  doctor_validate_config || status=1
-  doctor_validate_repo_remote || status=1
+
+  if [ -f "$GRKR_CONFIG_FILE" ]; then
+    doctor_validate_config || status=1
+    doctor_validate_repo_remote || status=1
+  else
+    doctor_fail "Missing config file: $GRKR_CONFIG_FILE"
+    status=1
+  fi
+
   doctor_validate_grkr_dir || status=1
 
   if [ "$status" -eq 0 ]; then

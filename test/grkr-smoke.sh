@@ -209,7 +209,10 @@ grep -F "## Implementation plan details" "$pr_body" >/dev/null
 grep -F "## Testing results" "$pr_body" >/dev/null
 grep -F "Functional testing performed" "$pr_body" >/dev/null
 grep -F "Fixes #1" "$pr_body" >/dev/null
-grep -F "Issue: [#1](https://example.com)" "$pr_body" >/dev/null
+if grep -Fq "Issue: [#1](https://example.com)" "$pr_body"; then
+  echo "unexpected duplicate issue mention in PR body"
+  exit 1
+fi
 task_dir="$tmpdir/.grkr/tasks/issue-1-test-issue"
 worktree_dir="$tmpdir/.grkr/worktrees/issue-1-test-issue"
 worktree_realpath=$(cd "$worktree_dir" && pwd)

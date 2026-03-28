@@ -121,5 +121,8 @@ output_file="$tmpdir/output.log"
 grep -F "✅ PR created: https://example.com/pr/1" "$output_file" >/dev/null
 grep -F "exceeded GitHub's PR body size limit" "$pr_body" >/dev/null
 grep -F "Fixes #1" "$pr_body" >/dev/null
-grep -F "Issue: [#1](https://example.com/issues/1)" "$pr_body" >/dev/null
+if grep -Fq "Issue: [#1](https://example.com/issues/1)" "$pr_body"; then
+  echo "unexpected duplicate issue mention in PR body"
+  exit 1
+fi
 [ "$(wc -m < "$pr_body" | tr -d '[:space:]')" -le 65536 ]

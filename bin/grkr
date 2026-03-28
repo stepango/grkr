@@ -652,8 +652,8 @@ normalize_pr_issue_mentions() {
       fixes_seen = 0
     }
     {
-      issue_line = ($0 ~ "^[[:space:]]*[Ii]ssue:[[:space:]]*")
-      issue_reference = ($0 ~ ("#" issue "([^0-9]|$)") || $0 ~ ("/issues/" issue "([^0-9]|$)"))
+      issue_line = ($0 ~ "^[[:space:]]*[*_`>#-]*[[:space:]]*[Ii]ssue([[:space:]]*[:#]|[[:space:]]+)")
+      issue_reference = ($0 ~ ("(^|[^0-9])#" issue "([^0-9]|$)") || $0 ~ ("/issues/" issue "([^0-9]|$)"))
       if (issue_line && issue_reference) {
         next
       }

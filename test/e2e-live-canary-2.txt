@@ -1,0 +1,2 @@
+grkr live e2e canary v2
+status: ready

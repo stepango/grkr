@@ -60,7 +60,7 @@ issue_project_item_id() {
     return 0
   fi
 
-  items_json=$(gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --format json 2>/dev/null || true)
+  items_json=$(gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit 1000 --format json 2>/dev/null || true)
   [ -n "$items_json" ] || return 0
 
   printf '%s' "$items_json" | jq -r --arg issue "$issue" '
@@ -186,4 +186,18 @@ move_issue_to_done() {
     "⚠️ Issue #$issue is not linked to project #$PROJECT_NUMBER. Continuing without moving it to $target_status." \
     "✅ Issue #$issue is already in $target_status." \
     "✅ Moved issue #$issue to $target_status."
+}
+
+move_issue_to_backlog() {
+  local issue=$1
+  local issue_json=$2
+  local target_status=${BACKLOG_VALUE:-Backlog}
+
+  move_issue_to_project_status \
+    "$issue" \
+    "$issue_json" \
+    "$target_status" \
+    "⚠️ Issue #$issue is not linked to project #$PROJECT_NUMBER. Continuing without moving it to $target_status." \
+    "📥 Issue #$issue is already in $target_status." \
+    "📥 Moved issue #$issue to $target_status."
 }

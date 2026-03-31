@@ -117,7 +117,8 @@ cat > "$tmpdir/bin/codex" <<EOF
 prompt_file=\$(mktemp "${TMPDIR:-/tmp}/grkr-codex-prompt.XXXXXX")
 cat > "\$prompt_file"
 if grep -Fq "Reply with exactly one word on the first non-empty line: proceed or refuse." "\$prompt_file"; then
-  printf 'proceed\n'
+  cat "\$prompt_file"
+  printf '\nproceed\n'
 else
   cat "\$prompt_file" > "$codex_prompt"
 fi
@@ -204,6 +205,9 @@ grep -F "📝 Posting research checkpoint for issue #1..." "$output_file" >/dev/
 grep -F "📝 Posting plan checkpoint for issue #1..." "$output_file" >/dev/null
 grep -F "📝 Posting test checkpoint for issue #1..." "$output_file" >/dev/null
 grep -F "✅ Moved issue #1 to Done." "$output_file" >/dev/null
+grep -F 'pr create' "$gh_log" >/dev/null
+grep -F -- '--head issue-1' "$gh_log" >/dev/null
+grep -F -- '--base main' "$gh_log" >/dev/null
 grep -F "## Detailed description of the task" "$pr_body" >/dev/null
 grep -F "## Implementation plan details" "$pr_body" >/dev/null
 grep -F "## Testing results" "$pr_body" >/dev/null

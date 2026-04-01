@@ -146,6 +146,42 @@ remove_active_job() {
   return 1
 }
 
+record_active_job() {
+  local job_key=$1
+  local pid=$2
+  local entity_type=$3
+  local entity_id=$4
+  local lock_name=$5
+  local task_slug=$6
+  local project_item_id=${7:-}
+  local tmp_file
+
+  tmp_file=$(mktemp "${TMPDIR:-/tmp}/grkr-active-jobs.XXXXXX")
+  jq \
+    --arg key "$job_key" \
+    --argjson pid "$pid" \
+    --arg entity_type "$entity_type" \
+    --arg entity_id "$entity_id" \
+    --arg lock_name "$lock_name" \
+    --arg task_slug "$task_slug" \
+    --arg project_item_id "$project_item_id" \
+    --arg started_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" '
+    .[$key] = {
+      pid: $pid,
+      entity_type: $entity_type,
+      entity_id: $entity_id,
+      lock_name: $lock_name,
+      task_slug: $task_slug,
+      started_at: $started_at
+    }
+    | if $project_item_id == "" then
+        .
+      else
+        .[$key].project_item_id = $project_item_id
+      end
+  ' "$ACTIVE_JOBS_FILE" > "$tmp_file" && mv "$tmp_file" "$ACTIVE_JOBS_FILE"
+}
+
 recover_dead_jobs() {
   local phase=$1
   local entries
@@ -313,9 +349,35 @@ phase_scan_comments_impl() {
   log_info "scan_and_schedule_comment_commands" "-" "repo/$REPO" "scheduled_jobs=0 worker_logic=pending"
 }
 
+schedule_issue_execution_job() {
+  local issue_number=$1
+  local job_key=$2
+  local task_slug=$3
+  local project_item_id=$4
+  local lock_name
+  local lock_file
+  local job_log
+  local pid
+
+  lock_name=$(job_key_lock_name "$job_key")
+  lock_file="$LOCKS_DIR/$lock_name.lock"
+  job_log=$(job_log_file "$job_key")
+  : > "$job_log"
+
+  (
+    flock -n 9 || exit 75
+    "$SCRIPT_DIR/grkr" --issue "$issue_number"
+  ) 9>"$lock_file" >>"$job_log" 2>&1 &
+  pid=$!
+
+  record_active_job "$job_key" "$pid" "issue" "$issue_number" "$lock_name" "$task_slug" "$project_item_id"
+  log_info "pick_and_schedule_issue_execution" "$job_key" "issue/$issue_number" "scheduled_jobs=1 selected_issue=$issue_number task_slug=$task_slug"
+}
+
 phase_pick_issue_impl() {
   local active_execution_count
   local selection_file
+  local project_item_id
   local status=0
 
   if [ "$VALIDATION_OK" -ne 1 ]; then
@@ -349,7 +411,8 @@ phase_pick_issue_impl() {
     return 0
   fi
 
-  log_info "pick_and_schedule_issue_execution" "$JOB_KEY" "issue/$ISSUE_NUMBER" "scheduled_jobs=0 selected_issue=$ISSUE_NUMBER task_slug=$TASK_SLUG scheduling=pending"
+  project_item_id=${PROJECT_ITEM_ID:-}
+  schedule_issue_execution_job "$ISSUE_NUMBER" "$JOB_KEY" "$TASK_SLUG" "$project_item_id"
 }
 
 phase_reap_impl() {

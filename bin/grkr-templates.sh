@@ -23,38 +23,41 @@ $body
 
 ### Current system behavior
 
-- \`grkr --issue $issue\` fetches issue metadata, optionally moves the project item to \`${IN_PROGRESS_VALUE:-In Progress}\`, checks out or creates \`issue-$issue\`, runs Codex once for implementation, then commits, pushes, and opens a pull request.
-- The current workflow does not create per-issue task folders or persist research and plan checkpoints that can be resumed on rerun.
+- \`grkr --issue $issue\` runs a staged workflow with checkpoint files under \`.grkr/tasks/$task_slug/\`, a dedicated issue worktree under \`.grkr/worktrees/$task_slug/\`, a decision gate, implementation, and the configured verification commands.
+- The supervisor checkout stays separate from the issue worktree so repository mutations happen in isolated execution context.
 
 ### Relevant files/modules
 
 - \`bin/grkr\`
+- \`bin/grkr-issue-workflow.sh\`
+- \`bin/grkr-project-status.sh\`
 - \`README.md\`
-- \`test/grkr-smoke.sh\`
+- \`test/\`
 
 ### Assumptions
 
-- The new checkpoint stages should run inside the existing single-issue helper before the later implementation step.
-- Checkpoint comments should use the machine-detectable marker format from the split spec.
-- Re-running the same issue should reuse the existing task folder and avoid duplicate checkpoint comments.
+- The issue body is the primary product contract unless linked discussion adds stricter requirements.
+- The implementation should preserve the existing shell-script conventions in \`bin/\` and \`test/\`.
+- The final change must keep every touched file within the repository's 1000-line limit.
 
 ### Unknowns
 
-- Whether a later worktree-based issue executor will keep the current branch naming or replace it with task-slug worktrees.
-- Whether later stages will regenerate checkpoint content with Codex instead of the shell-generated scaffolding used here.
+- Whether the issue description contains enough detail for the decision gate to proceed without clarification.
+- Which exact files will change until repository inspection confirms the implementation surface area.
+- Whether unrelated repository health issues could block safe autonomous implementation.
 
 ### Risks
 
-- Duplicate checkpoint comments if marker matching is too loose.
-- Local checkpoint files drifting from the issue thread if execution stops after writing the file but before posting the comment.
-- Regressing the current branch and PR flow while adding staged issue state.
+- Misreading the issue scope and changing a broader area than necessary.
+- Regressing the existing staged workflow, worktree isolation, or GitHub project transitions.
+- Passing local verification while still missing a workflow edge case or GitHub-side integration path.
 
 ### Inferred acceptance criteria
 
-- Create \`.grkr/tasks/$task_slug/\` for the issue.
-- Write \`research.md\`, \`plan.md\`, and \`progress.json\` under that task folder.
-- Post the research and plan checkpoints as issue comments.
-- Resume cleanly when matching checkpoint comments already exist.
+- Implement the requested behavior with a minimal, focused diff.
+- Keep the issue workflow resumable through the checkpoint and progress files.
+- Run the configured verification commands and record the results in \`test.md\` when implementation proceeds.
+- Preserve worktree isolation and the repository's file-size policy.
 EOF
 }
 
@@ -73,51 +76,48 @@ Issue #$issue: $title
 
 ### Implementation plan
 
-1. Derive the issue task slug and create the per-issue directory under \`.grkr/tasks/$task_slug/\`.
-2. Persist issue metadata and initialize \`progress.json\` with research and plan stages set to pending.
-3. Generate each checkpoint Markdown file when it is missing, then post it as an issue comment unless a matching checkpoint comment already exists.
-4. Reuse matching checkpoint comments on rerun so the workflow resumes without duplicate research or plan posts.
-5. Continue into the existing implementation flow after the two checkpoint stages complete.
+1. Inspect the issue requirements and the repository files most likely to be affected.
+2. Make the smallest focused change that satisfies the issue while preserving the existing shell-script conventions.
+3. Re-run the configured verification commands and capture the resulting test checkpoint if implementation proceeds.
+4. Publish only the relevant repository changes and keep project, checkpoint, and PR state in sync.
 
 ### Files likely to change
 
-- \`bin/grkr\`
+- \`bin/\`
+- \`test/\`
 - \`README.md\`
-- \`package.json\`
-- \`test/grkr-smoke.sh\`
-- \`test/grkr-checkpoint-resume.sh\`
 
 ### Migration or data concerns
 
-- Existing issue branches may already exist without any task folder; the first rerun must create the missing task state without disturbing branch reuse.
-- The new task artifacts live under \`.grkr/tasks/\` and do not require repository data migrations.
+- Repository mutations should happen only inside the dedicated issue worktree, with runtime artifacts kept under \`.grkr/\`.
+- Any user-facing workflow change must be reflected in \`README.md\` before the issue is considered complete.
 
 ### Test strategy
 
-- Extend the mocked issue flow test to assert task artifact creation and checkpoint comment posting.
-- Add a resume test that preloads matching checkpoint comments and verifies the launcher reuses them without reposting.
+- Run the smallest relevant shell tests for the affected workflow area first.
 - Run \`npm test\`.
+- Validate any GitHub project or issue-state assumptions against the configured live project when that can be done safely.
 
 ### Rollback strategy
 
-- Revert the launcher, test, and documentation changes.
-- Delete the generated \`.grkr/tasks/$task_slug/\` directory for any affected local runs if the checkpoint workflow needs to be removed.
+- Revert only the focused repository changes made for this issue.
+- Keep the local task artifacts as execution history unless cleanup is explicitly needed.
 
 ### Out-of-scope items
 
-- The implement-or-refuse decision gate.
-- Refusal checkpointing and Backlog transitions.
-- The later test-stage checkpoint.
+- Unrelated refactors outside the issue scope.
+- Manual GitHub cleanup that is not required to complete the issue workflow.
+- Changes to runtime artifacts outside this issue's task directory unless required for resume safety.
 
 ## Refusal assessment
 
-- Is the issue implementable now? Yes. The requested scope is limited to creating and resuming the research and plan checkpoint stages in the current shell launcher.
-- If not, why not? Not applicable.
-- Does the issue need clarification? No; the required files, comment behavior, and resume expectation are explicit in the issue and spec slices.
-- Does it need breakdown into smaller tasks? No; the next decision-gate and refusal work is already split into later issues.
-- Are dependencies missing? No new external dependency is required beyond the existing \`gh\`, \`jq\`, and \`codex\` tooling.
-- Is required design or product input absent? No; the checkpoint content and progress structure are specified.
-- Would implementation be too risky or too broad for an autonomous agent? No; the change is focused to the issue launcher, its tests, and the README.
+- Is the issue implementable now? Possibly, but the decision gate still needs to confirm that the scope is clear, bounded, and testable.
+- If not, why not? The workflow should refuse if the issue remains underspecified, too large, blocked by dependencies, or unsafe for autonomous execution.
+- Does the issue need clarification? Unknown until repository inspection confirms that the issue description is specific enough to implement.
+- Does it need breakdown into smaller tasks? Possibly, if the implementation spans multiple systems or lacks a bounded test strategy.
+- Are dependencies missing? Unknown until the affected code path and any upstream requirements are inspected.
+- Is required design or product input absent? Unknown until the implementation path is clear and any ambiguous behavior is identified.
+- Would implementation be too risky or too broad for an autonomous agent? Unknown until the decision gate evaluates repository health, scope, and safety.
 EOF
 }
 
@@ -137,6 +137,11 @@ Reply with exactly one word on the first non-empty line: proceed or refuse.
 
 Only reply with proceed when the issue is sufficiently specified, bounded, and ready for one autonomous implementation pass.
 
+If you choose refuse:
+- Put one refusal class on the second non-empty line.
+- Put a short explanation after that.
+- Allowed refusal classes: underspecified, too_large, missing_dependency, needs_design_decision, unsafe_autonomous_change, repo_not_ready, other.
+
 **Issue #$issue: $title**
 **URL:** $url
 
@@ -152,7 +157,6 @@ $body
 - Repository root: $GRKR_ROOT
 - Main repo policy: keep changed files at $MAX_FILE_LINES lines or fewer.
 
-If you choose refuse, you may add a short explanation after the first line.
 EOF
 }
 

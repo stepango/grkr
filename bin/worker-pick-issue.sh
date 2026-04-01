@@ -82,8 +82,217 @@ else
   active_issue_numbers_json='[]'
 fi
 
+project_items_user_graphql_query() {
+  local cursor_clause=${1:-}
+
+  cat <<EOF
+query {
+  user(login: "$PROJECT_OWNER") {
+    projectV2(number: $PROJECT_NUMBER) {
+      items(first: 100$cursor_clause) {
+        nodes {
+          id
+          fieldValues(first: 50) {
+            nodes {
+              ... on ProjectV2ItemFieldSingleSelectValue {
+                name
+                field {
+                  ... on ProjectV2FieldCommon {
+                    name
+                  }
+                }
+              }
+              ... on ProjectV2ItemFieldNumberValue {
+                number
+                field {
+                  ... on ProjectV2FieldCommon {
+                    name
+                  }
+                }
+              }
+            }
+          }
+          content {
+            __typename
+            ... on Issue {
+              number
+              title
+              updatedAt
+              state
+              repository {
+                nameWithOwner
+              }
+              assignees(first: 20) {
+                nodes {
+                  login
+                }
+              }
+            }
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  }
+}
+EOF
+}
+
+project_items_org_graphql_query() {
+  local cursor_clause=${1:-}
+
+  cat <<EOF
+query {
+  organization(login: "$PROJECT_OWNER") {
+    projectV2(number: $PROJECT_NUMBER) {
+      items(first: 100$cursor_clause) {
+        nodes {
+          id
+          fieldValues(first: 50) {
+            nodes {
+              ... on ProjectV2ItemFieldSingleSelectValue {
+                name
+                field {
+                  ... on ProjectV2FieldCommon {
+                    name
+                  }
+                }
+              }
+              ... on ProjectV2ItemFieldNumberValue {
+                number
+                field {
+                  ... on ProjectV2FieldCommon {
+                    name
+                  }
+                }
+              }
+            }
+          }
+          content {
+            __typename
+            ... on Issue {
+              number
+              title
+              updatedAt
+              state
+              repository {
+                nameWithOwner
+              }
+              assignees(first: 20) {
+                nodes {
+                  login
+                }
+              }
+            }
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  }
+}
+EOF
+}
+
+fetch_project_items_json() {
+  local mode=${1:-user}
+  local cursor=""
+  local cursor_clause=""
+  local query
+  local page_json
+  local nodes_json
+  local has_next
+  local end_cursor
+  local tmp_file
+  local tmp_next
+  local connection_filter
+
+  case "$mode" in
+    user)
+      connection_filter='.data.user.projectV2.items'
+      ;;
+    organization)
+      connection_filter='.data.organization.projectV2.items'
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  tmp_file=$(mktemp "${TMPDIR:-/tmp}/grkr-project-items.XXXXXX")
+  printf '[]\n' > "$tmp_file"
+
+  while true; do
+    if [ -n "$cursor" ]; then
+      cursor_clause=", after: \"$cursor\""
+    else
+      cursor_clause=""
+    fi
+
+    if [ "$mode" = "user" ]; then
+      query=$(project_items_user_graphql_query "$cursor_clause")
+    else
+      query=$(project_items_org_graphql_query "$cursor_clause")
+    fi
+
+    page_json=$(gh api graphql -f query="$query" 2>/dev/null || true)
+    if [ -z "$page_json" ]; then
+      rm -f "$tmp_file"
+      return 1
+    fi
+
+    if [ "$(printf '%s' "$page_json" | jq -r "($connection_filter // empty) | type // empty")" != "object" ]; then
+      rm -f "$tmp_file"
+      return 1
+    fi
+
+    nodes_json=$(printf '%s' "$page_json" | jq -c "($connection_filter.nodes // [])")
+    tmp_next=$(mktemp "${TMPDIR:-/tmp}/grkr-project-items.XXXXXX")
+    jq --argjson nodes "$nodes_json" '. + $nodes' "$tmp_file" > "$tmp_next"
+    mv "$tmp_next" "$tmp_file"
+
+    has_next=$(printf '%s' "$page_json" | jq -r "($connection_filter.pageInfo.hasNextPage // false)")
+    if [ "$has_next" != "true" ]; then
+      break
+    fi
+
+    end_cursor=$(printf '%s' "$page_json" | jq -r "($connection_filter.pageInfo.endCursor // empty)")
+    if [ -z "$end_cursor" ]; then
+      break
+    fi
+    cursor=$end_cursor
+  done
+
+  jq -c '{items: .}' "$tmp_file"
+  rm -f "$tmp_file"
+}
+
+fetch_project_items_with_fallback() {
+  local items_json
+
+  items_json=$(fetch_project_items_json user 2>/dev/null || true)
+  if [ -n "$items_json" ]; then
+    printf '%s\n' "$items_json"
+    return 0
+  fi
+
+  items_json=$(fetch_project_items_json organization 2>/dev/null || true)
+  if [ -n "$items_json" ]; then
+    printf '%s\n' "$items_json"
+    return 0
+  fi
+
+  gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit 1000 --format json
+}
+
 bot_login=$(gh api user --jq .login)
-project_items_json=$(gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit 1000 --format json)
+project_items_json=$(fetch_project_items_with_fallback)
 project_fields_json=$(gh project field-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit 1000 --format json)
 
 priority_field_json=$(printf '%s' "$project_fields_json" | jq -c --arg field_name "$PRIORITY_FIELD_NAME" '
@@ -122,6 +331,23 @@ candidate_json=$(printf '%s' "$project_items_json" | jq -c \
     end;
   def field_entries:
     (if type == "object" and has("fieldValues") then .fieldValues elif type == "object" and has("fields") then .fields else [] end) | arrayify;
+  def normalize_repo_name($value):
+    if $value == null then ""
+    elif ($value | type) == "string" then
+      ($value | sub("^https?://github\\.com/"; "") | sub("\\.git$"; ""))
+    elif ($value | type) == "object" then
+      normalize_repo_name(
+        if ($value.nameWithOwner // "") != "" then
+          $value.nameWithOwner
+        elif (($value.owner.login // "") != "" and ($value.name // "") != "") then
+          ($value.owner.login + "/" + $value.name)
+        else
+          ($value.url // "")
+        end
+      )
+    else
+      ""
+    end;
   def field_value($field_name):
     (field_entries | map(select((.field.name // .name // .fieldName // "") == $field_name)) | .[0]) // {};
   def field_text($field_name):
@@ -146,7 +372,7 @@ candidate_json=$(printf '%s' "$project_items_json" | jq -c \
   def issue_state:
     (.content.state // .content.issue.state // .issue.state // .state // "");
   def repo_name:
-    (.content.repository.nameWithOwner // .content.issue.repository.nameWithOwner // .repository.nameWithOwner // .content.repository // .repository // "");
+    normalize_repo_name(.content.repository // .content.issue.repository // .repository // "");
   def status_name:
     ((if (.status | type) == "object" then .status.name else null end) // (if (.status | type) == "string" then .status else null end) // field_text($status_field));
   def priority_name:

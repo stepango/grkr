@@ -274,7 +274,7 @@ update_task_progress_stage() {
     | if $comment_id == "" then
         del(.stages[$stage].comment_id)
       else
-        .stages[$stage].comment_id = ($comment_id | tonumber? // .)
+        .stages[$stage].comment_id = ($comment_id | tonumber? // $comment_id)
       end
   ' "$progress_file" > "$tmp_file"
   mv "$tmp_file" "$progress_file"
@@ -318,6 +318,34 @@ mark_task_progress_complete() {
     | .stages.test.status = "done"
     | .branch_url = $branch_url
     | .pr_url = $pr_url
+  ' "$progress_file" > "$tmp_file"
+  mv "$tmp_file" "$progress_file"
+}
+
+mark_task_progress_refused() {
+  local progress_file=$1
+  local reason_class=$2
+  local comment_id=$3
+  local now
+  local tmp_file
+
+  now=$(timestamp_utc)
+  tmp_file=$(mktemp "${TMPDIR:-/tmp}/grkr-progress.XXXXXX")
+  jq \
+    --arg reason_class "$reason_class" \
+    --arg comment_id "$comment_id" \
+    --arg updated_at "$now" '
+    .status = "refused"
+    | .decision = "refuse"
+    | .updated_at = $updated_at
+    | .stages.implement_or_refuse.status = "done"
+    | .stages.implement_or_refuse.reason_class = $reason_class
+    | if $comment_id == "" then
+        del(.stages.implement_or_refuse.comment_id)
+      else
+        .stages.implement_or_refuse.comment_id = ($comment_id | tonumber? // $comment_id)
+      end
+    | .stages.test.status = "skipped"
   ' "$progress_file" > "$tmp_file"
   mv "$tmp_file" "$progress_file"
 }
@@ -724,6 +752,7 @@ publish_issue_changes() {
   local PR_BODY_FILE
   local pr_list_json
   local pr_number
+  local pr_create_output
 
   echo "🔄 Auto-committing, pushing and creating PR..."
   stage_relevant_issue_files
@@ -749,7 +778,17 @@ publish_issue_changes() {
     PR_URL=$(printf '%s' "$pr_list_json" | jq -r '.[0].url // empty')
     echo "✅ PR updated: $PR_URL"
   else
-    PR_URL=$(gh pr create --title "$TITLE" --body-file "$PR_BODY_FILE")
+    pr_create_output=$(gh pr create --base "${MAIN_BRANCH:-main}" --head "$BRANCH" --title "$TITLE" --body-file "$PR_BODY_FILE" 2>&1) || {
+      echo "$pr_create_output"
+      rm -f "$PR_BODY_FILE"
+      return 1
+    }
+    PR_URL=$(printf '%s\n' "$pr_create_output" | awk '/^https?:\/\// {url=$0} END {print url}')
+    if [ -z "$PR_URL" ]; then
+      echo "$pr_create_output"
+      rm -f "$PR_BODY_FILE"
+      return 1
+    fi
     echo "✅ PR created: $PR_URL"
   fi
   gh issue edit "$ISSUE" --add-label "implemented" || true
@@ -787,6 +826,9 @@ process_issue() {
   local TASK_DIR
   local PROGRESS_FILE
   local codex_output_file
+  local refusal_result
+  local refusal_class
+  local refusal_comment_id
   if [ "$VALIDATION_OK" -ne 1 ]; then
     echo "⚠️ Validation failed; skipping issue #$ISSUE."
     return 1
@@ -825,11 +867,22 @@ process_issue() {
     return 1
   }
   decision=$IMPLEMENTATION_DECISION
-  rm -f "$decision_prompt_file" "$decision_output_file"
   if [ "$decision" != "proceed" ]; then
-    echo "⏸️ Decision gate returned $decision for issue #$ISSUE. Skipping implementation."
-    return 1
+    refusal_result=$(complete_issue_refusal "$ISSUE" "$ISSUE_JSON" "$TASK_SLUG" "$TASK_DIR" "$TITLE" "$PROGRESS_FILE" "$decision_output_file" "$ISSUE_WORKTREE_DIR") || {
+      rm -f "$decision_prompt_file" "$decision_output_file"
+      return 1
+    }
+    refusal_class=$(printf '%s\n' "$refusal_result" | tail -n2 | head -n1)
+    refusal_comment_id=$(printf '%s\n' "$refusal_result" | tail -n1)
+    mark_task_progress_refused "$PROGRESS_FILE" "$refusal_class" "$refusal_comment_id"
+    rm -f "$decision_prompt_file" "$decision_output_file"
+    CURRENT_ISSUE_WORKTREE=""
+    echo "⏸️ Refused implementation for issue #$ISSUE."
+    ATTACH_ISSUE_LOGS=0
+    attach_issue_logs
+    return 0
   fi
+  rm -f "$decision_prompt_file" "$decision_output_file"
   move_issue_to_in_progress "$ISSUE" "$ISSUE_JSON" || return 1
   CURRENT_ISSUE_WORKTREE="$ISSUE_WORKTREE_DIR"
   prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-prompt.XXXXXX")

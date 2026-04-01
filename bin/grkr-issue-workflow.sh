@@ -221,15 +221,331 @@ update_task_progress_decision() {
     --arg updated_at "$now" '
     .decision = $decision
     | .updated_at = $updated_at
-    | .stages.implement_or_refuse.status = "done"
     | if $decision == "proceed" then
-        .status = "implementing"
+        .stages.implement_or_refuse.status = "done"
+        | .status = "implementing"
       else
-        .status = "refused"
-        | .stages.test.status = "skipped"
+        .
       end
   ' "$progress_file" > "$tmp_file"
   mv "$tmp_file" "$progress_file"
+}
+
+valid_refusal_class() {
+  case "$1" in
+    underspecified|too_large|missing_dependency|needs_design_decision|unsafe_autonomous_change|repo_not_ready|other)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+normalize_refusal_class_candidate() {
+  local candidate
+
+  candidate=$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]' | tr ' -' '__' | tr -cd 'a-z0-9_')
+  if valid_refusal_class "$candidate"; then
+    printf '%s\n' "$candidate"
+  else
+    printf 'other\n'
+  fi
+}
+
+refusal_requires_backlog_move() {
+  case "${ENABLE_PROJECT_STATUS_UPDATES:-true}" in
+    false|False|FALSE|0|no|No|NO)
+      return 1
+      ;;
+  esac
+
+  case "${REFUSAL_REQUIRES_BACKLOG_MOVE:-true}" in
+    false|False|FALSE|0|no|No|NO)
+      return 1
+      ;;
+  esac
+
+  return 0
+}
+
+extract_decision_from_output() {
+  local output_file=$1
+
+  awk '
+    {
+      line=$0
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+      lower=tolower(line)
+      if (lower == "proceed" || lower == "refuse") {
+        decision=lower
+      }
+    }
+    END {
+      if (decision != "") {
+        print decision
+      }
+    }
+  ' "$output_file"
+}
+
+parse_refusal_decision_output() {
+  local output_file=$1
+
+  awk '
+    {
+      trimmed=$0
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", trimmed)
+      lower=tolower(trimmed)
+      lines[++count]=$0
+      if (lower == "refuse") {
+        refusal_line=count
+      }
+    }
+    END {
+      if (!refusal_line) {
+        exit 0
+      }
+
+      class_line=""
+      explanation=""
+      seen_class=0
+      for (i = refusal_line + 1; i <= count; i++) {
+        line=lines[i]
+        trimmed=line
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", trimmed)
+        if (trimmed == "") {
+          continue
+        }
+
+        if (!seen_class) {
+          class_line=trimmed
+          seen_class=1
+          continue
+        }
+
+        if (explanation != "") {
+          explanation=explanation "\n"
+        }
+        explanation=explanation trimmed
+      }
+
+      if (class_line != "") {
+        print class_line
+      }
+      print "---"
+      if (explanation != "") {
+        print explanation
+      }
+    }
+  ' "$output_file"
+}
+
+refusal_missing_requirements_markdown() {
+  local refusal_class=$1
+  local reasoning=$2
+
+  case "$refusal_class" in
+    underspecified)
+      cat <<EOF
+- Explicit acceptance criteria or expected behavior examples
+- Clear success conditions for the implementation and test stages
+EOF
+      ;;
+    too_large)
+      cat <<EOF
+- A smaller, explicitly scoped first slice of work
+- A concrete split between independent follow-up issues
+EOF
+      ;;
+    missing_dependency)
+      cat <<EOF
+- The missing upstream dependency, API, or prerequisite issue
+- Confirmation that the dependency is available in the target branch
+EOF
+      ;;
+    needs_design_decision)
+      cat <<EOF
+- A concrete design or product decision for the ambiguous behavior
+- Confirmation of the preferred implementation direction
+EOF
+      ;;
+    unsafe_autonomous_change)
+      cat <<EOF
+- Human review for the risky change path
+- A safer bounded approach or rollback strategy
+EOF
+      ;;
+    repo_not_ready)
+      cat <<EOF
+- Repository health restored enough for issue-local changes to be validated
+- Confirmation that unrelated build or test failures are resolved
+EOF
+      ;;
+    *)
+      cat <<EOF
+- The missing prerequisite identified in the refusal reasoning above
+- A narrower, directly testable issue scope
+EOF
+      ;;
+  esac
+}
+
+refusal_next_steps_markdown() {
+  local refusal_class=$1
+
+  case "$refusal_class" in
+    too_large)
+      cat <<EOF
+- Split the issue into smaller independently testable tasks
+- Re-run the workflow against the first bounded slice
+EOF
+      ;;
+    *)
+      cat <<EOF
+- Update the issue with the missing detail identified above
+- Re-run the workflow after the issue is clarified and bounded
+EOF
+      ;;
+  esac
+}
+
+refusal_split_recommendation() {
+  case "$1" in
+    too_large|unsafe_autonomous_change)
+      printf 'Yes. The current issue is too broad for one safe autonomous change.\n'
+      ;;
+    *)
+      printf 'No immediate split is required if the missing prerequisite can be resolved directly in this issue.\n'
+      ;;
+  esac
+}
+
+refusal_follow_up_recommendation() {
+  case "$1" in
+    too_large|missing_dependency|needs_design_decision)
+      printf 'Yes. Follow-up issues are recommended to separate prerequisite or decision work.\n'
+      ;;
+    *)
+      printf 'Not necessarily. The current issue may proceed once the missing information is added.\n'
+      ;;
+  esac
+}
+
+write_refusal_checkpoint_file() {
+  local checkpoint_file=$1
+  local issue=$2
+  local title=$3
+  local task_slug=$4
+  local refusal_class=$5
+  local reasoning=$6
+
+  {
+    printf '%s\n\n' "$(checkpoint_marker refusal "$task_slug")"
+    printf '## Implementation refused\n\n'
+    printf 'Issue #%s: %s\n\n' "$issue" "$title"
+    printf '### Refusal summary\n\n'
+    printf 'The issue was not implemented because the decision gate returned `refuse`.\n\n'
+    printf '### Reason class\n\n'
+    printf '%s\n\n' "$refusal_class"
+    printf '### Detailed reasoning\n\n'
+    printf '%s\n\n' "$reasoning"
+    printf '### What is needed before implementation\n\n'
+    refusal_missing_requirements_markdown "$refusal_class" "$reasoning"
+    printf '\n\n### Suggested next actions\n\n'
+    refusal_next_steps_markdown "$refusal_class"
+    printf '\n\n### Should the issue be split?\n\n'
+    refusal_split_recommendation "$refusal_class"
+    printf '\n### Are follow-up issues recommended?\n\n'
+    refusal_follow_up_recommendation "$refusal_class"
+  } > "$checkpoint_file"
+}
+
+ensure_refusal_checkpoint() {
+  local issue=$1
+  local issue_json=$2
+  local task_slug=$3
+  local task_dir=$4
+  local title=$5
+  local progress_file=$6
+  local refusal_class=$7
+  local reasoning=$8
+  local checkpoint_file
+  local comment_id
+  local comment_body
+  local refreshed_comments_json
+
+  checkpoint_file="$task_dir/refusal.md"
+  comment_id=$(checkpoint_comment_id_from_json "$issue_json" refusal "$task_slug")
+
+  if [ -f "$checkpoint_file" ] && [ -n "$comment_id" ]; then
+    echo "♻️ Reusing refusal checkpoint for issue #$issue from comment $comment_id." >&2
+    printf '%s\n' "$comment_id"
+    return 0
+  fi
+
+  if [ -n "$comment_id" ] && [ ! -f "$checkpoint_file" ]; then
+    comment_body=$(checkpoint_comment_body_from_json "$issue_json" refusal "$task_slug")
+    if [ -n "$comment_body" ]; then
+      printf '%s\n' "$comment_body" > "$checkpoint_file"
+      echo "♻️ Restored refusal checkpoint for issue #$issue from comment $comment_id." >&2
+      printf '%s\n' "$comment_id"
+      return 0
+    fi
+  fi
+
+  write_refusal_checkpoint_file "$checkpoint_file" "$issue" "$title" "$task_slug" "$refusal_class" "$reasoning"
+  echo "📝 Posting refusal checkpoint for issue #$issue..." >&2
+  gh issue comment "$issue" --body-file "$checkpoint_file" >/dev/null
+  refreshed_comments_json=$(fetch_issue_comments_json "$issue")
+  comment_id=$(checkpoint_comment_id_from_json "$refreshed_comments_json" refusal "$task_slug")
+  printf '%s\n' "$comment_id"
+}
+
+cleanup_issue_worktree() {
+  local worktree_dir=$1
+
+  [ -n "$worktree_dir" ] || return 0
+  [ -e "$worktree_dir" ] || return 0
+
+  if git worktree remove --force "$worktree_dir" >/dev/null 2>&1; then
+    echo "🧹 Removed issue worktree: $worktree_dir" >&2
+    return 0
+  fi
+
+  return 1
+}
+
+complete_issue_refusal() {
+  local issue=$1
+  local issue_json=$2
+  local task_slug=$3
+  local task_dir=$4
+  local title=$5
+  local progress_file=$6
+  local decision_output_file=$7
+  local worktree_dir=$8
+  local parsed_refusal
+  local refusal_class_candidate
+  local refusal_class
+  local reasoning
+  local refusal_comment_id
+
+  parsed_refusal=$(parse_refusal_decision_output "$decision_output_file")
+  refusal_class_candidate=$(printf '%s\n' "$parsed_refusal" | awk 'NR == 1 {print}')
+  refusal_class=$(normalize_refusal_class_candidate "$refusal_class_candidate")
+  reasoning=$(printf '%s\n' "$parsed_refusal" | awk 'found {print} /^---$/ {found=1}' | sed '/^$/d')
+  if [ -z "$reasoning" ]; then
+    reasoning="The issue does not appear ready for safe autonomous implementation in its current state."
+  fi
+
+  refusal_comment_id=$(ensure_refusal_checkpoint "$issue" "$issue_json" "$task_slug" "$task_dir" "$title" "$progress_file" "$refusal_class" "$reasoning")
+  if refusal_requires_backlog_move; then
+    if ! move_issue_to_backlog "$issue" "$issue_json" >&2; then
+      echo "⚠️ Refusal for issue #$issue was recorded, but the project status could not be moved to ${BACKLOG_VALUE:-Backlog}." >&2
+    fi
+  fi
+  cleanup_issue_worktree "$worktree_dir" || true
+  printf '%s\n' "$refusal_class"
+  printf '%s\n' "$refusal_comment_id"
 }
 
 run_implementation_decision_gate() {
@@ -241,7 +557,7 @@ run_implementation_decision_gate() {
   local decision
 
   run_codex_prompt "$prompt_file" "$output_file" "decide whether to implement the issue" replace "$worktree_dir"
-  decision=$(grep -Eio '\b(proceed|refuse)\b' "$output_file" | head -n1 | tr '[:upper:]' '[:lower:]')
+  decision=$(extract_decision_from_output "$output_file")
 
   case "$decision" in
     proceed|refuse)

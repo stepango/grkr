@@ -2,7 +2,7 @@
 
 AI-powered CLI that reads a GitHub issue and uses Codex to implement the changes.
 
-Current implementation status: the checkpointed issue flow now runs research, plan, a decision gate, refusal handling, isolated implementation in a dedicated issue worktree, test, and completion. The supervisor now syncs main, recovers stale jobs, selects the next project issue, and actually schedules issue execution in the background. PR conflict automation, `@:robot:` comment handling, and the remaining worker worktree flows are still planned follow-up work.
+Current implementation status: the checkpointed issue flow now runs research, plan, a decision gate, refusal handling, isolated implementation in a dedicated issue worktree, test, and completion. The supervisor now syncs main, recovers stale jobs, selects the next project issue, and actually schedules issue execution in the background. PR conflict resolution is now implemented via Gleam with a shell wrapper interface. `@:robot:` comment handling and the remaining worker worktree flows are still planned follow-up work.
 
 ## Usage
 
@@ -21,7 +21,24 @@ grkr --issue 1
 
 # Run the smoke test
 npm test
+
+# Resolve PR conflicts (Gleam-based)
+worker-resolve-pr.sh 123
 ```
+
+## PR Conflict Resolution
+
+The `worker-resolve-pr.sh` script implements automated PR conflict resolution using Gleam:
+
+1. Fetches PR metadata and checks for conflicts
+2. Creates a dedicated worktree at `.grkr/worktrees/pr-<number>/`
+3. Attempts automatic rebase or merge with `origin/main` based on `CONFLICT_STRATEGY`
+4. On conflicts, invokes Codex to resolve merge conflicts in affected files
+5. Validates resolved content and commits changes
+6. Pushes the resolved branch back to the PR
+7. Cleans up the worktree
+
+The implementation uses Gleam for the core logic with a thin shell wrapper that preserves shell conventions and integrates with the existing supervisor infrastructure.
 
 ## How it works
 
@@ -78,5 +95,6 @@ npm test
 - GitHub CLI (`gh`) installed and authenticated (`gh auth login`)
 - Codex CLI available in PATH
 - `jq` for JSON parsing
-- Node.js (for global install)
+- Gleam compiler (for PR conflict resolution)
+- Node.js (for global install and Gleam JavaScript target)
 - Git repository with an `origin` remote configured

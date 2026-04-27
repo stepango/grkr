@@ -42,6 +42,9 @@ EOF
 
 cat > "$tmpdir/bin/codex" <<'EOF'
 #!/bin/bash
+case "${1-}" in
+  --help) exit 0 ;;
+esac
 prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-dirty-prompt.XXXXXX")
 cat > "$prompt_file"
 if grep -Fq "Reply with exactly one word on the first non-empty line: proceed or refuse." "$prompt_file"; then

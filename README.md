@@ -50,6 +50,7 @@ npm test
 - `robot-main.sh` uses `MAIN_BRANCH` and `LOOP_INTERVAL_SECS` from `.grkr/config.sh`; `grkr init <id>` now writes both defaults into the generated config.
 - `worker-sync-main.sh` is the phase-1 supervisor worker; it always returns the main checkout to the configured `MAIN_BRANCH` before later phases run.
 - `worker-pick-issue.sh` is the phase-4 selector; it queries the live project through GitHub GraphQL, emits shell-safe key/value output for the next Todo issue candidate, and still tolerates the flat `gh project item-list` JSON shape as a fallback.
+- `worker-refuse-issue.sh` handles the refusal flow for issues that should not be implemented yet; it generates `refusal.md` with class and reasoning, posts a refusal checkpoint comment exactly once without duplication on resume, moves the project item from `Todo` to `Backlog` when configured, marks the workflow as refused, and treats refusal as a valid terminal state.
 - `grkr init <id>` also writes `IN_PROGRESS_VALUE="In Progress"` so issue execution can move a project item out of Todo before branching; status option lookup tolerates casing differences such as `In progress`.
 - `grkr init <id>` also writes `DONE_VALUE="Done"` plus default `TEST_COMMAND` and `BUILD_COMMAND` entries so the test stage has explicit verification commands.
 - `grkr init <id>` also writes `BACKLOG_VALUE="Backlog"` so refusal can move unready issues back out of Todo.

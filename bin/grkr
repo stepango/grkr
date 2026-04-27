@@ -902,7 +902,7 @@ process_issue() {
     fi
     mkdir -p "$TASK_DIR/codex"
     cp "$codex_output_file" "$TASK_DIR/codex/implementation-before-refusal.log"
-    refusal_result=$(complete_issue_refusal "$ISSUE" "$ISSUE_JSON" "$TASK_SLUG" "$TASK_DIR" "$TITLE" "$PROGRESS_FILE" /dev/null "$ISSUE_WORKTREE_DIR" "$implementation_refusal_class" "$implementation_refusal_reasoning") || {
+    refusal_result=$(complete_issue_refusal "$ISSUE" "$ISSUE_JSON" "$TASK_SLUG" "$TASK_DIR" "$TITLE" "$PROGRESS_FILE" /dev/null "$ISSUE_WORKTREE_DIR" "$implementation_refusal_class" "$implementation_refusal_reasoning" "The issue was not implemented because implementation discovered a blocker after the decision gate returned \`proceed\`.") || {
       CURRENT_ISSUE_WORKTREE=""
       rm -f "$prompt_file"
       CURRENT_PROMPT_FILE=""

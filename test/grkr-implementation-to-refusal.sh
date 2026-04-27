@@ -99,7 +99,7 @@ if grep -Fq "Reply with exactly one word on the first non-empty line: proceed or
 fi
 if grep -Fq "Implement the GitHub issue described below" "$prompt_file"; then
   cat "$prompt_file"
-  printf '\n\n## Analysis\n\nThe issue requires implementing feature X, but during implementation I discovered that API Y does not exist yet. This is a missing dependency blocker.\n\nrefuse\nmissing_dependency\nThe required upstream API does not exist in the codebase yet.\n'
+  printf '\n\n## Analysis\n\nThe issue requires implementing feature X, but during implementation I discovered that API Y does not exist yet. This is a missing dependency blocker.\n\ngrkr-refuse-implementation\nmissing_dependency\nThe required upstream API does not exist in the codebase yet.\n'
   rm -f "$prompt_file"
   exit 0
 fi
@@ -175,6 +175,7 @@ worktree_dir="$tmpdir/.grkr/worktrees/issue-2-missing-dependency-blocker"
 
 grep -F "<!-- grkr:checkpoint stage=refusal task=issue-2-missing-dependency-blocker version=1 -->" "$task_dir/refusal.md" >/dev/null
 grep -F "## Implementation refused" "$task_dir/refusal.md" >/dev/null
+grep -F 'The issue was not implemented because implementation discovered a blocker after the decision gate returned `proceed`.' "$task_dir/refusal.md" >/dev/null
 grep -F "missing_dependency" "$task_dir/refusal.md" >/dev/null
 
 jq -e '.status == "refused"' "$task_dir/progress.json" >/dev/null
@@ -188,6 +189,20 @@ grep -F 'git worktree remove --force' "$command_log" >/dev/null
 
 if grep -Fq 'gh pr create' "$command_log"; then
   echo "PR creation should not happen when implementation converts to refusal" >&2
+  exit 1
+fi
+
+prose_log="$tmpdir/prose.log"
+cat > "$prose_log" <<'EOF'
+## Implementation plan details
+Refuse broad rewrites and keep the change focused.
+## Testing results
+- Functional testing performed
+EOF
+
+false_positive_output=$(bash -c '. "$1"; detect_implementation_refusal "$2"' bash "$tmpdir/grkr-issue-workflow.sh" "$prose_log")
+if [ -n "$false_positive_output" ]; then
+  echo "ordinary implementation prose should not trigger refusal conversion" >&2
   exit 1
 fi
 

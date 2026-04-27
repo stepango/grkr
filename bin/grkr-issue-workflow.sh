@@ -437,13 +437,18 @@ write_refusal_checkpoint_file() {
   local task_slug=$4
   local refusal_class=$5
   local reasoning=$6
+  local summary="${7:-}"
+
+  if [ -z "$summary" ]; then
+    summary='The issue was not implemented because the decision gate returned `refuse`.'
+  fi
 
   {
     printf '%s\n\n' "$(checkpoint_marker refusal "$task_slug")"
     printf '## Implementation refused\n\n'
     printf 'Issue #%s: %s\n\n' "$issue" "$title"
     printf '### Refusal summary\n\n'
-    printf 'The issue was not implemented because the decision gate returned `refuse`.\n\n'
+    printf '%s\n\n' "$summary"
     printf '### Reason class\n\n'
     printf '%s\n\n' "$refusal_class"
     printf '### Detailed reasoning\n\n'
@@ -468,10 +473,15 @@ ensure_refusal_checkpoint() {
   local progress_file=$6
   local refusal_class=$7
   local reasoning=$8
+  local summary="${9:-}"
   local checkpoint_file
   local comment_id
   local comment_body
   local refreshed_comments_json
+
+  if [ -z "$summary" ]; then
+    summary='The issue was not implemented because the decision gate returned `refuse`.'
+  fi
 
   checkpoint_file="$task_dir/refusal.md"
   comment_id=$(checkpoint_comment_id_from_json "$issue_json" refusal "$task_slug")
@@ -492,7 +502,7 @@ ensure_refusal_checkpoint() {
     fi
   fi
 
-  write_refusal_checkpoint_file "$checkpoint_file" "$issue" "$title" "$task_slug" "$refusal_class" "$reasoning"
+  write_refusal_checkpoint_file "$checkpoint_file" "$issue" "$title" "$task_slug" "$refusal_class" "$reasoning" "$summary"
   echo "📝 Posting refusal checkpoint for issue #$issue..." >&2
   gh issue comment "$issue" --body-file "$checkpoint_file" >/dev/null
   refreshed_comments_json=$(fetch_issue_comments_json "$issue")
@@ -525,11 +535,16 @@ complete_issue_refusal() {
   local worktree_dir=$8
   local explicit_refusal_class=${9:-}
   local explicit_reasoning=${10:-}
+  local refusal_summary="${11:-}"
   local parsed_refusal
   local refusal_class_candidate
   local refusal_class
   local reasoning
   local refusal_comment_id
+
+  if [ -z "$refusal_summary" ]; then
+    refusal_summary='The issue was not implemented because the decision gate returned `refuse`.'
+  fi
 
   if [ -n "$explicit_refusal_class" ]; then
     refusal_class=$(normalize_refusal_class_candidate "$explicit_refusal_class")
@@ -547,7 +562,7 @@ complete_issue_refusal() {
     fi
   fi
 
-  refusal_comment_id=$(ensure_refusal_checkpoint "$issue" "$issue_json" "$task_slug" "$task_dir" "$title" "$progress_file" "$refusal_class" "$reasoning")
+  refusal_comment_id=$(ensure_refusal_checkpoint "$issue" "$issue_json" "$task_slug" "$task_dir" "$title" "$progress_file" "$refusal_class" "$reasoning" "$refusal_summary")
   if refusal_requires_backlog_move; then
     if ! move_issue_to_backlog "$issue" "$issue_json" >&2; then
       echo "⚠️ Refusal for issue #$issue was recorded, but the project status could not be moved to ${BACKLOG_VALUE:-Backlog}." >&2
@@ -584,9 +599,9 @@ run_implementation_decision_gate() {
 detect_implementation_refusal() {
   local output_file=$1
 
-  awk '
+  emit_task_log_stream "$output_file" | awk '
     BEGIN {
-      found_refuse = 0
+      found_marker = 0
       refusal_class = ""
       in_reasoning = 0
       reasoning = ""
@@ -596,12 +611,15 @@ detect_implementation_refusal() {
       gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
       lower = tolower(line)
 
-      if (lower ~ /^refuse(:|[^a-z]|$)/) {
-        found_refuse = 1
+      if (lower == "grkr-refuse-implementation") {
+        found_marker = 1
         next
       }
 
-      if (found_refuse && refusal_class == "") {
+      if (found_marker && refusal_class == "") {
+        if (line == "") {
+          next
+        }
         if (line ~ /^(underspecified|too_large|missing_dependency|needs_design_decision|unsafe_autonomous_change|repo_not_ready|other)$/) {
           refusal_class = line
           in_reasoning = 1
@@ -617,10 +635,7 @@ detect_implementation_refusal() {
       }
     }
     END {
-      if (found_refuse) {
-        if (refusal_class == "") {
-          refusal_class = "other"
-        }
+      if (found_marker && refusal_class != "") {
         print refusal_class
         print "---"
         if (reasoning != "") {
@@ -630,5 +645,5 @@ detect_implementation_refusal() {
         }
       }
     }
-  ' "$output_file"
+  '
 }

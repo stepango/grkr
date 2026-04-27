@@ -8,8 +8,9 @@ cp bin/grkr "$tmpdir/grkr.sh"
 cp bin/grkr-issue-workflow.sh "$tmpdir/grkr-issue-workflow.sh"
 cp bin/grkr-project-status.sh "$tmpdir/grkr-project-status.sh"
 cp bin/grkr-templates.sh "$tmpdir/grkr-templates.sh"
+cp bin/worker-refuse-issue.sh "$tmpdir/worker-refuse-issue.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
-chmod +x "$tmpdir/grkr.sh" "$tmpdir/doctor.sh"
+chmod +x "$tmpdir/grkr.sh" "$tmpdir/worker-refuse-issue.sh" "$tmpdir/doctor.sh"
 
 real_git=$(command -v git)
 mkdir -p "$tmpdir/bin"
@@ -191,5 +192,22 @@ fi
 
 if [ -f "$unexpected_prompt" ]; then
   echo "implementation prompt should not be generated for refusals" >&2
+  exit 1
+fi
+
+cat >> "$tmpdir/.grkr/config.sh" <<'EOF'
+REFUSAL_REQUIRES_BACKLOG_MOVE="false"
+EOF
+printf '' > "$command_log"
+
+(
+  cd "$tmpdir"
+  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" bash "$tmpdir/worker-refuse-issue.sh" 1 underspecified "Still missing acceptance criteria." >>"$output_file" 2>&1
+)
+
+jq -e '.status == "refused"' "$task_dir/progress.json" >/dev/null
+jq -e '.stages.implement_or_refuse.reason_class == "underspecified"' "$task_dir/progress.json" >/dev/null
+if grep -Fq 'gh project item-edit' "$command_log"; then
+  echo "standalone refusal worker should respect REFUSAL_REQUIRES_BACKLOG_MOVE=false" >&2
   exit 1
 fi

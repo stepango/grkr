@@ -328,6 +328,19 @@ project_status_updates_enabled() {
   return 0
 }
 
+refusal_requires_backlog_move() {
+  if ! project_status_updates_enabled; then
+    return 1
+  fi
+
+  case "${REFUSAL_REQUIRES_BACKLOG_MOVE:-true}" in
+    false|False|FALSE|0|no|No|NO)
+      return 1
+      ;;
+  esac
+  return 0
+}
+
 normalize_project_option_name() {
   printf '%s' "${1:-}" | jq -Rr '
     gsub("^\\s+|\\s+$"; "")
@@ -371,7 +384,7 @@ move_issue_to_backlog() {
   local option_row
   local edit_output
 
-  if ! project_status_updates_enabled; then
+  if ! refusal_requires_backlog_move; then
     return 0
   fi
 

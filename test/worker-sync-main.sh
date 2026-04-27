@@ -1,6 +1,11 @@
 #!/bin/bash
 set -euo pipefail
 
+if ! command -v flock >/dev/null 2>&1; then
+  echo "⚠️ flock not available, skipping worker-sync-main test"
+  exit 0
+fi
+
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-worker-sync-main.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
@@ -27,7 +32,12 @@ case "\$*" in
 esac
 EOF
 
-chmod +x "$tmpdir/bin/git"
+cat > "$tmpdir/bin/flock" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+
+chmod +x "$tmpdir/bin/git" "$tmpdir/bin/flock"
 
 (
   cd "$tmpdir"

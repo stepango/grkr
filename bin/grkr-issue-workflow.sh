@@ -523,18 +523,28 @@ complete_issue_refusal() {
   local progress_file=$6
   local decision_output_file=$7
   local worktree_dir=$8
+  local explicit_refusal_class=${9:-}
+  local explicit_reasoning=${10:-}
   local parsed_refusal
   local refusal_class_candidate
   local refusal_class
   local reasoning
   local refusal_comment_id
 
-  parsed_refusal=$(parse_refusal_decision_output "$decision_output_file")
-  refusal_class_candidate=$(printf '%s\n' "$parsed_refusal" | awk 'NR == 1 {print}')
-  refusal_class=$(normalize_refusal_class_candidate "$refusal_class_candidate")
-  reasoning=$(printf '%s\n' "$parsed_refusal" | awk 'found {print} /^---$/ {found=1}' | sed '/^$/d')
-  if [ -z "$reasoning" ]; then
-    reasoning="The issue does not appear ready for safe autonomous implementation in its current state."
+  if [ -n "$explicit_refusal_class" ]; then
+    refusal_class=$(normalize_refusal_class_candidate "$explicit_refusal_class")
+    reasoning="$explicit_reasoning"
+    if [ -z "$reasoning" ]; then
+      reasoning="The issue does not appear ready for safe autonomous implementation in its current state."
+    fi
+  else
+    parsed_refusal=$(parse_refusal_decision_output "$decision_output_file")
+    refusal_class_candidate=$(printf '%s\n' "$parsed_refusal" | awk 'NR == 1 {print}')
+    refusal_class=$(normalize_refusal_class_candidate "$refusal_class_candidate")
+    reasoning=$(printf '%s\n' "$parsed_refusal" | awk 'found {print} /^---$/ {found=1}' | sed '/^$/d')
+    if [ -z "$reasoning" ]; then
+      reasoning="The issue does not appear ready for safe autonomous implementation in its current state."
+    fi
   fi
 
   refusal_comment_id=$(ensure_refusal_checkpoint "$issue" "$issue_json" "$task_slug" "$task_dir" "$title" "$progress_file" "$refusal_class" "$reasoning")
@@ -569,4 +579,56 @@ run_implementation_decision_gate() {
       return 1
       ;;
   esac
+}
+
+detect_implementation_refusal() {
+  local output_file=$1
+
+  awk '
+    BEGIN {
+      found_refuse = 0
+      refusal_class = ""
+      in_reasoning = 0
+      reasoning = ""
+    }
+    {
+      line = $0
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+      lower = tolower(line)
+
+      if (lower ~ /^refuse(:|[^a-z]|$)/) {
+        found_refuse = 1
+        next
+      }
+
+      if (found_refuse && refusal_class == "") {
+        if (line ~ /^(underspecified|too_large|missing_dependency|needs_design_decision|unsafe_autonomous_change|repo_not_ready|other)$/) {
+          refusal_class = line
+          in_reasoning = 1
+          next
+        }
+      }
+
+      if (in_reasoning && line != "") {
+        if (reasoning != "") {
+          reasoning = reasoning "\n"
+        }
+        reasoning = reasoning line
+      }
+    }
+    END {
+      if (found_refuse) {
+        if (refusal_class == "") {
+          refusal_class = "other"
+        }
+        print refusal_class
+        print "---"
+        if (reasoning != "") {
+          print reasoning
+        } else {
+          print "Implementation discovered that the issue is not ready for safe autonomous completion."
+        }
+      }
+    }
+  ' "$output_file"
 }

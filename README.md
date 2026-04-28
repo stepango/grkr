@@ -40,6 +40,19 @@ The `worker-resolve-pr.sh` script implements automated PR conflict resolution us
 
 The implementation uses Gleam for the core logic with a thin shell wrapper that preserves shell conventions and integrates with the existing supervisor infrastructure.
 
+## Issue provider auth foundation
+
+The v2 migration now includes a Gleam-owned issue-provider configuration foundation under `src/grkr/issue_provider/`. GitHub remains the default provider, while Linear can be configured alongside it for upcoming provider/query slices.
+
+Linear credentials are treated as OAuth app credentials, not as a direct GraphQL token. For local automation, place the two app credential values in `~/.linear/secret.txt` or point `LINEAR_CREDENTIALS_PATH` at an equivalent file. The supported OAuth app file shape is:
+
+```text
+client_id=<linear OAuth client id>
+client_secret=<linear OAuth client secret>
+```
+
+These values are only enough to identify the OAuth app. Linear GraphQL calls still require a later OAuth installation/token exchange that produces an access token; until that exists, the Gleam validator returns a redacted, actionable `OAuthAppCredentialsWithoutToken` error instead of pretending the app credentials can query Linear directly. A single-line `token=...` or token-only file shape is parsed for future installed-token support, but OAuth app credentials are the expected local secret shape for the current Linear setup.
+
 ## How it works
 
 1. `robot-main.sh` creates the `.grkr` runtime layout, validates prerequisites, and runs the ordered supervisor phases on the configured interval

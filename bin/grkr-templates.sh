@@ -198,6 +198,14 @@ $body
 ## Testing results
 - Functional testing performed
 
+If you discover an issue-quality blocker during implementation that requires refusal instead of completion, end your final response with exactly this block:
+
+grkr-refuse-implementation
+<one allowed refusal class>
+<short explanation>
+
+Allowed refusal classes: underspecified, too_large, missing_dependency, needs_design_decision, unsafe_autonomous_change, repo_not_ready, other.
+
 ---
 
 **Instructions for you:**

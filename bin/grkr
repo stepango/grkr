@@ -890,6 +890,36 @@ process_issue() {
   write_issue_prompt_file "$prompt_file" "$ISSUE" "$TITLE" "$URL" "$BODY" "$TASK_SLUG" "$ISSUE_WORKTREE_DIR"
   codex_output_file="$TASK_DIR/implementation.log"
   run_codex_prompt "$prompt_file" "$codex_output_file" "implement the issue" replace "$ISSUE_WORKTREE_DIR"
+
+  implementation_refusal=$(detect_implementation_refusal "$codex_output_file")
+  if [ -n "$implementation_refusal" ]; then
+    echo "⚠️ Implementation discovered blockers that require refusal."
+    echo "🔄 Converting implementation attempt to refusal for issue #$ISSUE."
+    implementation_refusal_class=$(printf '%s\n' "$implementation_refusal" | awk 'NR == 1 {print}')
+    implementation_refusal_reasoning=$(printf '%s\n' "$implementation_refusal" | awk 'found {print} /^---$/ {found=1}' | sed '/^$/d')
+    if [ -z "$implementation_refusal_reasoning" ]; then
+      implementation_refusal_reasoning="Implementation discovered that the issue is not ready for safe autonomous completion."
+    fi
+    mkdir -p "$TASK_DIR/codex"
+    cp "$codex_output_file" "$TASK_DIR/codex/implementation-before-refusal.log"
+    refusal_result=$(complete_issue_refusal "$ISSUE" "$ISSUE_JSON" "$TASK_SLUG" "$TASK_DIR" "$TITLE" "$PROGRESS_FILE" /dev/null "$ISSUE_WORKTREE_DIR" "$implementation_refusal_class" "$implementation_refusal_reasoning" "The issue was not implemented because implementation discovered a blocker after the decision gate returned \`proceed\`.") || {
+      CURRENT_ISSUE_WORKTREE=""
+      rm -f "$prompt_file"
+      CURRENT_PROMPT_FILE=""
+      return 1
+    }
+    refusal_class=$(printf '%s\n' "$refusal_result" | tail -n2 | head -n1)
+    refusal_comment_id=$(printf '%s\n' "$refusal_result" | tail -n1)
+    mark_task_progress_refused "$PROGRESS_FILE" "$refusal_class" "$refusal_comment_id"
+    CURRENT_ISSUE_WORKTREE=""
+    rm -f "$prompt_file"
+    CURRENT_PROMPT_FILE=""
+    echo "⏸️ Refused implementation for issue #$ISSUE (converted during implementation)."
+    ATTACH_ISSUE_LOGS=0
+    attach_issue_logs
+    return 0
+  fi
+
   ensure_publishable_file_sizes "$ISSUE" "$TITLE" "$TASK_SLUG" "$prompt_file" "$codex_output_file" || {
     CURRENT_ISSUE_WORKTREE=""
     return 1

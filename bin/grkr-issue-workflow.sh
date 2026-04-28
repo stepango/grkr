@@ -437,13 +437,18 @@ write_refusal_checkpoint_file() {
   local task_slug=$4
   local refusal_class=$5
   local reasoning=$6
+  local summary="${7:-}"
+
+  if [ -z "$summary" ]; then
+    summary='The issue was not implemented because the decision gate returned `refuse`.'
+  fi
 
   {
     printf '%s\n\n' "$(checkpoint_marker refusal "$task_slug")"
     printf '## Implementation refused\n\n'
     printf 'Issue #%s: %s\n\n' "$issue" "$title"
     printf '### Refusal summary\n\n'
-    printf 'The issue was not implemented because the decision gate returned `refuse`.\n\n'
+    printf '%s\n\n' "$summary"
     printf '### Reason class\n\n'
     printf '%s\n\n' "$refusal_class"
     printf '### Detailed reasoning\n\n'
@@ -468,10 +473,15 @@ ensure_refusal_checkpoint() {
   local progress_file=$6
   local refusal_class=$7
   local reasoning=$8
+  local summary="${9:-}"
   local checkpoint_file
   local comment_id
   local comment_body
   local refreshed_comments_json
+
+  if [ -z "$summary" ]; then
+    summary='The issue was not implemented because the decision gate returned `refuse`.'
+  fi
 
   checkpoint_file="$task_dir/refusal.md"
   comment_id=$(checkpoint_comment_id_from_json "$issue_json" refusal "$task_slug")
@@ -492,7 +502,7 @@ ensure_refusal_checkpoint() {
     fi
   fi
 
-  write_refusal_checkpoint_file "$checkpoint_file" "$issue" "$title" "$task_slug" "$refusal_class" "$reasoning"
+  write_refusal_checkpoint_file "$checkpoint_file" "$issue" "$title" "$task_slug" "$refusal_class" "$reasoning" "$summary"
   echo "📝 Posting refusal checkpoint for issue #$issue..." >&2
   gh issue comment "$issue" --body-file "$checkpoint_file" >/dev/null
   refreshed_comments_json=$(fetch_issue_comments_json "$issue")
@@ -523,21 +533,36 @@ complete_issue_refusal() {
   local progress_file=$6
   local decision_output_file=$7
   local worktree_dir=$8
+  local explicit_refusal_class=${9:-}
+  local explicit_reasoning=${10:-}
+  local refusal_summary="${11:-}"
   local parsed_refusal
   local refusal_class_candidate
   local refusal_class
   local reasoning
   local refusal_comment_id
 
-  parsed_refusal=$(parse_refusal_decision_output "$decision_output_file")
-  refusal_class_candidate=$(printf '%s\n' "$parsed_refusal" | awk 'NR == 1 {print}')
-  refusal_class=$(normalize_refusal_class_candidate "$refusal_class_candidate")
-  reasoning=$(printf '%s\n' "$parsed_refusal" | awk 'found {print} /^---$/ {found=1}' | sed '/^$/d')
-  if [ -z "$reasoning" ]; then
-    reasoning="The issue does not appear ready for safe autonomous implementation in its current state."
+  if [ -z "$refusal_summary" ]; then
+    refusal_summary='The issue was not implemented because the decision gate returned `refuse`.'
   fi
 
-  refusal_comment_id=$(ensure_refusal_checkpoint "$issue" "$issue_json" "$task_slug" "$task_dir" "$title" "$progress_file" "$refusal_class" "$reasoning")
+  if [ -n "$explicit_refusal_class" ]; then
+    refusal_class=$(normalize_refusal_class_candidate "$explicit_refusal_class")
+    reasoning="$explicit_reasoning"
+    if [ -z "$reasoning" ]; then
+      reasoning="The issue does not appear ready for safe autonomous implementation in its current state."
+    fi
+  else
+    parsed_refusal=$(parse_refusal_decision_output "$decision_output_file")
+    refusal_class_candidate=$(printf '%s\n' "$parsed_refusal" | awk 'NR == 1 {print}')
+    refusal_class=$(normalize_refusal_class_candidate "$refusal_class_candidate")
+    reasoning=$(printf '%s\n' "$parsed_refusal" | awk 'found {print} /^---$/ {found=1}' | sed '/^$/d')
+    if [ -z "$reasoning" ]; then
+      reasoning="The issue does not appear ready for safe autonomous implementation in its current state."
+    fi
+  fi
+
+  refusal_comment_id=$(ensure_refusal_checkpoint "$issue" "$issue_json" "$task_slug" "$task_dir" "$title" "$progress_file" "$refusal_class" "$reasoning" "$refusal_summary")
   if refusal_requires_backlog_move; then
     if ! move_issue_to_backlog "$issue" "$issue_json" >&2; then
       echo "⚠️ Refusal for issue #$issue was recorded, but the project status could not be moved to ${BACKLOG_VALUE:-Backlog}." >&2
@@ -569,4 +594,56 @@ run_implementation_decision_gate() {
       return 1
       ;;
   esac
+}
+
+detect_implementation_refusal() {
+  local output_file=$1
+
+  emit_task_log_stream "$output_file" | awk '
+    BEGIN {
+      found_marker = 0
+      refusal_class = ""
+      in_reasoning = 0
+      reasoning = ""
+    }
+    {
+      line = $0
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
+      lower = tolower(line)
+
+      if (lower == "grkr-refuse-implementation") {
+        found_marker = 1
+        next
+      }
+
+      if (found_marker && refusal_class == "") {
+        if (line == "") {
+          next
+        }
+        if (line ~ /^(underspecified|too_large|missing_dependency|needs_design_decision|unsafe_autonomous_change|repo_not_ready|other)$/) {
+          refusal_class = line
+          in_reasoning = 1
+          next
+        }
+      }
+
+      if (in_reasoning && line != "") {
+        if (reasoning != "") {
+          reasoning = reasoning "\n"
+        }
+        reasoning = reasoning line
+      }
+    }
+    END {
+      if (found_marker && refusal_class != "") {
+        print refusal_class
+        print "---"
+        if (reasoning != "") {
+          print reasoning
+        } else {
+          print "Implementation discovered that the issue is not ready for safe autonomous completion."
+        }
+      }
+    }
+  '
 }

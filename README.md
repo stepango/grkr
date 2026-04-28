@@ -59,6 +59,7 @@ npm test
 - `grkr --issue <id>` includes the per-file 1000-line rule in the Codex prompt and will trigger one immediate Codex refactor pass when staged changes still violate that limit.
 - `grkr --issue <id>` now runs issue execution in `.grkr/worktrees/<issue-slug>/`, uses a dedicated Codex decision gate before implementation, and only proceeds when that gate returns `proceed`.
 - `grkr --issue <id>` treats `refuse` as a valid terminal outcome: it writes `refusal.md`, posts a refusal checkpoint comment, moves the issue back to `Backlog` when configured, skips implementation and tests, and removes the issue worktree.
+- During implementation, if Codex reports an explicit `grkr-refuse-implementation` blocker (missing dependencies, unsafe changes, or other issue-quality problems), the workflow converts from implementation to refusal, preserves the implementation log as `.grkr/tasks/<issue-slug>/codex/implementation-before-refusal.log`, and posts the refusal checkpoint with the discovered reason class.
 - `grkr --issue <id>` stages only relevant non-`.grkr` files from the issue worktree and updates an existing branch PR when one is already open.
 - `grkr --project <id>` treats per-issue failures as recoverable so the long-running watcher does not exit after one bad issue.
 - `grkr --issue <id>` warns when the working directory is dirty, then continues so intentionally staged or unstaged local changes can be included.

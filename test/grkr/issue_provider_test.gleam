@@ -1,3 +1,4 @@
+import gleam/dict
 import gleam/option.{None, Some}
 import gleam/string
 import gleeunit
@@ -156,3 +157,30 @@ pub fn parse_linear_personal_token_test() {
   credential.parse_linear_credentials("token=lin_api_test_token")
   |> should.equal(Ok(LinearPersonalToken(token: "lin_api_test_token")))
 }
+
+pub fn discover_reads_linear_credentials_file_test() {
+  install_linear_secret(
+    "client_id=linear_client_123\nclient_secret=linear_secret_456\n",
+  )
+
+  case credential.discover() {
+    Ok(discovered) -> {
+      case dict.get(discovered.providers, "linear") {
+        Ok(ProviderConfig(
+          credentials: LinearOAuthApp(
+            client_id: "linear_client_123",
+            client_secret: "linear_secret_456",
+            access_token: None,
+          ),
+          ..,
+        )) -> True
+        _ -> False
+      }
+    }
+    _ -> False
+  }
+  |> should.equal(True)
+}
+
+@external(javascript, "./issue_provider_env_ffi.mjs", "installLinearSecret")
+fn install_linear_secret(content: String) -> Nil

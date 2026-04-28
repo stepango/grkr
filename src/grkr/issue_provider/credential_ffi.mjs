@@ -1,5 +1,10 @@
 import { readFileSync, existsSync } from "fs";
 import { homedir } from "os";
+import { Ok, Error as GleamError } from "../../gleam.mjs";
+import {
+  CredentialFileNotFound,
+  CredentialFileNotReadable,
+} from "./types.mjs";
 
 /**
  * Read a file, expanding ~ to home directory
@@ -11,13 +16,13 @@ export function readFile(path) {
     const expandedPath = path.replace(/^~/, homedir());
 
     if (!existsSync(expandedPath)) {
-      return ["Error", ["CredentialFileNotFound", path]];
+      return new GleamError(new CredentialFileNotFound(path));
     }
 
     const content = readFileSync(expandedPath, "utf-8");
-    return ["Ok", content];
+    return new Ok(content);
   } catch (error) {
-    return ["Error", ["CredentialFileNotReadable", path]];
+    return new GleamError(new CredentialFileNotReadable(path));
   }
 }
 

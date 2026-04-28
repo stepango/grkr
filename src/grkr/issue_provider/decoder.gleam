@@ -1,7 +1,7 @@
 import gleam/list
 import gleam/string
-import grkr/issue_provider/types
 import grkr/issue_provider/ffi
+import grkr/issue_provider/types
 
 /// Decode Linear state from JSON
 pub fn decode_state(obj: ffi.JsonValue) -> Result(types.LinearState, String) {
@@ -9,7 +9,11 @@ pub fn decode_state(obj: ffi.JsonValue) -> Result(types.LinearState, String) {
   let name = ffi.get_field(obj, "name")
   let state_type = ffi.get_field(obj, "type")
 
-  case ffi.decode_string(id), ffi.decode_string(name), ffi.decode_string(state_type) {
+  case
+    ffi.decode_string(id),
+    ffi.decode_string(name),
+    ffi.decode_string(state_type)
+  {
     Ok(i), Ok(n), Ok(t) -> Ok(types.LinearState(id: i, name: n, state_type: t))
     _, _, _ -> Error("Invalid state")
   }
@@ -21,8 +25,13 @@ fn decode_assignee(obj: ffi.JsonValue) -> Result(types.LinearAssignee, String) {
   let name = ffi.get_field(obj, "name")
   let display_name = ffi.get_field(obj, "displayName")
 
-  case ffi.decode_string(id), ffi.decode_string(name), ffi.decode_string(display_name) {
-    Ok(i), Ok(n), Ok(d) -> Ok(types.LinearAssignee(id: i, name: n, display_name: d))
+  case
+    ffi.decode_string(id),
+    ffi.decode_string(name),
+    ffi.decode_string(display_name)
+  {
+    Ok(i), Ok(n), Ok(d) ->
+      Ok(types.LinearAssignee(id: i, name: n, display_name: d))
     _, _, _ -> Error("Invalid assignee")
   }
 }
@@ -51,11 +60,16 @@ fn decode_team(obj: ffi.JsonValue) -> Result(types.LinearTeam, String) {
   }
 }
 
-/// Decode Linear priority from string
+/// Decode Linear priority from the API value.
 fn decode_priority(str: ffi.JsonValue) -> types.LinearPriority {
-  case ffi.decode_string(str) {
-    Ok(s) -> types.parse_priority(string.lowercase(s))
-    Error(_) -> types.NoPriority
+  case ffi.decode_int(str) {
+    Ok(value) -> types.parse_priority_number(value)
+    Error(_) -> {
+      case ffi.decode_string(str) {
+        Ok(s) -> types.parse_priority(string.lowercase(s))
+        Error(_) -> types.NoPriority
+      }
+    }
   }
 }
 
@@ -74,8 +88,13 @@ pub fn decode_issue(obj: ffi.JsonValue) -> Result(types.LinearIssue, String) {
   let created_at = ffi.get_field(obj, "createdAt")
   let updated_at = ffi.get_field(obj, "updatedAt")
 
-  case ffi.decode_string(id), ffi.decode_string(identifier), ffi.decode_string(title),
-    ffi.decode_string(url), ffi.decode_string(created_at), ffi.decode_string(updated_at)
+  case
+    ffi.decode_string(id),
+    ffi.decode_string(identifier),
+    ffi.decode_string(title),
+    ffi.decode_string(url),
+    ffi.decode_string(created_at),
+    ffi.decode_string(updated_at)
   {
     Ok(i), Ok(ident), Ok(t), Ok(u), Ok(ca), Ok(ua) -> {
       let state = case decode_state(state_obj) {
@@ -87,26 +106,29 @@ pub fn decode_issue(obj: ffi.JsonValue) -> Result(types.LinearIssue, String) {
 
       let assignee = case ffi.is_null(assignee_obj) {
         True -> Error(Nil)
-        False -> case decode_assignee(assignee_obj) {
-          Ok(a) -> Ok(a)
-          Error(_) -> Error(Nil)
-        }
+        False ->
+          case decode_assignee(assignee_obj) {
+            Ok(a) -> Ok(a)
+            Error(_) -> Error(Nil)
+          }
       }
 
       let project = case ffi.is_null(project_obj) {
         True -> Error(Nil)
-        False -> case decode_project(project_obj) {
-          Ok(p) -> Ok(p)
-          Error(_) -> Error(Nil)
-        }
+        False ->
+          case decode_project(project_obj) {
+            Ok(p) -> Ok(p)
+            Error(_) -> Error(Nil)
+          }
       }
 
       let team = case ffi.is_null(team_obj) {
         True -> Error(Nil)
-        False -> case decode_team(team_obj) {
-          Ok(t) -> Ok(t)
-          Error(_) -> Error(Nil)
-        }
+        False ->
+          case decode_team(team_obj) {
+            Ok(t) -> Ok(t)
+            Error(_) -> Error(Nil)
+          }
       }
 
       let description_str = case ffi.decode_string(description) {
@@ -134,7 +156,9 @@ pub fn decode_issue(obj: ffi.JsonValue) -> Result(types.LinearIssue, String) {
 }
 
 /// Decode a list of Linear issues
-pub fn decode_issues(arr: ffi.JsonValue) -> Result(List(types.LinearIssue), String) {
+pub fn decode_issues(
+  arr: ffi.JsonValue,
+) -> Result(List(types.LinearIssue), String) {
   case ffi.decode_array(arr) {
     Ok(items) -> {
       list.try_map(items, decode_issue)
@@ -144,10 +168,9 @@ pub fn decode_issues(arr: ffi.JsonValue) -> Result(List(types.LinearIssue), Stri
 }
 
 /// Decode Linear API response with issues
-pub fn decode_issues_response(json_string: String) -> Result(
-  List(types.LinearIssue),
-  String,
-) {
+pub fn decode_issues_response(
+  json_string: String,
+) -> Result(List(types.LinearIssue), String) {
   case ffi.parse(json_string) {
     Ok(parsed) -> {
       let data = ffi.get_field(parsed, "data")
@@ -162,7 +185,9 @@ pub fn decode_issues_response(json_string: String) -> Result(
 }
 
 /// Decode Linear teams response
-pub fn decode_teams_response(json_string: String) -> Result(List(types.LinearTeam), String) {
+pub fn decode_teams_response(
+  json_string: String,
+) -> Result(List(types.LinearTeam), String) {
   case ffi.parse(json_string) {
     Ok(parsed) -> {
       let data = ffi.get_field(parsed, "data")
@@ -180,10 +205,9 @@ pub fn decode_teams_response(json_string: String) -> Result(List(types.LinearTea
 }
 
 /// Decode Linear projects response
-pub fn decode_projects_response(json_string: String) -> Result(
-  List(types.LinearProject),
-  String,
-) {
+pub fn decode_projects_response(
+  json_string: String,
+) -> Result(List(types.LinearProject), String) {
   case ffi.parse(json_string) {
     Ok(parsed) -> {
       let data = ffi.get_field(parsed, "data")

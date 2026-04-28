@@ -2,7 +2,7 @@ import gleam/int
 import gleam/list
 import gleam/result
 import gleam/string
-import grkr/issue_provider/types as types
+import grkr/issue_provider/types
 
 /// Linear configuration loaded from environment and files
 pub type LinearConfig {
@@ -42,10 +42,9 @@ pub fn load_linear_config() -> Result(LinearConfig, types.ConfigError) {
 }
 
 /// Load Linear configuration from a config file path
-pub fn load_linear_config_from_file(path: String) -> Result(
-  LinearConfig,
-  types.ConfigError,
-) {
+pub fn load_linear_config_from_file(
+  path: String,
+) -> Result(LinearConfig, types.ConfigError) {
   case read_file(path) {
     Ok(contents) -> parse_config_from_contents(contents)
     Error(_err) -> Error(types.InvalidCredentialFormat)
@@ -53,10 +52,9 @@ pub fn load_linear_config_from_file(path: String) -> Result(
 }
 
 /// Parse configuration from file contents
-fn parse_config_from_contents(contents: String) -> Result(
-  LinearConfig,
-  types.ConfigError,
-) {
+fn parse_config_from_contents(
+  contents: String,
+) -> Result(LinearConfig, types.ConfigError) {
   let lines = string.split(contents, "\n")
 
   let get_value = fn(key: String) -> Result(String, Nil) {
@@ -73,7 +71,11 @@ fn parse_config_from_contents(contents: String) -> Result(
           case string.length(trimmed) > string.length(prefix) {
             True -> {
               let _prefix_part = string.slice(trimmed, 0, string.length(prefix))
-              string.slice(trimmed, string.length(prefix), string.length(trimmed))
+              string.slice(
+                trimmed,
+                string.length(prefix),
+                string.length(trimmed),
+              )
             }
             False -> ""
           }

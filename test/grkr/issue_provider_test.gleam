@@ -1,7 +1,9 @@
-import gleeunit/should
 import gleam/io
 import gleam/list
+import gleam/string
+import gleeunit/should
 import grkr/issue_provider/decoder
+import grkr/issue_provider/query
 import grkr/issue_provider/selector
 import grkr/issue_provider/types
 
@@ -23,7 +25,7 @@ const fixture_issue_json = "
               \"name\": \"Todo\",
               \"type\": \"backlog\"
             },
-            \"priority\": \"high\",
+            \"priority\": 2,
             \"assignee\": {
               \"id\": \"u1\",
               \"name\": \"bot\",
@@ -53,7 +55,7 @@ const fixture_issue_json = "
               \"name\": \"Todo\",
               \"type\": \"backlog\"
             },
-            \"priority\": \"urgent\",
+            \"priority\": 1,
             \"assignee\": {
               \"id\": \"u1\",
               \"name\": \"bot\",
@@ -215,6 +217,21 @@ pub fn priority_parsing_test() {
 
   types.parse_priority("unknown")
   |> should.equal(types.NoPriority)
+
+  types.parse_priority_number(1)
+  |> should.equal(types.Urgent)
+
+  types.parse_priority_number(2)
+  |> should.equal(types.High)
+
+  types.parse_priority_number(3)
+  |> should.equal(types.Medium)
+
+  types.parse_priority_number(4)
+  |> should.equal(types.Low)
+
+  types.parse_priority_number(0)
+  |> should.equal(types.NoPriority)
 }
 
 pub fn priority_weight_test() {
@@ -266,7 +283,11 @@ pub fn issue_filtering_test() {
       title: "Issue 2",
       description: "Test",
       url: "https://linear.app/issue/ENG-124",
-      state: types.LinearState(id: "s2", name: "In Progress", state_type: "started"),
+      state: types.LinearState(
+        id: "s2",
+        name: "In Progress",
+        state_type: "started",
+      ),
       priority: types.Urgent,
       assignee: Ok(types.LinearAssignee(
         id: "u1",
@@ -372,6 +393,13 @@ pub fn state_normalization_test() {
 
   selector.state_names_match("Todo", "In Progress")
   |> should.equal(False)
+}
+
+pub fn query_escapes_graphql_strings_test() {
+  let built = query.build_team_projects_query("team\"x\nid")
+
+  string.contains(built, "team\\\"x\\nid")
+  |> should.equal(True)
 }
 
 fn json_error_to_string(err: String) -> String {

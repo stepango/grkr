@@ -1,7 +1,7 @@
 import gleam/list
 import gleam/order
 import gleam/string
-import grkr/issue_provider/types as types
+import grkr/issue_provider/types
 
 /// Compare two issues by priority, then updated_at, then identifier
 fn compare_issues(
@@ -73,9 +73,8 @@ pub fn select_highest_priority(
   case issues {
     [] -> Error(Nil)
     _ -> {
-      let sorted = list.sort(issues, fn(a, b) {
-        compare_issues(priority_order, a, b)
-      })
+      let sorted =
+        list.sort(issues, fn(a, b) { compare_issues(priority_order, a, b) })
 
       case list.first(sorted) {
         Ok(issue) -> Ok(issue)
@@ -95,16 +94,20 @@ pub fn select_issue(
   let count = list.length(filtered)
 
   case select_highest_priority(filtered, priority_order) {
-    Ok(issue) -> types.SelectionSuccess(
-      selected: types.issue_to_selected(issue),
-      total_candidates: count,
-    )
+    Ok(issue) ->
+      types.SelectionSuccess(
+        selected: types.issue_to_selected(issue),
+        total_candidates: count,
+      )
     Error(Nil) -> types.NoMatchingIssues
   }
 }
 
 /// Create a default filter from state name and assignee ID
-pub fn default_filter(state_name: String, assignee_id: String) -> types.IssueFilter {
+pub fn default_filter(
+  state_name: String,
+  assignee_id: String,
+) -> types.IssueFilter {
   types.make_filter(state_name, assignee_id, Error(Nil), Error(Nil))
 }
 
@@ -139,6 +142,9 @@ pub fn state_names_match(a: String, b: String) -> Bool {
 }
 
 /// Validate that an issue's state matches the expected state
-pub fn validate_issue_state(issue: types.LinearIssue, expected_state: String) -> Bool {
+pub fn validate_issue_state(
+  issue: types.LinearIssue,
+  expected_state: String,
+) -> Bool {
   state_names_match(issue.state.name, expected_state)
 }

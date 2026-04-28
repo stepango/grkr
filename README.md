@@ -109,7 +109,7 @@ PRIORITY_ORDER="P0,P1,P2,P3"
 
 ### Linear (experimental)
 
-Set `GRKR_ISSUE_PROVIDER=linear` in your environment or `.grkr/config.sh` to use Linear as the issue source.
+Set `GRKR_ISSUE_PROVIDER=linear` in your environment or `.grkr/config.sh` to try Linear fixture-backed issue selection.
 
 Configuration for Linear:
 
@@ -126,7 +126,7 @@ Linear credential setup:
 2. Store the OAuth app credentials in `~/.linear/secret.txt` as `client_id=...` and `client_secret=...`.
 3. Do not use those app credentials as a personal API key. Live Linear GraphQL access requires the OAuth installation/token exchange flow; this provider slice refuses live queries until that token flow is configured.
 
-For fixture-backed selection, set `LINEAR_FIXTURE_PATH` to a JSON file containing Linear API response data.
+For fixture-backed selection, set `LINEAR_FIXTURE_PATH` to a JSON file containing Linear API response data. This slice returns shell-safe Linear issue metadata (`ISSUE_IDENTIFIER`, title, URL, state, priority, update time, job key, and task slug), but the supervisor only schedules executable work when a provider returns the GitHub `ISSUE_NUMBER` required by `grkr --issue`. Full Linear issue execution is still pending.
 
 The Linear provider supports:
 - Team and project-scoped issue queries

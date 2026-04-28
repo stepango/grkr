@@ -6,11 +6,7 @@ pub type Provider {
 
 /// Linear issue state mapping
 pub type LinearState {
-  LinearState(
-    id: String,
-    name: String,
-    state_type: String,
-  )
+  LinearState(id: String, name: String, state_type: String)
 }
 
 /// Linear priority levels
@@ -24,29 +20,17 @@ pub type LinearPriority {
 
 /// Linear assignee
 pub type LinearAssignee {
-  LinearAssignee(
-    id: String,
-    name: String,
-    display_name: String,
-  )
+  LinearAssignee(id: String, name: String, display_name: String)
 }
 
 /// Linear project
 pub type LinearProject {
-  LinearProject(
-    id: String,
-    name: String,
-    url: String,
-  )
+  LinearProject(id: String, name: String, url: String)
 }
 
 /// Linear team
 pub type LinearTeam {
-  LinearTeam(
-    id: String,
-    key: String,
-    name: String,
-  )
+  LinearTeam(id: String, key: String, name: String)
 }
 
 /// Linear issue
@@ -108,13 +92,7 @@ pub type ProviderError {
 
 /// Priority ordering for sorting
 pub type PriorityOrder {
-  PriorityOrder(
-    urgent: Int,
-    high: Int,
-    medium: Int,
-    low: Int,
-    no_priority: Int,
-  )
+  PriorityOrder(urgent: Int, high: Int, medium: Int, low: Int, no_priority: Int)
 }
 
 /// Issue selection result with metadata
@@ -131,6 +109,17 @@ pub fn parse_priority(value: String) -> LinearPriority {
     "high" -> High
     "medium" -> Medium
     "low" -> Low
+    _ -> NoPriority
+  }
+}
+
+/// Parse Linear's numeric priority value.
+pub fn parse_priority_number(value: Int) -> LinearPriority {
+  case value {
+    1 -> Urgent
+    2 -> High
+    3 -> Medium
+    4 -> Low
     _ -> NoPriority
   }
 }

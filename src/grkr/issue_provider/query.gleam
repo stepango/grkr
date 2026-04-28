@@ -1,5 +1,18 @@
 import gleam/int
+import gleam/string
 import grkr/issue_provider/types
+
+fn graphql_string(value: String) -> String {
+  "\""
+  <> {
+    value
+    |> string.replace("\\", "\\\\")
+    |> string.replace("\"", "\\\"")
+    |> string.replace("\n", "\\n")
+    |> string.replace("\r", "\\r")
+  }
+  <> "\""
+}
 
 /// Build a GraphQL query for fetching assigned issues
 pub fn build_assigned_issues_query(
@@ -8,40 +21,38 @@ pub fn build_assigned_issues_query(
   filter: Result(types.IssueFilter, Nil),
 ) -> String {
   let pagination_clause = case after {
-    Ok(cursor) -> ", after: \"" <> cursor <> "\""
+    Ok(cursor) -> ", after: " <> graphql_string(cursor)
     Error(Nil) -> ""
   }
 
   let filter_clause = case filter {
     Ok(f) -> {
-      let state_filter = ", state: { name: { eq: \"" <> f.state_name <> "\" } }"
+      let state_filter =
+        ", state: { name: { eq: " <> graphql_string(f.state_name) <> " } }"
 
       let project_filter = case f.project_id {
-        Ok(pid) -> ", project: { id: { eq: \"" <> pid <> "\" } }"
+        Ok(pid) -> ", project: { id: { eq: " <> graphql_string(pid) <> " } }"
         Error(Nil) -> ""
       }
 
       let team_filter = case f.team_id {
-        Ok(tid) -> ", team: { id: { eq: \"" <> tid <> "\" } }"
+        Ok(tid) -> ", team: { id: { eq: " <> graphql_string(tid) <> " } }"
         Error(Nil) -> ""
       }
 
-      "filter: { assignee: { me: true } " <> state_filter <> project_filter
-        <> team_filter
-        <> " }"
+      "filter: { assignee: { me: true } "
+      <> state_filter
+      <> project_filter
+      <> team_filter
+      <> " }"
     }
     Error(Nil) -> "filter: { assignee: { me: true } }"
   }
 
   "query {
   viewer {
-    assignedIssues(first: "
-    <> int.to_string(first)
-    <> pagination_clause
-    <> "
-    "
-    <> filter_clause
-    <> ") {
+    assignedIssues(first: " <> int.to_string(first) <> pagination_clause <> "
+    " <> filter_clause <> ") {
       nodes {
         id
         identifier
@@ -99,7 +110,7 @@ pub fn build_teams_query() -> String {
 /// Build a GraphQL query for fetching team projects
 pub fn build_team_projects_query(team_id: String) -> String {
   "query {
-  team(id: \"" <> team_id <> "\") {
+  team(id: " <> graphql_string(team_id) <> ") {
     projects {
       nodes {
         id
@@ -114,7 +125,7 @@ pub fn build_team_projects_query(team_id: String) -> String {
 /// Build a GraphQL query for fetching a single issue by identifier
 pub fn build_issue_query(identifier: String) -> String {
   "query {
-  issue(identifier: \"" <> identifier <> "\") {
+  issue(identifier: " <> graphql_string(identifier) <> ") {
     id
     identifier
     title
@@ -179,10 +190,7 @@ pub fn filtered_query_config(filter: types.IssueFilter) -> QueryConfig {
 }
 
 /// Create a query config with pagination
-pub fn paginated_query_config(
-  first: Int,
-  after: String,
-) -> QueryConfig {
+pub fn paginated_query_config(first: Int, after: String) -> QueryConfig {
   QueryConfig(first: first, after: Ok(after), filter: Error(Nil))
 }
 

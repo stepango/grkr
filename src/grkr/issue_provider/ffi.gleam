@@ -13,6 +13,10 @@ pub fn get_field(obj: JsonValue, field: String) -> JsonValue
 @external(javascript, "../issue_provider/json_ffi.mjs", "decodeString")
 pub fn decode_string(val: JsonValue) -> Result(String, String)
 
+/// Decode a JsonValue as an int
+@external(javascript, "../issue_provider/json_ffi.mjs", "decodeInt")
+pub fn decode_int(val: JsonValue) -> Result(Int, String)
+
 /// Check if a JsonValue is null
 @external(javascript, "../issue_provider/json_ffi.mjs", "isNull")
 pub fn is_null(val: JsonValue) -> Bool

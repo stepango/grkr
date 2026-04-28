@@ -411,6 +411,11 @@ phase_pick_issue_impl() {
     return 0
   fi
 
+  if [ -z "${ISSUE_NUMBER:-}" ]; then
+    log_warn "pick_and_schedule_issue_execution" "${JOB_KEY:-"-"}" "repo/$REPO" "scheduled_jobs=0 selected_issue_missing_number=true"
+    return 0
+  fi
+
   project_item_id=${PROJECT_ITEM_ID:-}
   schedule_issue_execution_job "$ISSUE_NUMBER" "$JOB_KEY" "$TASK_SLUG" "$project_item_id"
 }

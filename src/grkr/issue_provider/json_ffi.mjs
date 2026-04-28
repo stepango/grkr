@@ -36,6 +36,16 @@ export function decodeString(obj) {
 }
 
 /**
+ * Decode an integer field.
+ */
+export function decodeInt(obj) {
+  if (Number.isInteger(obj)) {
+    return new Ok(obj);
+  }
+  return new Error("Expected int");
+}
+
+/**
  * Check if a value is null
  */
 export function isNull(val) {

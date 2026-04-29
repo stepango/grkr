@@ -40,6 +40,19 @@ The `worker-resolve-pr.sh` script implements automated PR conflict resolution us
 
 The implementation uses Gleam for the core logic with a thin shell wrapper that preserves shell conventions and integrates with the existing supervisor infrastructure.
 
+## Progress Tracking and Linear Integration
+
+grkr includes Gleam-owned progress tracking and Linear integration under `src/grkr/progress/`:
+
+1. **Checkpoint stages**: Research, plan, refusal, implementation, test, and PR summary stages with validation and formatting
+2. **Idempotency**: Stable machine markers and idempotency keys for checkpoint comments to prevent duplicates
+3. **Markdown rendering**: Checkpoint comment formatting with optional PR links and refusal reasons
+4. **Linear state mapping**: Configurable mapping from grkr phases to Linear workflow states via environment variables
+5. **Linear mutations**: GraphQL mutation planning for comment creation and issue state updates with idempotency markers
+6. **Token handling**: Safe failure when Linear access tokens are unavailable without treating OAuth app credentials as direct GraphQL tokens
+
+The progress modules provide planning functions for checkpoint rendering and Linear mutations while preserving existing GitHub issue workflows. Linear support runs alongside GitHub, not as a replacement.
+
 ## How it works
 
 1. `robot-main.sh` creates the `.grkr` runtime layout, validates prerequisites, and runs the ordered supervisor phases on the configured interval

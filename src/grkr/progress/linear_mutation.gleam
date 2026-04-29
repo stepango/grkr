@@ -1,6 +1,6 @@
 import gleam/string
-import grkr/progress/checkpoint_stage
 import grkr/progress/checkpoint_id
+import grkr/progress/checkpoint_stage
 
 pub type LinearIssueId {
   LinearIssueId(value: String)
@@ -35,8 +35,7 @@ pub fn create_comment_mutation(
 ) -> MutationRequest {
   let marker = checkpoint_id.marker(stage, task_slug)
   let idempotency_key = checkpoint_id.to_idempotency_key(marker)
-  let body_with_marker =
-    checkpoint_id.to_html_comment(marker) <> "\n\n" <> body
+  let body_with_marker = checkpoint_id.to_html_comment(marker) <> "\n\n" <> body
 
   let query =
     "mutation ($issueId: ID!, $body: String!) { commentCreate(input: {issueId: $issueId, body: $body}) { comment { id } } }"
@@ -60,7 +59,7 @@ pub fn update_state_mutation(
   state_id: String,
 ) -> MutationRequest {
   let query =
-    "mutation ($issueId: ID!, $stateId: ID!) { issueUpdate(input: {id: $issueId, stateId: $stateId}) { issue { id state { id name } } success } }"
+    "mutation ($issueId: String!, $stateId: String!) { issueUpdate(id: $issueId, input: {stateId: $stateId}) { issue { id state { id name } } success } }"
 
   let variables_json =
     "{\"issueId\":\""
@@ -93,11 +92,11 @@ pub fn create_comment_with_pr_link(
 
 pub fn format_mutation_for_logging(request: MutationRequest) -> String {
   "Query: "
-    <> request.query
-    <> "\nVariables: "
-    <> request.variables_json
-    <> "\nIdempotency key: "
-    <> request.idempotency_key
+  <> request.query
+  <> "\nVariables: "
+  <> "[redacted]"
+  <> "\nIdempotency key: "
+  <> request.idempotency_key
 }
 
 fn escape_json_string(value: String) -> String {
@@ -146,16 +145,17 @@ pub fn safe_unavailable_token_result(
 }
 
 pub fn build_error_context(error: String) -> String {
-  "Linear mutation failed: " <> error
-    <> "\nNote: Linear credentials in ~/.linear/secret.txt are OAuth app credentials, "
-    <> "not personal API keys. Write operations require proper OAuth token setup."
+  "Linear mutation failed: "
+  <> error
+  <> "\nNote: Linear credentials in ~/.linear/secret.txt are OAuth app credentials, "
+  <> "not personal API keys. Write operations require proper OAuth token setup."
 }
 
 pub fn is_idempotent_error(error: String) -> Bool {
   let lower = string.lowercase(error)
   string.contains(lower, "duplicate")
-    || string.contains(lower, "already exists")
-    || string.contains(lower, "unique")
+  || string.contains(lower, "already exists")
+  || string.contains(lower, "unique")
 }
 
 pub fn should_retry_mutation(result: MutationResult) -> Bool {

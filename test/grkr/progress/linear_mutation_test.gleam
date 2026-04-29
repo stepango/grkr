@@ -1,5 +1,5 @@
-import gleeunit
 import gleam/string
+import gleeunit
 import gleeunit/should
 import grkr/progress/checkpoint_stage
 import grkr/progress/linear_mutation
@@ -31,6 +31,12 @@ pub fn update_state_mutation_test() {
 
   string.contains(request.query, "issueUpdate")
   |> should.be_true()
+
+  string.contains(request.query, "issueUpdate(id: $issueId, input:")
+  |> should.be_true()
+
+  string.contains(request.query, "issueUpdate(input: {id:")
+  |> should.be_false()
 
   request.idempotency_key
   |> should.equal("grkr-state-update-LIN-456")
@@ -75,16 +81,23 @@ pub fn check_token_status_test() {
 }
 
 pub fn safe_unavailable_token_result_test() {
-  let result = linear_mutation.safe_unavailable_token_result(linear_mutation.TokenAvailable)
+  let result =
+    linear_mutation.safe_unavailable_token_result(
+      linear_mutation.TokenAvailable,
+    )
 
   result
   |> should.equal(linear_mutation.MutationNeedsToken)
 
   let unavailable_result =
-    linear_mutation.safe_unavailable_token_result(linear_mutation.TokenUnavailable)
+    linear_mutation.safe_unavailable_token_result(
+      linear_mutation.TokenUnavailable,
+    )
 
   unavailable_result
-  |> should.equal(linear_mutation.MutationFailed("Linear access token not available"))
+  |> should.equal(linear_mutation.MutationFailed(
+    "Linear access token not available",
+  ))
 }
 
 pub fn is_idempotent_error_test() {
@@ -115,7 +128,8 @@ pub fn should_retry_mutation_test() {
   |> should.be_false()
 
   let success_result = linear_mutation.MutationSuccess("comment-123")
-  let should_not_retry_success = linear_mutation.should_retry_mutation(success_result)
+  let should_not_retry_success =
+    linear_mutation.should_retry_mutation(success_result)
 
   should_not_retry_success
   |> should.be_false()
@@ -129,6 +143,26 @@ pub fn build_error_context_test() {
 
   string.contains(error_context, "OAuth")
   |> should.be_true()
+}
+
+pub fn format_mutation_for_logging_redacts_variables_test() {
+  let request =
+    linear_mutation.MutationRequest(
+      query: "mutation SecretMutation",
+      variables_json: "{\"body\":\"token=secret-value\"}",
+      idempotency_key: "grkr-checkpoint-test-issue-1",
+    )
+
+  let log = linear_mutation.format_mutation_for_logging(request)
+
+  string.contains(log, "mutation SecretMutation")
+  |> should.be_true()
+
+  string.contains(log, "[redacted]")
+  |> should.be_true()
+
+  string.contains(log, "secret-value")
+  |> should.be_false()
 }
 
 pub fn to_linear_issue_id_test() {

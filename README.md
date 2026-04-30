@@ -98,7 +98,7 @@ The project includes an opt-in Linear live e2e harness with its control flow imp
 
 - **OAuth credential parsing**: Reads Linear OAuth app credentials from `~/.linear/secret.txt` or `GRKR_LINEAR_SECRET_PATH`.
 - **Credential redaction**: Never prints OAuth credentials or derived tokens in logs or test output.
-- **GraphQL operation construction**: Builds viewer/project/team queries plus the issue/comment/state mutations required by the full live e2e flow.
+- **GraphQL operation construction**: Builds viewer/project/team queries for the read-only live e2e flow, with mutation builders kept behind the safe-query guard.
 - **Opt-in testing**: Live tests are gated on `GRKR_LINEAR_E2E=1` and are not part of normal `npm test`, so the default suite never mutates Linear.
 - **Clear blocker handling**: If only OAuth app credentials are available, the harness stops with an explicit access-token/OAuth-install blocker instead of treating app credentials as API tokens.
 
@@ -129,7 +129,7 @@ When `GRKR_LINEAR_E2E=1` is set:
 - The wrapper delegates to `gleam run -m grkr/linear/e2e_main`.
 - The Gleam harness loads OAuth app credentials from `~/.linear/secret.txt` or `GRKR_LINEAR_SECRET_PATH`.
 - If `GRKR_LINEAR_ACCESS_TOKEN` is missing, the harness exits with status 2 and reports the OAuth/access-token blocker without printing credential values.
-- If a derived token is provided, the harness performs the live Linear checks implemented by the Gleam Linear client path.
+- If a derived token is provided, the harness performs read-only live Linear checks through the Gleam Linear client path.
 
 When `GRKR_LINEAR_E2E` is not set or equals `0`:
 - E2E tests are skipped entirely.

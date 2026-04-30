@@ -1,4 +1,10 @@
 import { Ok, Error, toList } from "../../gleam.mjs";
+import {
+  GraphQLResponse,
+  LinearProject,
+  LinearTeam,
+  LinearUser,
+} from "./types.mjs";
 
 const LINEAR_API_URL = "https://api.linear.app/graphql";
 
@@ -23,16 +29,14 @@ export async function execute_graphql_request(token, query) {
     const data = await response.json();
 
     if (data.errors) {
-      return new Ok({
-        data: new Error(data.errors.map(e => e.message).join(", ")),
-        errors: toList(data.errors.map(e => e.message)),
-      });
+      const messages = data.errors.map(e => e.message);
+      return new Ok(new GraphQLResponse(
+        new Error(messages.join(", ")),
+        toList(messages),
+      ));
     }
 
-    return new Ok({
-      data: new Ok(data.data),
-      errors: toList([]),
-    });
+    return new Ok(new GraphQLResponse(new Ok(data.data), toList([])));
   } catch (error) {
     return new Error("Request failed: " + error.message);
   }
@@ -45,11 +49,11 @@ export function parse_viewer_json(data) {
       return new Error("Missing viewer data");
     }
 
-    return new Ok({
-      id: viewer.id || "",
-      name: viewer.name || "",
-      email: viewer.email || "",
-    });
+    return new Ok(new LinearUser(
+      viewer.id || "",
+      viewer.name || "",
+      viewer.email || "",
+    ));
   } catch (error) {
     return new Error("Failed to parse viewer: " + error.message);
   }
@@ -62,11 +66,11 @@ export function parse_projects_json(data) {
       return new Error("Missing or invalid projects data");
     }
 
-    const parsed = projects.map(p => ({
-      id: p.id || "",
-      name: p.name || "",
-      url: p.url || "",
-    }));
+    const parsed = projects.map(p => new LinearProject(
+      p.id || "",
+      p.name || "",
+      p.url || "",
+    ));
 
     return new Ok(toList(parsed));
   } catch (error) {
@@ -81,11 +85,11 @@ export function parse_teams_json(data) {
       return new Error("Missing or invalid teams data");
     }
 
-    const parsed = teams.map(t => ({
-      id: t.id || "",
-      name: t.name || "",
-      key: t.key || "",
-    }));
+    const parsed = teams.map(t => new LinearTeam(
+      t.id || "",
+      t.name || "",
+      t.key || "",
+    ));
 
     return new Ok(toList(parsed));
   } catch (error) {

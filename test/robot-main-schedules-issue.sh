@@ -106,6 +106,14 @@ jq -e '.["issue:5:execution"].task_slug == "issue-5-scheduled-by-supervisor"' "$
 [ -f "$tmpdir/.grkr/logs/jobs/issue-5-execution.log" ]
 [ -f "$tmpdir/.grkr/locks/issue-5.lock" ]
 
+for _ in {1..20}; do
+  if grep -F -- '--issue 5' "$runner_log" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.1
+done
+
+grep -F -- '--issue 5' "$runner_log" >/dev/null
 grep -F 'fetch' "$git_log" >/dev/null
 grep -F 'checkout' "$git_log" >/dev/null
 grep -F 'reset' "$git_log" >/dev/null

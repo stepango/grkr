@@ -1,5 +1,6 @@
 import { closeSync, mkdirSync, openSync } from "fs";
 import { spawnSync } from "child_process";
+import { Ok, Error } from "../../gleam.mjs";
 
 export function get_env(name) {
   return process.env[name] || "";
@@ -19,19 +20,19 @@ const lockFds = new Map();
 export function acquire_lock(lockPath) {
   try {
     const fd = openSync(lockPath, "a");
-    const result = spawnSync("flock", ["-n", String(fd)], {
-      stdio: ["ignore", "ignore", "ignore"],
+    const result = spawnSync("flock", ["-n", "3"], {
+      stdio: ["ignore", "ignore", "ignore", fd],
     });
 
     if (result.status !== 0) {
       closeSync(fd);
-      return ["Error", undefined];
+      return new Error(undefined);
     }
 
     lockFds.set(lockPath, fd);
-    return ["Ok", undefined];
+    return new Ok(undefined);
   } catch (_error) {
-    return ["Error", undefined];
+    return new Error(undefined);
   }
 }
 

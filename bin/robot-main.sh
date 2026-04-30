@@ -324,7 +324,7 @@ phase_sync_main_impl() {
     return 0
   fi
 
-  GRKR_SYNC_MAIN_LOCK_HELD=1 "$SCRIPT_DIR/worker-sync-main.sh" || status=$?
+  "$SCRIPT_DIR/worker-sync-main.sh" || status=$?
 
   case "$status" in
     0)

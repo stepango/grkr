@@ -573,6 +573,19 @@ complete_issue_refusal() {
   printf '%s\n' "$refusal_comment_id"
 }
 
+run_decision_gate_gleam() {
+  local mode=$1
+  local output_file=$2
+  local project_root=${GRKR_GLEAM_PROJECT_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}
+
+  if [ -f "$project_root/gleam.toml" ] && command -v gleam >/dev/null 2>&1; then
+    (cd "$project_root" && gleam run -m grkr/decision_gate/main -- "$mode" "$output_file")
+    return
+  fi
+
+  return 127
+}
+
 run_implementation_decision_gate() {
   local issue=$1
   local progress_file=$2
@@ -582,7 +595,12 @@ run_implementation_decision_gate() {
   local decision
 
   run_codex_prompt "$prompt_file" "$output_file" "decide whether to implement the issue" replace "$worktree_dir"
-  decision=$(extract_decision_from_output "$output_file")
+  local gleam_decision_output
+  if gleam_decision_output=$(run_decision_gate_gleam parse-decision "$output_file"); then
+    decision=$(printf '%s\n' "$gleam_decision_output" | awk 'NF {print; exit}')
+  else
+    decision=$(extract_decision_from_output "$output_file")
+  fi
 
   case "$decision" in
     proceed|refuse)
@@ -590,8 +608,9 @@ run_implementation_decision_gate() {
       IMPLEMENTATION_DECISION=$decision
       ;;
     *)
-      echo "❌ Decision gate for issue #$issue returned an invalid result."
-      return 1
+      echo "❌ Decision gate for issue #$issue could not be normalized by Gleam. Defaulting to refusal."
+      update_task_progress_decision "$progress_file" "refuse"
+      IMPLEMENTATION_DECISION=refuse
       ;;
   esac
 }
@@ -599,38 +618,23 @@ run_implementation_decision_gate() {
 detect_implementation_refusal() {
   local output_file=$1
 
+  if run_decision_gate_gleam detect-refusal "$output_file"; then
+    return
+  fi
+
   emit_task_log_stream "$output_file" | awk '
-    BEGIN {
-      found_marker = 0
-      refusal_class = ""
-      in_reasoning = 0
-      reasoning = ""
-    }
+    BEGIN { found_marker = 0; refusal_class = ""; reasoning = "" }
     {
       line = $0
       gsub(/^[[:space:]]+|[[:space:]]+$/, "", line)
       lower = tolower(line)
-
-      if (lower == "grkr-refuse-implementation") {
-        found_marker = 1
-        next
-      }
-
+      if (lower == "grkr-refuse-implementation") { found_marker = 1; next }
       if (found_marker && refusal_class == "") {
-        if (line == "") {
-          next
-        }
-        if (line ~ /^(underspecified|too_large|missing_dependency|needs_design_decision|unsafe_autonomous_change|repo_not_ready|other)$/) {
-          refusal_class = line
-          in_reasoning = 1
-          next
-        }
+        if (line == "") { next }
+        if (line ~ /^(underspecified|too_large|missing_dependency|needs_design_decision|unsafe_autonomous_change|repo_not_ready|other)$/) { refusal_class = line; next }
       }
-
-      if (in_reasoning && line != "") {
-        if (reasoning != "") {
-          reasoning = reasoning "\n"
-        }
+      if (found_marker && refusal_class != "" && line != "") {
+        if (reasoning != "") { reasoning = reasoning "\n" }
         reasoning = reasoning line
       }
     }
@@ -638,11 +642,7 @@ detect_implementation_refusal() {
       if (found_marker && refusal_class != "") {
         print refusal_class
         print "---"
-        if (reasoning != "") {
-          print reasoning
-        } else {
-          print "Implementation discovered that the issue is not ready for safe autonomous completion."
-        }
+        if (reasoning != "") { print reasoning } else { print "Implementation discovered that the issue is not ready for safe autonomous completion." }
       }
     }
   '

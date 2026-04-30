@@ -2,7 +2,7 @@
 
 AI-powered CLI that reads a GitHub issue and uses Codex to implement the changes.
 
-Current implementation status: the checkpointed issue flow now runs research, plan, a decision gate, refusal handling, isolated implementation in a dedicated issue worktree, test, and completion. The supervisor now syncs main through a Gleam-backed worker, recovers stale jobs, selects the next project issue, and actually schedules issue execution in the background. PR conflict resolution is also implemented via Gleam with a shell wrapper interface. `@:robot:` comment handling and the remaining worker worktree flows are still planned follow-up work.
+Current implementation status: the checkpointed issue flow now runs research, plan, a Gleam-normalized decision gate, refusal handling, isolated implementation in a dedicated issue worktree, test, and completion. The supervisor now syncs main through a Gleam-backed worker, recovers stale jobs, selects the next project issue, and actually schedules issue execution in the background. PR conflict resolution is also implemented via Gleam with a shell wrapper interface. `@:robot:` comment handling and the remaining worker worktree flows are still planned follow-up work.
 
 ## Usage
 
@@ -81,7 +81,7 @@ These values are only enough to identify the OAuth app. Linear GraphQL calls sti
 6. The issue helper creates or reuses `.grkr/tasks/<issue-slug>/`, writes `research.md`, `plan.md`, and `progress.json`, and posts the research and plan checkpoints back to the issue
 7. If matching checkpoint comments already exist, the issue helper reuses those comments and resumes without reposting duplicate research or plan checkpoints
 8. The issue helper also creates or reuses `.grkr/worktrees/<issue-slug>/` so issue execution happens in a dedicated git worktree instead of the supervisor checkout
-9. After research and plan, a separate Codex decision gate runs in the issue worktree and implementation continues only when that gate returns `proceed`
+9. After research and plan, a separate Codex decision gate runs in the issue worktree; the first meaningful Codex line is normalized by Gleam and implementation continues only when that gate returns `proceed`
 10. When the decision is `refuse`, the issue helper writes `.grkr/tasks/<issue-slug>/refusal.md`, posts the refusal checkpoint, moves the project item back to `Backlog` when configured, marks `progress.json` as refused, skips test, and removes the issue worktree
 11. When the decision is `proceed`, the issue helper moves the configured project item to the configured in-progress status when it can resolve that project item; project status option matching is case-insensitive and whitespace-normalized
 12. Codex implementation output is anchored at `.grkr/tasks/<issue-slug>/implementation.log`; when the transcript grows too large, `grkr` keeps that file as a manifest and shards the full log into `.grkr/tasks/<issue-slug>/codex/implementation.log.parts/` so every tracked file stays within the 1000-line limit
@@ -106,9 +106,9 @@ These values are only enough to identify the OAuth app. Linear GraphQL calls sti
 - `grkr --issue <id>` automatically shrinks oversized Codex-generated PR bodies so `gh pr create` stays under GitHub's 65536-character body limit.
 - `grkr --issue <id>` links the issue once in the PR body via `Fixes #<id>` to avoid duplicate issue mentions.
 - `grkr --issue <id>` includes the per-file 1000-line rule in the Codex prompt and will trigger one immediate Codex refactor pass when staged changes still violate that limit.
-- `grkr --issue <id>` now runs issue execution in `.grkr/worktrees/<issue-slug>/`, uses a dedicated Codex decision gate before implementation, and only proceeds when that gate returns `proceed`.
+- `grkr --issue <id>` now runs issue execution in `.grkr/worktrees/<issue-slug>/`, uses a dedicated Codex decision gate before implementation, normalizes the gate result through Gleam, and only proceeds when that gate returns `proceed`.
 - `grkr --issue <id>` treats `refuse` as a valid terminal outcome: it writes `refusal.md`, posts a refusal checkpoint comment, moves the issue back to `Backlog` when configured, skips implementation and tests, and removes the issue worktree.
-- During implementation, if Codex reports an explicit `grkr-refuse-implementation` blocker (missing dependencies, unsafe changes, or other issue-quality problems), the workflow converts from implementation to refusal, preserves the implementation log as `.grkr/tasks/<issue-slug>/codex/implementation-before-refusal.log`, and posts the refusal checkpoint with the discovered reason class.
+- During implementation, if Codex reports an explicit `grkr-refuse-implementation` blocker (missing dependencies, unsafe changes, or other issue-quality problems), Gleam parses that marker and the workflow converts from implementation to refusal, preserves the implementation log as `.grkr/tasks/<issue-slug>/codex/implementation-before-refusal.log`, and posts the refusal checkpoint with the discovered reason class.
 - `grkr --issue <id>` stages only relevant non-`.grkr` files from the issue worktree and updates an existing branch PR when one is already open.
 - `grkr --project <id>` treats per-issue failures as recoverable so the long-running watcher does not exit after one bad issue.
 - `grkr --issue <id>` warns when the working directory is dirty, then continues so intentionally staged or unstaged local changes can be included.

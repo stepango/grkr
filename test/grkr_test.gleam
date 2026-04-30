@@ -10,6 +10,7 @@ import grkr/progress/linear_state_test
 import grkr/progress/main_test as progress_main_test
 import grkr/resolve_pr/codex_test
 import grkr/resolve_pr/types_test
+import grkr/decision_gate/decision_gate_test
 import grkr/sync_main/main_test
 
 pub fn main() {
@@ -26,4 +27,5 @@ pub fn main() {
   types_test.main()
   codex_test.main()
   main_test.main()
+  decision_gate_test.main()
 }

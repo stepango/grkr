@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
+repo_root=$(pwd)
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-robot-main-schedule.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
@@ -92,7 +93,7 @@ chmod +x "$tmpdir/worker-pick-issue.sh" "$tmpdir/grkr" "$tmpdir/bin/gh" "$tmpdir
 output_file="$tmpdir/output.log"
 (
   cd "$tmpdir"
-  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_MAX_TICKS=1 bash "$tmpdir/robot-main.sh" >"$output_file" 2>&1
+  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_GLEAM_PROJECT_ROOT="$repo_root" GRKR_MAX_TICKS=1 bash "$tmpdir/robot-main.sh" >"$output_file" 2>&1
 )
 
 sleep 0.1

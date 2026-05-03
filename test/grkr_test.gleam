@@ -3,6 +3,7 @@ import grkr/linear/e2e_test
 import grkr/linear/graphql_test
 import grkr/resolve_pr/codex_test
 import grkr/resolve_pr/types_test
+import grkr/sync_main/main_test
 
 pub fn main() {
   config_test.main()
@@ -10,4 +11,5 @@ pub fn main() {
   graphql_test.main()
   types_test.main()
   codex_test.main()
+  main_test.main()
 }

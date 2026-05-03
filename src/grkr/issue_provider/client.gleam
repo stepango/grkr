@@ -7,7 +7,9 @@ pub fn access_token_from_env() -> Result(String, types.ProviderError) {
   require_access_token(get_env("GRKR_LINEAR_ACCESS_TOKEN"))
 }
 
-pub fn require_access_token(token: String) -> Result(String, types.ProviderError) {
+pub fn require_access_token(
+  token: String,
+) -> Result(String, types.ProviderError) {
   case string.trim(token) {
     "" ->
       Error(types.QueryError(
@@ -22,9 +24,16 @@ pub fn run_assigned_issues_query(
   graphql_query: String,
 ) -> Result(String, types.ProviderError) {
   use token <- result_try(require_access_token(access_token))
-  case post_graphql(endpoint, token, graphql_query) {
+  case post_graphql(endpoint, authorization_header(token), graphql_query) {
     Ok(body) -> Ok(body)
     Error(message) -> Error(types.QueryError(redact(message, token)))
+  }
+}
+
+pub fn authorization_header(access_token: String) -> String {
+  case string.starts_with(access_token, "Bearer ") {
+    True -> access_token
+    False -> "Bearer " <> access_token
   }
 }
 

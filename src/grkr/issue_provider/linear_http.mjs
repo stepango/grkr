@@ -1,11 +1,11 @@
 import { execFileSync } from "child_process";
 import { Ok, Error } from "../../gleam.mjs";
 
-export function postGraphqlSync(endpoint, accessToken, query) {
+export function postGraphqlSync(endpoint, authorizationHeader, query) {
   const script = String.raw`
 const https = require("https");
 const endpoint = process.argv[1];
-const accessToken = process.env.GRKR_LINEAR_GRAPHQL_TOKEN || "";
+const authorizationHeader = process.env.GRKR_LINEAR_GRAPHQL_AUTHORIZATION || "";
 let payload = "";
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", chunk => { payload += chunk; });
@@ -19,7 +19,7 @@ process.stdin.on("end", () => {
     headers: {
       "Content-Type": "application/json",
       "Content-Length": Buffer.byteLength(body),
-      "Authorization": accessToken,
+      "Authorization": authorizationHeader,
       "User-Agent": "grkr-linear-provider"
     }
   }, response => {
@@ -48,7 +48,10 @@ process.stdin.on("end", () => {
     const output = execFileSync(process.execPath, ["-e", script, endpoint], {
       input: query,
       encoding: "utf8",
-      env: { ...process.env, GRKR_LINEAR_GRAPHQL_TOKEN: accessToken },
+      env: {
+        ...process.env,
+        GRKR_LINEAR_GRAPHQL_AUTHORIZATION: authorizationHeader,
+      },
       maxBuffer: 10 * 1024 * 1024,
       timeout: 30_000,
       stdio: ["pipe", "pipe", "pipe"],
@@ -57,6 +60,6 @@ process.stdin.on("end", () => {
   } catch (err) {
     const stderr = err?.stderr ? String(err.stderr) : "";
     const message = stderr.trim() || err.message || "Linear GraphQL request failed";
-    return new Error(message.replaceAll(accessToken, "[REDACTED]"));
+    return new Error(message.replaceAll(authorizationHeader, "[REDACTED]"));
   }
 }

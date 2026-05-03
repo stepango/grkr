@@ -577,14 +577,18 @@ pub fn discover_reads_linear_credentials_file_test() {
 
 pub fn linear_client_requires_oauth_access_token_test() {
   client.require_access_token("")
-  |> should.equal(Error(types.QueryError(
-    "Linear live issue selection requires an OAuth-derived access token in GRKR_LINEAR_ACCESS_TOKEN; OAuth app client credentials are not API tokens",
-  )))
+  |> should.equal(
+    Error(types.QueryError(
+      "Linear live issue selection requires an OAuth-derived access token in GRKR_LINEAR_ACCESS_TOKEN; OAuth app client credentials are not API tokens",
+    )),
+  )
 
   client.require_access_token("  ")
-  |> should.equal(Error(types.QueryError(
-    "Linear live issue selection requires an OAuth-derived access token in GRKR_LINEAR_ACCESS_TOKEN; OAuth app client credentials are not API tokens",
-  )))
+  |> should.equal(
+    Error(types.QueryError(
+      "Linear live issue selection requires an OAuth-derived access token in GRKR_LINEAR_ACCESS_TOKEN; OAuth app client credentials are not API tokens",
+    )),
+  )
 
   client.require_access_token("lin_oauth_access_token")
   |> should.equal(Ok("lin_oauth_access_token"))
@@ -595,8 +599,17 @@ pub fn linear_client_redacts_token_from_errors_test() {
   |> should.equal("request failed for [REDACTED]")
 }
 
+pub fn linear_client_uses_oauth_bearer_authorization_test() {
+  client.authorization_header("lin_oauth_access_token")
+  |> should.equal("Bearer lin_oauth_access_token")
+
+  client.authorization_header("Bearer lin_oauth_access_token")
+  |> should.equal("Bearer lin_oauth_access_token")
+}
+
 pub fn linear_live_query_includes_filter_test() {
-  let filter = types.make_filter("Todo", "user-1", Ok("project-1"), Ok("team-1"))
+  let filter =
+    types.make_filter("Todo", "user-1", Ok("project-1"), Ok("team-1"))
   let built = query.build_assigned_issues_query(100, Error(Nil), Ok(filter))
 
   string.contains(built, "assignedIssues(first: 100")

@@ -151,7 +151,7 @@ LINEAR_TODO_STATE="Todo"
 Linear credential setup:
 1. Create or install a Linear OAuth app for grkr.
 2. Store the OAuth app credentials in `~/.linear/secret.txt` as `client_id=...` and `client_secret=...`.
-3. Do not use those app credentials as a personal API key. Live Linear GraphQL access requires an OAuth installation/token exchange that produces a bearer/access token; export that derived token as `GRKR_LINEAR_ACCESS_TOKEN` only for the current run or store it in approved local secret storage once that flow is available. grkr never reads `~/.linear/secret.txt` as an API token and redacts token values from client errors.
+3. Do not use those app credentials as a personal API key. Live Linear GraphQL access requires an OAuth installation/token exchange that produces an access token; export that derived token as `GRKR_LINEAR_ACCESS_TOKEN` only for the current run or store it in approved local secret storage once that flow is available. grkr sends it with Linear's required bearer authorization header, never reads `~/.linear/secret.txt` as an API token, and redacts token values from client errors.
 
 For fixture-backed selection, set `LINEAR_FIXTURE_PATH` to a JSON file containing Linear API response data. This slice returns shell-safe Linear issue metadata (`ISSUE_IDENTIFIER`, title, URL, state, priority, update time, job key, and task slug), but the supervisor only schedules executable work when a provider returns the GitHub `ISSUE_NUMBER` required by `grkr --issue`. Full Linear issue execution is still pending.
 

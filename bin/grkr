@@ -71,6 +71,9 @@ case "$MODE" in
     [ -n "${2:-}" ] || usage
     ID="$2"
     ;;
+  --help|-h|help)
+    usage 0
+    ;;
   *)
     usage
     ;;

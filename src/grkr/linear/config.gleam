@@ -1,4 +1,5 @@
 import grkr/linear/types
+import grkr/linear/oauth
 import gleam/string
 import gleam/list
 import gleam/result
@@ -76,9 +77,18 @@ pub fn load_e2e_config() -> Result(types.E2EConfig, String) {
 }
 
 fn load_access_token() -> Result(types.LinearToken, Nil) {
-  case get_env_var("GRKR_LINEAR_ACCESS_TOKEN") {
-    "" -> Error(Nil)
-    token -> Ok(types.LinearToken(token))
+  // First, try to load from OAuth token store
+  let token_path = oauth.get_token_store_path()
+
+  case oauth.load_token(token_path) {
+    Ok(token) -> Ok(types.LinearToken(token))
+    Error(_) -> {
+      // Fall back to environment variable
+      case get_env_var("GRKR_LINEAR_ACCESS_TOKEN") {
+        "" -> Error(Nil)
+        token -> Ok(types.LinearToken(token))
+      }
+    }
   }
 }
 

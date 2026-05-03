@@ -42,11 +42,12 @@ else
   exec >>"$LOGFILE" 2>&1
 fi
 usage() {
+  local status=${1:-1}
   echo "Usage: grkr init <project-id> | grkr --issue <number> | grkr --project <id>"
   echo "Example: grkr init 42"
   echo "Example: grkr --issue 1"
   echo "Example: grkr --project 42"
-  exit 1
+  exit "$status"
 }
 
 MAX_FILE_LINES=1000
@@ -64,6 +65,9 @@ case "$MODE" in
   --issue|--project)
     [ -n "${2:-}" ] || usage
     ID="$2"
+    ;;
+  --help|-h|help)
+    usage 0
     ;;
   *)
     usage

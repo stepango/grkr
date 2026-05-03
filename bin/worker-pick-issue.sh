@@ -10,6 +10,12 @@ if [ -f "$GRKR_CONFIG_FILE" ]; then
   . "$GRKR_CONFIG_FILE"
 fi
 
+# Check if using Linear issue provider
+ISSUE_PROVIDER=${GRKR_ISSUE_PROVIDER:-github}
+if [ "$ISSUE_PROVIDER" = "linear" ]; then
+  exec gleam run -m grkr/issue_provider/main
+fi
+
 REPO=${REPO:-}
 PROJECT_OWNER=${PROJECT_OWNER:-}
 PROJECT_NUMBER=${PROJECT_NUMBER:-}

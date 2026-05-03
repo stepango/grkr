@@ -117,3 +117,27 @@ grep -F -- '--issue 5' "$runner_log" >/dev/null
 grep -F 'fetch' "$git_log" >/dev/null
 grep -F 'checkout' "$git_log" >/dev/null
 grep -F 'reset' "$git_log" >/dev/null
+
+cat > "$tmpdir/worker-pick-issue.sh" <<'EOF'
+#!/bin/bash
+cat <<'OUT'
+SELECTED=1
+ISSUE_IDENTIFIER='ENG-123'
+JOB_KEY='linear:ENG-123:execution'
+TASK_SLUG='eng-123'
+ISSUE_TITLE='Linear issue'
+OUT
+EOF
+
+printf '{}\n' > "$tmpdir/.grkr/state/active_jobs.json"
+runner_lines_before=$(wc -l < "$runner_log" | tr -d ' ')
+
+(
+  cd "$tmpdir"
+  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_MAX_TICKS=1 bash "$tmpdir/robot-main.sh" >"$output_file" 2>&1
+)
+
+runner_lines_after=$(wc -l < "$runner_log" | tr -d ' ')
+[ "$runner_lines_after" = "$runner_lines_before" ]
+grep -F 'selected_issue_missing_number=true' "$tmpdir/.grkr/logs/loop.log" >/dev/null
+jq -e 'length == 0' "$tmpdir/.grkr/state/active_jobs.json" >/dev/null

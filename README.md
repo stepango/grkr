@@ -103,6 +103,51 @@ These values are only enough to identify the OAuth app. Linear GraphQL calls sti
 - `grkr init <id>` will create `.grkr/config.sh` for the current `origin` remote and project id you pass in.
 - `.grkr/tasks/` is local runtime state and ignored by git; `.grkr/config.sh` and `.grkr/config.sh.example` stay tracked.
 
+## Issue Providers
+
+grkr supports multiple issue providers for selecting work:
+
+### GitHub Projects (default)
+
+The default provider uses GitHub Projects to select issues. Configure via `.grkr/config.sh`:
+
+```bash
+PROJECT_OWNER="owner-or-org"
+PROJECT_NUMBER="12"
+STATUS_FIELD_NAME="Status"
+TODO_VALUE="Todo"
+PRIORITY_FIELD_NAME="Priority"
+PRIORITY_ORDER="P0,P1,P2,P3"
+```
+
+### Linear (experimental)
+
+Set `GRKR_ISSUE_PROVIDER=linear` in your environment or `.grkr/config.sh` to try Linear fixture-backed issue selection.
+
+Configuration for Linear:
+
+```bash
+GRKR_ISSUE_PROVIDER="linear"
+LINEAR_ASSIGNEE_ID="user-or-bot-id"
+LINEAR_PROJECT_ID="optional-project-id"
+LINEAR_TEAM_ID="optional-team-id"
+LINEAR_TODO_STATE="Todo"
+```
+
+Linear credential setup:
+1. Create or install a Linear OAuth app for grkr.
+2. Store the OAuth app credentials in `~/.linear/secret.txt` as `client_id=...` and `client_secret=...`.
+3. Do not use those app credentials as a personal API key. Live Linear GraphQL access requires the OAuth installation/token exchange flow; this provider slice refuses live queries until that token flow is configured.
+
+For fixture-backed selection, set `LINEAR_FIXTURE_PATH` to a JSON file containing Linear API response data. This slice returns shell-safe Linear issue metadata (`ISSUE_IDENTIFIER`, title, URL, state, priority, update time, job key, and task slug), but the supervisor only schedules executable work when a provider returns the GitHub `ISSUE_NUMBER` required by `grkr --issue`. Full Linear issue execution is still pending.
+
+The Linear provider supports:
+- Team and project-scoped issue queries
+- Priority ordering (urgent, high, medium, low, none)
+- State filtering (e.g., Todo, In Progress)
+- Assignee filtering
+- Fixture-backed unit tests
+
 ## Linear E2E Tests
 
 The project includes an opt-in Linear live e2e harness with its control flow implemented in Gleam under `src/grkr/linear/` and a thin shell wrapper at `test/e2e-linear-live.sh`.
@@ -153,7 +198,7 @@ When `GRKR_LINEAR_E2E` is not set or equals `0`:
 - GitHub CLI (`gh`) installed and authenticated (`gh auth login`)
 - Codex CLI available in PATH
 - `jq` for JSON parsing
-- Gleam compiler (for PR conflict resolution and Linear E2E)
+- Gleam compiler (for PR conflict resolution, Linear issue provider, and Linear E2E)
 - Node.js (for global install and Gleam JavaScript target)
 - Git repository with an `origin` remote configured
-- Linear OAuth app credentials (only for live E2E tests, optional)
+- Linear OAuth app credentials in `~/.linear/secret.txt` or `GRKR_LINEAR_SECRET_PATH` (optional, for Linear issue provider fixture/live-token setup and live E2E tests)

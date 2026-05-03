@@ -1,6 +1,7 @@
-import gleam/list
-import gleam/string
 import gleam/javascript/promise.{type Promise}
+import gleam/list
+import gleam/result
+import gleam/string
 
 /// Default path for storing OAuth tokens in ~/.linear/
 const default_token_path = "~/.linear/token.txt"
@@ -41,6 +42,11 @@ pub type TokenExchangeResponse {
     refresh_token: Result(String, Nil),
     scope: Result(String, Nil),
   )
+}
+
+/// Raw host HTTP response for token exchange.
+pub type TokenExchangeHttpResponse {
+  TokenExchangeHttpResponse(status_code: Int, body: String)
 }
 
 /// OAuth authorization parameters
@@ -97,12 +103,24 @@ pub fn exchange_code_for_token(
   code: String,
   redirect_uri: String,
 ) -> Promise(Result(TokenExchangeResponse, TokenExchangeError)) {
-  execute_token_exchange(client_id, client_secret, code, redirect_uri)
+  execute_token_exchange_request(client_id, client_secret, code, redirect_uri)
+  |> promise.map(fn(response) {
+    case response {
+      Error(message) -> Error(NetworkError(message))
+      Ok(response) -> parse_token_exchange_http_response(response)
+    }
+  })
 }
 
 /// Store OAuth token in local token store
-pub fn store_token(token: String, path: String) -> Result(Nil, TokenStoreError) {
-  write_token_file(path, token)
+pub fn store_token(
+  token: String,
+  path: String,
+) -> Result(Nil, TokenStoreError) {
+  case string.trim(token) {
+    "" -> Error(TokenStoreInvalid)
+    trimmed_token -> write_token_file(path, trimmed_token <> "\n")
+  }
 }
 
 /// Store OAuth token in default location
@@ -112,7 +130,14 @@ pub fn store_token_default(token: String) -> Result(Nil, TokenStoreError) {
 
 /// Load OAuth token from local token store
 pub fn load_token(path: String) -> Result(String, TokenStoreError) {
-  read_token_file(path)
+  case read_token_file(path) {
+    Error(err) -> Error(err)
+    Ok(token) ->
+      case string.trim(token) {
+        "" -> Error(TokenStoreInvalid)
+        trimmed_token -> Ok(trimmed_token)
+      }
+  }
 }
 
 /// Load OAuth token from default location
@@ -146,9 +171,7 @@ pub fn redact_token(token: String) -> String {
 }
 
 /// Redact token exchange response for safe logging
-pub fn redact_token_response(
-  response: TokenExchangeResponse,
-) -> String {
+pub fn redact_token_response(response: TokenExchangeResponse) -> String {
   "TokenExchangeResponse(\n"
   <> "  access_token: "
   <> redact_token(response.access_token)
@@ -171,16 +194,19 @@ pub fn redact_token_response(
 /// Format token exchange error for safe logging
 pub fn format_token_exchange_error(err: TokenExchangeError) -> String {
   case err {
-    InvalidRequest -> "InvalidRequest: The request is missing a required parameter"
+    InvalidRequest ->
+      "InvalidRequest: The request is missing a required parameter"
     InvalidClient -> "InvalidClient: Client authentication failed"
     InvalidGrant -> "InvalidGrant: The authorization code is invalid or expired"
     UnauthorizedClient -> "UnauthorizedClient: The client is not authorized"
-    UnsupportedGrantType -> "UnsupportedGrantType: The grant type is not supported"
+    UnsupportedGrantType ->
+      "UnsupportedGrantType: The grant type is not supported"
     AccessDenied -> "AccessDenied: The user denied the request"
     InvalidScope -> "InvalidScope: The requested scope is invalid"
     ServerError(msg) -> "ServerError: " <> msg
     NetworkError(msg) -> "NetworkError: " <> msg
-    InvalidResponse -> "InvalidResponse: The server response could not be parsed"
+    InvalidResponse ->
+      "InvalidResponse: The server response could not be parsed"
   }
 }
 
@@ -198,12 +224,57 @@ pub fn token_store_exists_default() -> Bool {
 pub fn parse_token_exchange_response(
   json: String,
 ) -> Result(TokenExchangeResponse, TokenExchangeError) {
-  parse_token_response_json(json)
+  use access_token <- result.try(
+    json_string_field(json, "access_token")
+    |> result.replace_error(InvalidResponse),
+  )
+
+  let token_type =
+    json_string_field(json, "token_type")
+    |> result.unwrap("bearer")
+
+  Ok(TokenExchangeResponse(
+    access_token: access_token,
+    token_type: token_type,
+    expires_in: json_int_field(json, "expires_in"),
+    refresh_token: json_string_field(json, "refresh_token"),
+    scope: json_string_field(json, "scope"),
+  ))
 }
 
 // Internal helper functions
 
-fn build_url_with_params(base: String, params: List(#(String, String))) -> String {
+fn parse_token_exchange_http_response(
+  response: TokenExchangeHttpResponse,
+) -> Result(TokenExchangeResponse, TokenExchangeError) {
+  case response.status_code {
+    200 -> parse_token_exchange_response(response.body)
+    _ -> Error(map_oauth_error(response.status_code, response.body))
+  }
+}
+
+fn map_oauth_error(status_code: Int, body: String) -> TokenExchangeError {
+  let error_code =
+    json_string_field(body, "error")
+    |> result.unwrap("")
+
+  case error_code {
+    "invalid_request" -> InvalidRequest
+    "invalid_client" -> InvalidClient
+    "invalid_grant" -> InvalidGrant
+    "unauthorized_client" -> UnauthorizedClient
+    "unsupported_grant_type" -> UnsupportedGrantType
+    "access_denied" -> AccessDenied
+    "invalid_scope" -> InvalidScope
+    "" -> ServerError("HTTP " <> int_to_string(status_code))
+    other -> ServerError(other)
+  }
+}
+
+fn build_url_with_params(
+  base: String,
+  params: List(#(String, String)),
+) -> String {
   let param_str =
     params
     |> list.map(fn(pair) {
@@ -253,18 +324,15 @@ fn int_to_string(i: Int) -> String {
 // External FFI functions
 
 @external(javascript, "../linear/oauth_ffi.mjs", "execute_token_exchange")
-fn execute_token_exchange(
+fn execute_token_exchange_request(
   client_id: String,
   client_secret: String,
   code: String,
   redirect_uri: String,
-) -> Promise(Result(TokenExchangeResponse, TokenExchangeError))
+) -> Promise(Result(TokenExchangeHttpResponse, String))
 
 @external(javascript, "../linear/oauth_ffi.mjs", "write_token_file")
-fn write_token_file(
-  path: String,
-  token: String,
-) -> Result(Nil, TokenStoreError)
+fn write_token_file(path: String, token: String) -> Result(Nil, TokenStoreError)
 
 @external(javascript, "../linear/oauth_ffi.mjs", "read_token_file")
 fn read_token_file(path: String) -> Result(String, TokenStoreError)
@@ -276,9 +344,10 @@ fn get_env_var(name: String) -> String
 fn file_exists(path: String) -> Bool
 
 @external(javascript, "../linear/oauth_ffi.mjs", "parse_token_response_json")
-fn parse_token_response_json(
-  json: String,
-) -> Result(TokenExchangeResponse, TokenExchangeError)
+fn json_string_field(json: String, field: String) -> Result(String, Nil)
+
+@external(javascript, "../linear/oauth_ffi.mjs", "json_int_field")
+fn json_int_field(json: String, field: String) -> Result(Int, Nil)
 
 @external(javascript, "../linear/oauth_ffi.mjs", "int_to_string")
 fn builtin_int_to_string(i: Int) -> String

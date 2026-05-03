@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
+repo_root=$(pwd)
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-robot-main-failure.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
@@ -69,7 +70,7 @@ chmod +x "$tmpdir/bin/gh" "$tmpdir/bin/codex" "$tmpdir/bin/git" "$tmpdir/bin/tim
 output_file="$tmpdir/output.log"
 (
   cd "$tmpdir"
-  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_MAX_TICKS=1 bash "$tmpdir/robot-main.sh" >"$output_file" 2>&1
+  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_GLEAM_PROJECT_ROOT="$repo_root" GRKR_MAX_TICKS=1 bash "$tmpdir/robot-main.sh" >"$output_file" 2>&1
 )
 
 grep -F 'phase=sync_main' "$tmpdir/.grkr/logs/loop.log" >/dev/null

@@ -120,24 +120,34 @@ fn read_linear_credentials_file(path: String) -> CredentialResult(String) {
   read_file_ffi(path)
 }
 
-/// Find a value in format "key=value" from lines
+/// Find a value in format "key=value" or "key: value" from lines
 fn find_line_value(
   lines: List(String),
   key: String,
   default: String,
 ) -> String {
   lines
-  |> list.find(fn(line) {
-    string.starts_with(line, key <> "=") || string.starts_with(line, key <> " ")
-  })
-  |> result.map(fn(line) {
-    let parts = string.split(line, "=")
-    case parts {
-      [_, value] -> string.trim(value)
-      _ -> default
-    }
-  })
+  |> list.find_map(fn(line) { parse_key_value_line(line, key) })
   |> result.unwrap(default)
+}
+
+fn parse_key_value_line(line: String, key: String) -> Result(String, Nil) {
+  case string.starts_with(line, key <> "=") {
+    True ->
+      line
+      |> string.drop_start(string.length(key) + 1)
+      |> string.trim
+      |> Ok
+    False ->
+      case string.starts_with(line, key <> ":") {
+        True ->
+          line
+          |> string.drop_start(string.length(key) + 1)
+          |> string.trim
+          |> Ok
+        False -> Error(Nil)
+      }
+  }
 }
 
 /// Get GitHub token from environment (gh CLI or GITHUB_TOKEN)

@@ -542,6 +542,17 @@ pub fn parse_linear_oauth_app_credentials_test() {
   |> should.equal(True)
 }
 
+pub fn parse_linear_oauth_app_credentials_colon_test() {
+  let content = "client_id: linear_client_123\nclient_secret: linear_secret_456"
+
+  case credential.parse_linear_credentials(content) {
+    Ok(types.LinearOAuthApp("linear_client_123", "linear_secret_456", None)) ->
+      True
+    _ -> False
+  }
+  |> should.equal(True)
+}
+
 pub fn parse_linear_personal_token_test() {
   credential.parse_linear_credentials("lin_api_test_token")
   |> should.equal(Ok(types.LinearPersonalToken(token: "lin_api_test_token")))

@@ -26,7 +26,7 @@ pub fn run_e2e_tests() -> Promise(types.E2ETestResult) {
             Error(Nil) -> {
               io.println("No Linear access token available.")
               io.println(
-                "OAuth app credentials are present; complete OAuth install/token exchange and set GRKR_LINEAR_ACCESS_TOKEN for live e2e.",
+                "OAuth app credentials are present; complete OAuth install/token exchange and configure GRKR_LINEAR_TOKEN_PATH, ~/.linear/token.txt, or GRKR_LINEAR_ACCESS_TOKEN for live e2e.",
               )
               promise.resolve(types.E2ETestBlocked(
                 "No Linear access token available - OAuth app credentials require installation/token exchange",

@@ -18,6 +18,6 @@ cd "$PROJECT_ROOT"
 
 echo "Running opt-in Linear live e2e via Gleam..."
 echo "Credentials are loaded only from GRKR_LINEAR_SECRET_PATH or ~/.linear/secret.txt and are never printed."
-echo "A derived OAuth/access token must be supplied via GRKR_LINEAR_ACCESS_TOKEN after completing the Linear app install/token exchange."
+echo "A derived OAuth/access token must be supplied via GRKR_LINEAR_TOKEN_PATH, ~/.linear/token.txt, or GRKR_LINEAR_ACCESS_TOKEN after completing the Linear app install/token exchange."
 
 gleam run -m grkr/linear/e2e_main

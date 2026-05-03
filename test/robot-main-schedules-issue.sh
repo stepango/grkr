@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
+repo_root=$(pwd)
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-robot-main-schedule.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
@@ -92,7 +93,7 @@ chmod +x "$tmpdir/worker-pick-issue.sh" "$tmpdir/grkr" "$tmpdir/bin/gh" "$tmpdir
 output_file="$tmpdir/output.log"
 (
   cd "$tmpdir"
-  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_MAX_TICKS=1 bash "$tmpdir/robot-main.sh" >"$output_file" 2>&1
+  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_GLEAM_PROJECT_ROOT="$repo_root" GRKR_MAX_TICKS=1 bash "$tmpdir/robot-main.sh" >"$output_file" 2>&1
 )
 
 sleep 0.1
@@ -105,6 +106,14 @@ jq -e '.["issue:5:execution"].task_slug == "issue-5-scheduled-by-supervisor"' "$
 [ -f "$tmpdir/.grkr/logs/jobs/issue-5-execution.log" ]
 [ -f "$tmpdir/.grkr/locks/issue-5.lock" ]
 
+for _ in {1..20}; do
+  if grep -F -- '--issue 5' "$runner_log" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.1
+done
+
+grep -F -- '--issue 5' "$runner_log" >/dev/null
 grep -F 'fetch' "$git_log" >/dev/null
 grep -F 'checkout' "$git_log" >/dev/null
 grep -F 'reset' "$git_log" >/dev/null

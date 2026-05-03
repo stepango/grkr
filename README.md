@@ -2,7 +2,7 @@
 
 AI-powered CLI that reads a GitHub issue and uses Codex to implement the changes.
 
-Current implementation status: the checkpointed issue flow now runs research, plan, a decision gate, refusal handling, isolated implementation in a dedicated issue worktree, test, and completion. The supervisor now syncs main, recovers stale jobs, selects the next project issue, and actually schedules issue execution in the background. PR conflict resolution is now implemented via Gleam with a shell wrapper interface. `@:robot:` comment handling and the remaining worker worktree flows are still planned follow-up work.
+Current implementation status: the checkpointed issue flow now runs research, plan, a decision gate, refusal handling, isolated implementation in a dedicated issue worktree, test, and completion. The supervisor now syncs main through a Gleam-backed worker, recovers stale jobs, selects the next project issue, and actually schedules issue execution in the background. PR conflict resolution is also implemented via Gleam with a shell wrapper interface. `@:robot:` comment handling and the remaining worker worktree flows are still planned follow-up work.
 
 ## Usage
 
@@ -40,10 +40,23 @@ The `worker-resolve-pr.sh` script implements automated PR conflict resolution us
 
 The implementation uses Gleam for the core logic with a thin shell wrapper that preserves shell conventions and integrates with the existing supervisor infrastructure.
 
+## Issue provider auth foundation
+
+The v2 migration now includes a Gleam-owned issue-provider configuration foundation under `src/grkr/issue_provider/`. GitHub remains the default provider, while Linear can be configured alongside it for upcoming provider/query slices.
+
+Linear credentials are treated as OAuth app credentials, not as a direct GraphQL token. Credential discovery reads `~/.linear/secret.txt` by default; for local automation, place the two app credential values there or point `LINEAR_CREDENTIALS_PATH` at an equivalent file. The supported OAuth app file shape is:
+
+```text
+client_id=<linear OAuth client id>
+client_secret=<linear OAuth client secret>
+```
+
+These values are only enough to identify the OAuth app. Linear GraphQL calls still require a later OAuth installation/token exchange that produces an access token; until that exists, the Gleam validator returns a redacted, actionable `OAuthAppCredentialsWithoutToken` error instead of pretending the app credentials can query Linear directly. A single-line `token=...` or token-only file shape is parsed for future installed-token support, but OAuth app credentials are the expected local secret shape for the current Linear setup.
+
 ## How it works
 
 1. `robot-main.sh` creates the `.grkr` runtime layout, validates prerequisites, and runs the ordered supervisor phases on the configured interval
-2. The first supervisor phase delegates to `worker-sync-main.sh`, which takes `.grkr/locks/main.lock`, fetches `origin/$MAIN_BRANCH` with pruning, checks out the configured main branch, and hard-resets the supervisor checkout to `origin/$MAIN_BRANCH`
+2. The first supervisor phase delegates to `worker-sync-main.sh`, a thin shell wrapper around `grkr/sync_main/main`, which takes `.grkr/locks/main.lock`, fetches `origin/$MAIN_BRANCH` with pruning, checks out the configured main branch, and hard-resets the supervisor checkout to `origin/$MAIN_BRANCH`
 3. The supervisor writes structured loop logs to `.grkr/logs/main.log` and `.grkr/logs/loop.log`, keeps per-job logs under `.grkr/logs/jobs/`, recovers stale jobs from `.grkr/state/active_jobs.json`, and keeps later phases running when an earlier phase fails
 4. Phase 4 delegates to `worker-pick-issue.sh`, which reads the configured GitHub Project live, filters Todo issues assigned to the authenticated bot in the configured repo, excludes active issue jobs, orders candidates by priority and age, and emits the stable `issue:<n>:execution` job key plus task slug for the top match
 5. `grkr --issue <n>` remains the focused single-issue helper that fetches issue details using `gh issue view`
@@ -65,7 +78,7 @@ The implementation uses Gleam for the core logic with a thin shell wrapper that 
 - `npm install -g .` installs the local `bin/grkr` launcher into your PATH.
 - The installed `grkr` launcher resolves its real script path before loading helper files, so symlinked installs such as npm's global bin layout do not need `grkr-templates.sh` copied into the top-level bin directory.
 - `robot-main.sh` uses `MAIN_BRANCH` and `LOOP_INTERVAL_SECS` from `.grkr/config.sh`; `grkr init <id>` now writes both defaults into the generated config.
-- `worker-sync-main.sh` is the phase-1 supervisor worker; it always returns the main checkout to the configured `MAIN_BRANCH` before later phases run.
+- `worker-sync-main.sh` is the phase-1 supervisor worker; it delegates production sync logic to Gleam and always returns the main checkout to the configured `MAIN_BRANCH` before later phases run.
 - `worker-pick-issue.sh` is the phase-4 selector; it queries the live project through GitHub GraphQL, emits shell-safe key/value output for the next Todo issue candidate, and still tolerates the flat `gh project item-list` JSON shape as a fallback.
 - `worker-refuse-issue.sh` handles the refusal flow for issues that should not be implemented yet; it generates `refusal.md` with class and reasoning, posts a refusal checkpoint comment exactly once without duplication on resume, moves the project item from `Todo` to `Backlog` when `ENABLE_PROJECT_STATUS_UPDATES` and `REFUSAL_REQUIRES_BACKLOG_MOVE` allow it, marks the workflow as refused, and treats refusal as a valid terminal state.
 - `grkr init <id>` also writes `IN_PROGRESS_VALUE="In Progress"` so issue execution can move a project item out of Todo before branching; status option lookup tolerates casing differences such as `In progress`.
@@ -135,12 +148,57 @@ The Linear provider supports:
 - Assignee filtering
 - Fixture-backed unit tests
 
+## Linear E2E Tests
+
+The project includes an opt-in Linear live e2e harness with its control flow implemented in Gleam under `src/grkr/linear/` and a thin shell wrapper at `test/e2e-linear-live.sh`.
+
+### Features
+
+- **OAuth credential parsing**: Reads Linear OAuth app credentials from `~/.linear/secret.txt` or `GRKR_LINEAR_SECRET_PATH`.
+- **Credential redaction**: Never prints OAuth credentials or derived tokens in logs or test output.
+- **GraphQL operation construction**: Builds viewer/project/team queries for the read-only live e2e flow, with mutation builders kept behind the safe-query guard.
+- **Opt-in testing**: Live tests are gated on `GRKR_LINEAR_E2E=1` and are not part of normal `npm test`, so the default suite never mutates Linear.
+- **Clear blocker handling**: If only OAuth app credentials are available, the harness stops with an explicit access-token/OAuth-install blocker instead of treating app credentials as API tokens.
+
+### Usage
+
+```bash
+# Run live Linear E2E tests (opt-in)
+GRKR_LINEAR_E2E=1 bash test/e2e-linear-live.sh
+
+# Run unit tests only (no Linear access required)
+gleam test
+```
+
+### Linear OAuth Setup
+
+Live tests require Linear OAuth app credentials in `~/.linear/secret.txt`:
+
+```text
+client_id: your_oauth_client_id
+client_secret: your_oauth_client_secret
+```
+
+These are OAuth app credentials, not a personal API key. Complete the Linear app install/OAuth token exchange outside the repository, store the derived access token only in approved local secret storage, and expose it to the harness as `GRKR_LINEAR_ACCESS_TOKEN` for the current run. Do not commit the token or put it in tracked config.
+
+### E2E Test Behavior
+
+When `GRKR_LINEAR_E2E=1` is set:
+- The wrapper delegates to `gleam run -m grkr/linear/e2e_main`.
+- The Gleam harness loads OAuth app credentials from `~/.linear/secret.txt` or `GRKR_LINEAR_SECRET_PATH`.
+- If `GRKR_LINEAR_ACCESS_TOKEN` is missing, the harness exits with status 2 and reports the OAuth/access-token blocker without printing credential values.
+- If a derived token is provided, the harness performs read-only live Linear checks through the Gleam Linear client path.
+
+When `GRKR_LINEAR_E2E` is not set or equals `0`:
+- E2E tests are skipped entirely.
+- Normal `npm test` runs without touching Linear.
+
 ## Requirements
 
 - GitHub CLI (`gh`) installed and authenticated (`gh auth login`)
 - Codex CLI available in PATH
 - `jq` for JSON parsing
-- Gleam compiler (for PR conflict resolution and Linear issue provider)
+- Gleam compiler (for PR conflict resolution, Linear issue provider, and Linear E2E)
 - Node.js (for global install and Gleam JavaScript target)
 - Git repository with an `origin` remote configured
-- Linear OAuth app credentials in `~/.linear/secret.txt` (optional, for Linear issue provider fixture/live-token setup)
+- Linear OAuth app credentials in `~/.linear/secret.txt` or `GRKR_LINEAR_SECRET_PATH` (optional, for Linear issue provider fixture/live-token setup and live E2E tests)

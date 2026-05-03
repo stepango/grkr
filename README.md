@@ -170,7 +170,7 @@ The project includes an opt-in Linear live e2e harness with its control flow imp
 
 - **OAuth credential parsing**: Reads Linear OAuth app credentials from `~/.linear/secret.txt` or `GRKR_LINEAR_SECRET_PATH`.
 - **Credential redaction**: Never prints OAuth credentials or derived tokens in logs or test output.
-- **GraphQL operation construction**: Builds viewer/project/team queries for the read-only live e2e flow, with mutation builders kept behind the safe-query guard.
+- **GraphQL operation construction**: Builds viewer/project/team queries and mutation-backed temporary issue/comment/archive operations for the opt-in live e2e flow.
 - **Opt-in testing**: Live tests are gated on `GRKR_LINEAR_E2E=1` and are not part of normal `npm test`, so the default suite never mutates Linear.
 - **Clear blocker handling**: If only OAuth app credentials are available, the harness stops with an explicit access-token/OAuth-install blocker instead of treating app credentials as API tokens.
 
@@ -201,7 +201,7 @@ When `GRKR_LINEAR_E2E=1` is set:
 - The wrapper delegates to `gleam run -m grkr/linear/e2e_main`.
 - The Gleam harness loads OAuth app credentials from `~/.linear/secret.txt` or `GRKR_LINEAR_SECRET_PATH`.
 - If `GRKR_LINEAR_ACCESS_TOKEN` is missing, the harness exits with status 2 and reports the OAuth/access-token blocker without printing credential values.
-- If a derived token is provided, the harness performs read-only live Linear checks through the Gleam Linear client path.
+- If a derived token is provided, the harness performs live Linear checks through the Gleam Linear client path: it reads viewer/projects/teams, creates a clearly named temporary `grkr Linear live e2e temporary issue` in the first discovered team, reads that issue back, adds a `grkr:checkpoint:linear-live-e2e` checkpoint comment, and archives the temporary issue for cleanup. Output may include the temporary Linear issue URL and comment id, but never credentials or tokens.
 
 When `GRKR_LINEAR_E2E` is not set or equals `0`:
 - E2E tests are skipped entirely.

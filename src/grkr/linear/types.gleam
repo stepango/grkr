@@ -2,10 +2,7 @@ import gleam/dict.{type Dict}
 import gleam/dynamic.{type Dynamic}
 
 pub type OAuthCredentials {
-  OAuthCredentials(
-    client_id: String,
-    client_secret: String,
-  )
+  OAuthCredentials(client_id: String, client_secret: String)
 }
 
 pub type LinearToken {
@@ -21,27 +18,15 @@ pub type E2EConfig {
 }
 
 pub type LinearUser {
-  LinearUser(
-    id: String,
-    name: String,
-    email: String,
-  )
+  LinearUser(id: String, name: String, email: String)
 }
 
 pub type LinearProject {
-  LinearProject(
-    id: String,
-    name: String,
-    url: String,
-  )
+  LinearProject(id: String, name: String, url: String)
 }
 
 pub type LinearTeam {
-  LinearTeam(
-    id: String,
-    name: String,
-    key: String,
-  )
+  LinearTeam(id: String, name: String, key: String)
 }
 
 pub type LinearIssue {
@@ -54,18 +39,28 @@ pub type LinearIssue {
   )
 }
 
-pub type GraphQLQuery {
-  GraphQLQuery(
-    query: String,
-    variables: Dict(String, String),
+pub type LinearComment {
+  LinearComment(id: String, body: String)
+}
+
+pub type LinearArchiveResult {
+  LinearArchiveResult(success: Bool)
+}
+
+pub type LinearLiveMutationSummary {
+  LinearLiveMutationSummary(
+    issue: LinearIssue,
+    comment: LinearComment,
+    archived: Bool,
   )
 }
 
+pub type GraphQLQuery {
+  GraphQLQuery(query: String, variables: Dict(String, String))
+}
+
 pub type GraphQLResponse {
-  GraphQLResponse(
-    data: Result(Dynamic, String),
-    errors: List(String),
-  )
+  GraphQLResponse(data: Result(Dynamic, String), errors: List(String))
 }
 
 pub type E2ETestResult {
@@ -73,6 +68,7 @@ pub type E2ETestResult {
     viewer: LinearUser,
     projects: List(LinearProject),
     teams: List(LinearTeam),
+    live_mutation: Result(LinearLiveMutationSummary, Nil),
   )
   E2ETestBlocked(reason: String)
   E2ETestFailed(error: String)

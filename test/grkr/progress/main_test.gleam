@@ -1,0 +1,206 @@
+import gleeunit
+import gleam/string
+import gleeunit/should
+import grkr/progress/checkpoint_stage
+import grkr/progress/main
+import grkr/progress/linear_mutation
+
+pub fn main() {
+  gleeunit.main()
+}
+
+pub fn plan_checkpoint_render_test() {
+  let result =
+    main.plan_checkpoint_render(
+      "issue-123-test",
+      checkpoint_stage.Research,
+      "Research findings here",
+    )
+
+  string.contains(result, "Research checkpoint")
+  |> should.be_true()
+
+  string.contains(result, "Research findings here")
+  |> should.be_true()
+
+  string.contains(result, "grkr:checkpoint")
+  |> should.be_true()
+}
+
+pub fn plan_checkpoint_render_with_pr_test() {
+  let result =
+    main.plan_checkpoint_render_with_pr(
+      "issue-456-impl",
+      checkpoint_stage.Implementation,
+      "Implementation complete",
+      "https://github.com/test/repo/pull/123",
+    )
+
+  string.contains(result, "Implementation checkpoint")
+  |> should.be_true()
+
+  string.contains(result, "Implementation complete")
+  |> should.be_true()
+
+  string.contains(result, "### PR")
+  |> should.be_true()
+
+  string.contains(result, "https://github.com/test/repo/pull/123")
+  |> should.be_true()
+}
+
+pub fn plan_refusal_render_test() {
+  let result =
+    main.plan_refusal_render(
+      "issue-789-refuse",
+      "underspecified",
+      "This issue needs more details",
+    )
+
+  string.contains(result, "Implementation refused")
+  |> should.be_true()
+
+  string.contains(result, "underspecified")
+  |> should.be_true()
+
+  string.contains(result, "This issue needs more details")
+  |> should.be_true()
+}
+
+pub fn plan_pr_summary_render_test() {
+  let result =
+    main.plan_pr_summary_render(
+      "issue-999-summary",
+      "https://github.com/test/repo/pull/456",
+      "https://github.com/test/repo/tree/feature",
+    )
+
+  string.contains(result, "PR summary")
+  |> should.be_true()
+
+  string.contains(result, "https://github.com/test/repo/pull/456")
+  |> should.be_true()
+}
+
+pub fn plan_linear_state_update_test() {
+  let mock_env = fn(_key) { "Custom State" }
+  let result = main.plan_linear_state_update(checkpoint_stage.Research, mock_env)
+
+  result
+  |> should.equal(Ok("Custom State"))
+}
+
+pub fn validate_checkpoint_stage_test() {
+  main.validate_checkpoint_stage("research")
+  |> should.equal(Ok(checkpoint_stage.Research))
+
+  main.validate_checkpoint_stage("invalid")
+  |> should.be_error()
+}
+
+pub fn generate_idempotency_key_test() {
+  let result =
+    main.generate_idempotency_key(checkpoint_stage.Plan, "issue-777-key")
+
+  result
+  |> should.equal("grkr-checkpoint-plan-issue-777-key")
+}
+
+pub fn format_checkpoint_marker_test() {
+  let result =
+    main.format_checkpoint_marker(checkpoint_stage.Test, "issue-888-marker")
+
+  string.contains(result, "grkr:checkpoint")
+  |> should.be_true()
+
+  string.contains(result, "stage=test")
+  |> should.be_true()
+
+  string.contains(result, "task=issue-888-marker")
+  |> should.be_true()
+}
+
+pub fn check_linear_token_availability_test() {
+  let mock_getter = fn() { Ok("test-token") }
+  let result = main.check_linear_token_availability(mock_getter)
+
+  result
+  |> should.equal(linear_mutation.TokenAvailable)
+}
+
+pub fn explain_unavailable_token_test() {
+  let result = main.explain_unavailable_token()
+
+  string.contains(result, "OAuth")
+  |> should.be_true()
+}
+
+pub fn cli_render_checkpoint_test() {
+  let result = main.cli_render_checkpoint("research", "issue-111-cli", "CLI test")
+
+  result
+  |> should.equal(Ok("<!-- grkr:checkpoint stage=research task=issue-111-cli version=1 -->\n\n## Research checkpoint\n\nCLI test"))
+}
+
+pub fn cli_render_checkpoint_with_pr_test() {
+  let result =
+    main.cli_render_checkpoint_with_pr(
+      "implementation",
+      "issue-222-cli",
+      "CLI impl",
+      "https://github.com/test/repo/pull/222",
+    )
+
+  case result {
+    Ok(content) -> {
+  string.contains(content, "https://github.com/test/repo/pull/222")
+  |> should.be_true()
+    }
+    Error(_) -> should.fail()
+  }
+}
+
+pub fn cli_render_refusal_test() {
+  let result = main.cli_render_refusal("issue-333-cli", "blocked", "CLI refusal")
+
+  string.contains(result, "blocked")
+  |> should.be_true()
+}
+
+pub fn cli_render_pr_summary_test() {
+  let result =
+    main.cli_render_pr_summary(
+      "issue-444-cli",
+      "https://github.com/test/repo/pull/444",
+      "https://github.com/test/repo/tree/branch",
+    )
+
+  string.contains(result, "PR summary")
+  |> should.be_true()
+}
+
+pub fn cli_plan_linear_state_test() {
+  let mock_env = fn(_key) { "Test State" }
+  let result = main.cli_plan_linear_state("plan", mock_env)
+
+  result
+  |> should.equal(Ok("Test State"))
+}
+
+pub fn cli_plan_linear_mutation_test() {
+  let result =
+    main.cli_plan_linear_mutation(
+      "LIN-555",
+      "Test body",
+      "test",
+      "issue-555-mutation",
+    )
+
+  case result {
+    Ok(mutation) -> {
+  string.contains(mutation.query, "commentCreate")
+  |> should.be_true()
+    }
+    Error(_) -> should.fail()
+  }
+}

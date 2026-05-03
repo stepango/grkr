@@ -110,6 +110,14 @@ function issueFromObject(issue) {
   );
 }
 
+function payloadFailed(payload, operation) {
+  if (payload?.success === false) {
+    return new Error(`${operation} returned success=false`);
+  }
+
+  return null;
+}
+
 export function parse_issue_json(data) {
   try {
     const issue = data?.issue;
@@ -125,7 +133,13 @@ export function parse_issue_json(data) {
 
 export function parse_created_issue_json(data) {
   try {
-    const issue = data?.issueCreate?.issue;
+    const payload = data?.issueCreate;
+    const failed = payloadFailed(payload, "Issue create");
+    if (failed) {
+      return failed;
+    }
+
+    const issue = payload?.issue;
     if (!issue) {
       return new Error("Missing created issue data");
     }
@@ -138,7 +152,13 @@ export function parse_created_issue_json(data) {
 
 export function parse_comment_json(data) {
   try {
-    const comment = data?.commentCreate?.comment;
+    const payload = data?.commentCreate;
+    const failed = payloadFailed(payload, "Comment create");
+    if (failed) {
+      return failed;
+    }
+
+    const comment = payload?.comment;
     if (!comment) {
       return new Error("Missing created comment data");
     }
@@ -157,6 +177,10 @@ export function parse_archive_json(data) {
     const archive = data?.issueArchive;
     if (!archive) {
       return new Error("Missing issue archive data");
+    }
+    const failed = payloadFailed(archive, "Issue archive");
+    if (failed) {
+      return failed;
     }
 
     return new Ok(new LinearArchiveResult(Boolean(archive.success)));

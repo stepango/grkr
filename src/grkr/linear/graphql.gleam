@@ -1,7 +1,7 @@
-import grkr/linear/types
 import gleam/dict
 import gleam/list
 import gleam/string
+import grkr/linear/types
 
 pub fn viewer_query() -> types.GraphQLQuery {
   types.GraphQLQuery(
@@ -37,7 +37,7 @@ pub fn create_issue_mutation(
   description: String,
 ) -> types.GraphQLQuery {
   types.GraphQLQuery(
-    query: "mutation CreateIssue($teamId: String!, $title: String!, $description: String!) { issueCreate(input: { teamId: $teamId, title: $title, description: $description }) { issue { id title description url state { id } } } }",
+    query: "mutation CreateIssue($teamId: String!, $title: String!, $description: String!) { issueCreate(input: { teamId: $teamId, title: $title, description: $description }) { success issue { id title description url state { id } } } }",
     variables: dict.from_list([
       #("teamId", team_id),
       #("title", title),
@@ -51,7 +51,7 @@ pub fn create_comment_mutation(
   body: String,
 ) -> types.GraphQLQuery {
   types.GraphQLQuery(
-    query: "mutation CreateComment($issueId: String!, $body: String!) { commentCreate(input: { issueId: $issueId, body: $body }) { comment { id body } } }",
+    query: "mutation CreateComment($issueId: String!, $body: String!) { commentCreate(input: { issueId: $issueId, body: $body }) { success comment { id body } } }",
     variables: dict.from_list([
       #("issueId", issue_id),
       #("body", body),

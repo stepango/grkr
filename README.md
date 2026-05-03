@@ -19,6 +19,9 @@ robot-main.sh
 # Run for an issue
 grkr --issue 1
 
+# Print CLI usage
+grkr --help
+
 # Run the smoke test
 npm test
 

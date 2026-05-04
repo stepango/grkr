@@ -1,7 +1,9 @@
 import gleam/io
 import gleam/string
+import grkr/issue_provider/client
 import grkr/issue_provider/config
 import grkr/issue_provider/decoder
+import grkr/issue_provider/query
 import grkr/issue_provider/selector
 import grkr/issue_provider/types
 
@@ -18,21 +20,36 @@ pub fn run() -> Result(types.SelectedIssue, types.ProviderError) {
   use linear_config <- result_try_config(config.load_linear_config())
   let fixture_path = get_env("LINEAR_FIXTURE_PATH")
 
+  let filter = config.config_to_filter(linear_config)
+
   case fixture_path == "" {
-    True ->
-      Error(types.QueryError(
-        "Linear live queries require OAuth installation/access-token setup; set LINEAR_FIXTURE_PATH for fixture-backed selection in this slice",
+    True -> {
+      use token <- result_try_provider(client.access_token_from_env())
+      let graphql_query = query.build_assigned_issues_query(100, Error(Nil), Ok(filter))
+      use contents <- result_try_provider(client.run_assigned_issues_query(
+        token,
+        graphql_query,
       ))
+      use issues <- result_try_provider(decode_fixture(contents))
+      select_issue(issues, filter, linear_config.priority_order)
+    }
     False -> {
       use contents <- result_try_provider(read_fixture(fixture_path))
       use issues <- result_try_provider(decode_fixture(contents))
-      let filter = config.config_to_filter(linear_config)
-      case selector.select_issue(issues, filter, linear_config.priority_order) {
-        types.SelectionSuccess(selected, _total_candidates) -> Ok(selected)
-        types.NoMatchingIssues -> Error(types.NoMatchingIssue)
-        types.ProviderFailed(error) -> Error(error)
-      }
+      select_issue(issues, filter, linear_config.priority_order)
     }
+  }
+}
+
+fn select_issue(
+  issues: List(types.LinearIssue),
+  filter: types.IssueFilter,
+  priority_order: types.PriorityOrder,
+) -> Result(types.SelectedIssue, types.ProviderError) {
+  case selector.select_issue(issues, filter, priority_order) {
+    types.SelectionSuccess(selected, _total_candidates) -> Ok(selected)
+    types.NoMatchingIssues -> Error(types.NoMatchingIssue)
+    types.ProviderFailed(error) -> Error(error)
   }
 }
 

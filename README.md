@@ -140,7 +140,7 @@ PRIORITY_ORDER="P0,P1,P2,P3"
 
 ### Linear (experimental)
 
-Set `GRKR_ISSUE_PROVIDER=linear` in your environment or `.grkr/config.sh` to try Linear fixture-backed issue selection.
+Set `GRKR_ISSUE_PROVIDER=linear` in your environment or `.grkr/config.sh` to use the Gleam-backed Linear issue selector. Fixture mode remains available for tests, and live Linear queries run only when an OAuth-derived access token is explicitly provided.
 
 Configuration for Linear:
 
@@ -155,7 +155,7 @@ LINEAR_TODO_STATE="Todo"
 Linear credential setup:
 1. Create or install a Linear OAuth app for grkr.
 2. Store the OAuth app credentials in `~/.linear/secret.txt` as `client_id=...` and `client_secret=...`.
-3. Do not use those app credentials as a personal API key. Live Linear GraphQL access requires the OAuth installation/token exchange flow; this provider slice refuses live queries until that token flow is configured.
+3. Do not use those app credentials as a personal API key. Live Linear GraphQL access requires an OAuth installation/token exchange that produces an access token; export that derived token as `GRKR_LINEAR_ACCESS_TOKEN` only for the current run or store it in approved local secret storage once that flow is available. grkr sends it with Linear's required bearer authorization header, never reads `~/.linear/secret.txt` as an API token, and redacts token values from client errors.
 
 For fixture-backed selection, set `LINEAR_FIXTURE_PATH` to a JSON file containing Linear API response data. This slice returns shell-safe Linear issue metadata (`ISSUE_IDENTIFIER`, title, URL, state, priority, update time, job key, and task slug), but the supervisor only schedules executable work when a provider returns the GitHub `ISSUE_NUMBER` required by `grkr --issue`. Full Linear issue execution is still pending.
 
@@ -164,7 +164,8 @@ The Linear provider supports:
 - Priority ordering (urgent, high, medium, low, none)
 - State filtering (e.g., Todo, In Progress)
 - Assignee filtering
-- Fixture-backed unit tests
+- Live Linear GraphQL issue selection when `GRKR_LINEAR_ACCESS_TOKEN` contains an OAuth-derived access token
+- Safe blocked output when no derived token is available, without treating OAuth app credentials as API tokens
 
 ## Linear E2E Tests
 

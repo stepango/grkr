@@ -5,6 +5,7 @@ import gleam/option.{None, Some}
 import gleam/string
 import gleeunit
 import gleeunit/should
+import grkr/issue_provider/client
 import grkr/issue_provider/credential
 import grkr/issue_provider/decoder
 import grkr/issue_provider/query
@@ -571,6 +572,55 @@ pub fn discover_reads_linear_credentials_file_test() {
     }
     _ -> False
   }
+  |> should.equal(True)
+}
+
+pub fn linear_client_requires_oauth_access_token_test() {
+  client.require_access_token("")
+  |> should.equal(
+    Error(types.QueryError(
+      "Linear live issue selection requires an OAuth-derived access token in GRKR_LINEAR_ACCESS_TOKEN; OAuth app client credentials are not API tokens",
+    )),
+  )
+
+  client.require_access_token("  ")
+  |> should.equal(
+    Error(types.QueryError(
+      "Linear live issue selection requires an OAuth-derived access token in GRKR_LINEAR_ACCESS_TOKEN; OAuth app client credentials are not API tokens",
+    )),
+  )
+
+  client.require_access_token("lin_oauth_access_token")
+  |> should.equal(Ok("lin_oauth_access_token"))
+}
+
+pub fn linear_client_redacts_token_from_errors_test() {
+  client.redact("request failed for lin_secret_token", "lin_secret_token")
+  |> should.equal("request failed for [REDACTED]")
+}
+
+pub fn linear_client_uses_oauth_bearer_authorization_test() {
+  client.authorization_header("lin_oauth_access_token")
+  |> should.equal("Bearer lin_oauth_access_token")
+
+  client.authorization_header("Bearer lin_oauth_access_token")
+  |> should.equal("Bearer lin_oauth_access_token")
+}
+
+pub fn linear_live_query_includes_filter_test() {
+  let filter =
+    types.make_filter("Todo", "user-1", Ok("project-1"), Ok("team-1"))
+  let built = query.build_assigned_issues_query(100, Error(Nil), Ok(filter))
+
+  string.contains(built, "assignedIssues(first: 100")
+  |> should.equal(True)
+  string.contains(built, "assignee: { me: true }")
+  |> should.equal(True)
+  string.contains(built, "state: { name: { eq: \"Todo\" } }")
+  |> should.equal(True)
+  string.contains(built, "project: { id: { eq: \"project-1\" } }")
+  |> should.equal(True)
+  string.contains(built, "team: { id: { eq: \"team-1\" } }")
   |> should.equal(True)
 }
 

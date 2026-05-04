@@ -40,4 +40,40 @@ if ! grep -q 'progress cli error:' /tmp/grkr-progress-cli-invalid.$$; then
 fi
 rm -f /tmp/grkr-progress-cli-invalid.$$
 
+linear_state=$(LINEAR_STATE_RESEARCH='Planning Review' gleam run -m grkr/progress/cli -- linear-state research)
+if [ "$linear_state" != "Planning Review" ]; then
+  printf 'unexpected Linear state: %s\n' "$linear_state" >&2
+  exit 1
+fi
+
+linear_mutation=$(gleam run -m grkr/progress/cli -- linear-comment-mutation LIN-71 'Linear checkpoint body' plan issue-71-progress-cli)
+case "$linear_mutation" in
+  *'commentCreate'*'grkr:checkpoint'*'Linear checkpoint body'*'grkr-checkpoint-plan-issue-71-progress-cli'*) ;;
+  *)
+    printf 'Linear comment mutation output missing expected planning details\n%s\n' "$linear_mutation" >&2
+    exit 1
+    ;;
+esac
+
+linear_debug=$(gleam run -m grkr/progress/cli -- mutation-debug LIN-71 'secret=do-not-print' plan issue-71-progress-cli)
+case "$linear_debug" in
+  *'[redacted]'*) ;;
+  *)
+    printf 'mutation debug output missing redaction marker\n%s\n' "$linear_debug" >&2
+    exit 1
+    ;;
+esac
+case "$linear_debug" in
+  *'do-not-print'*)
+    printf 'mutation debug output leaked variables\n%s\n' "$linear_debug" >&2
+    exit 1
+    ;;
+esac
+
+token_status=$(env -u GRKR_LINEAR_ACCESS_TOKEN gleam run -m grkr/progress/cli -- check-token)
+if [ "$token_status" != "Token unavailable" ]; then
+  printf 'unexpected Linear token status: %s\n' "$token_status" >&2
+  exit 1
+fi
+
 printf 'grkr progress cli test passed\n'

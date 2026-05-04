@@ -4,7 +4,7 @@ import grkr/linear/e2e
 import grkr/linear/types
 
 pub fn main() -> Promise(Nil) {
-  e2e.run_e2e_tests()
+  e2e.run_e2e(Nil)
   |> promise.map(fn(result) {
     io.println(e2e.format_test_result(result))
 

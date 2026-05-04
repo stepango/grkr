@@ -125,7 +125,7 @@ pub fn store_token(
 
 /// Store OAuth token in default location
 pub fn store_token_default(token: String) -> Result(Nil, TokenStoreError) {
-  write_token_file(default_token_path, token)
+  store_token(token, default_token_path)
 }
 
 /// Load OAuth token from local token store
@@ -142,7 +142,7 @@ pub fn load_token(path: String) -> Result(String, TokenStoreError) {
 
 /// Load OAuth token from default location
 pub fn load_token_default() -> Result(String, TokenStoreError) {
-  read_token_file(default_token_path)
+  load_token(default_token_path)
 }
 
 /// Get token store path from environment or default

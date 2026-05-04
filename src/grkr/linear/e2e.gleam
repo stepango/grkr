@@ -5,7 +5,7 @@ import grkr/linear/client
 import grkr/linear/config
 import grkr/linear/types
 
-pub fn run_e2e_tests() -> Promise(types.E2ETestResult) {
+pub fn run_e2e(_: Nil) -> Promise(types.E2ETestResult) {
   io.println("Starting Linear E2E tests...")
 
   case config.load_e2e_config() {

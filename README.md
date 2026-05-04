@@ -47,10 +47,11 @@ grkr includes Gleam-owned progress tracking and Linear integration under `src/gr
 1. **Checkpoint stages**: Research, plan, refusal, implementation, test, and PR summary stages with validation and formatting
 2. **Idempotency**: Stable machine markers and idempotency keys for checkpoint comments to prevent duplicates
 3. **Markdown rendering**: Checkpoint comment formatting with optional PR links and refusal reasons
-4. **Linear state mapping**: Configurable mapping from grkr phases to Linear workflow states via environment variables
-5. **Linear mutations**: GraphQL mutation planning for comment creation and issue state updates with idempotency markers
-6. **Token handling**: Safe failure when Linear access tokens are unavailable without treating OAuth app credentials as direct GraphQL tokens
-7. **Safe diagnostics**: Linear mutation debug output includes the query and idempotency key while redacting variables that may contain checkpoint body text or secrets
+4. **Progress CLI**: `gleam run -m grkr/progress/cli -- marker <stage> <task-slug>` renders the checkpoint marker used by the shell workflow, so `bin/grkr` and `worker-refuse-issue.sh` now delegate marker production to Gleam.
+5. **Linear state mapping**: Configurable mapping from grkr phases to Linear workflow states via environment variables
+6. **Linear mutations**: GraphQL mutation planning for comment creation and issue state updates with idempotency markers
+7. **Token handling**: Safe failure when Linear access tokens are unavailable without treating OAuth app credentials as direct GraphQL tokens
+8. **Safe diagnostics**: Linear mutation debug output includes the query and idempotency key while redacting variables that may contain checkpoint body text or secrets
 
 The progress modules provide planning functions for checkpoint rendering and Linear mutations while preserving existing GitHub issue workflows. Linear support runs alongside GitHub, not as a replacement.
 

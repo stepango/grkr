@@ -59,11 +59,31 @@ timestamp_utc() {
   date -u +"%Y-%m-%dT%H:%M:%SZ"
 }
 
+run_progress_cli() {
+  local project_root
+  project_root=${GRKR_GLEAM_PROJECT_ROOT:-$(dirname "$SCRIPT_DIR")}
+
+  if [ -f "$project_root/gleam.toml" ]; then
+    (cd "$project_root" && gleam run -m grkr/progress/cli -- "$@")
+    return
+  fi
+
+  case "${1:-}" in
+    marker)
+      printf '<!-- grkr:checkpoint stage=%s task=%s version=1 -->' "$2" "$3"
+      ;;
+    *)
+      printf 'Missing Gleam project root for grkr progress CLI: %s\n' "$project_root" >&2
+      return 1
+      ;;
+  esac
+}
+
 checkpoint_marker() {
   local stage=$1
   local task_slug=$2
 
-  printf '<!-- grkr:checkpoint stage=%s task=%s version=1 -->' "$stage" "$task_slug"
+  run_progress_cli marker "$stage" "$task_slug"
 }
 
 fetch_issue_comments_json() {

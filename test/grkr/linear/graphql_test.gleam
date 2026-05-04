@@ -1,8 +1,8 @@
-import grkr/linear/graphql
-import gleeunit
-import gleeunit/should
 import gleam/dict
 import gleam/string
+import gleeunit
+import gleeunit/should
+import grkr/linear/graphql
 
 pub fn main() {
   gleeunit.main()
@@ -65,7 +65,8 @@ pub fn issue_query_test() {
 }
 
 pub fn create_issue_mutation_test() {
-  let query = graphql.create_issue_mutation("team-123", "Test Issue", "Test Description")
+  let query =
+    graphql.create_issue_mutation("team-123", "Test Issue", "Test Description")
 
   query.query
   |> string.contains("mutation CreateIssue")
@@ -73,6 +74,10 @@ pub fn create_issue_mutation_test() {
 
   query.query
   |> string.contains("$teamId: String!")
+  |> should.be_true
+
+  query.query
+  |> string.contains("success")
   |> should.be_true
 
   query.variables
@@ -97,6 +102,10 @@ pub fn create_comment_mutation_test() {
 
   query.query
   |> string.contains("$issueId: String!")
+  |> should.be_true
+
+  query.query
+  |> string.contains("success")
   |> should.be_true
 
   query.variables

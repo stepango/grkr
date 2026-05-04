@@ -1,6 +1,9 @@
 import { Ok, Error, toList } from "../../gleam.mjs";
 import {
   GraphQLResponse,
+  LinearArchiveResult,
+  LinearComment,
+  LinearIssue,
   LinearProject,
   LinearTeam,
   LinearUser,
@@ -94,5 +97,94 @@ export function parse_teams_json(data) {
     return new Ok(toList(parsed));
   } catch (error) {
     return new Error("Failed to parse teams: " + error.message);
+  }
+}
+
+function issueFromObject(issue) {
+  return new LinearIssue(
+    issue?.id || "",
+    issue?.title || "",
+    issue?.description || "",
+    issue?.url || "",
+    issue?.state?.id || "",
+  );
+}
+
+function payloadFailed(payload, operation) {
+  if (payload?.success === false) {
+    return new Error(`${operation} returned success=false`);
+  }
+
+  return null;
+}
+
+export function parse_issue_json(data) {
+  try {
+    const issue = data?.issue;
+    if (!issue) {
+      return new Error("Missing issue data");
+    }
+
+    return new Ok(issueFromObject(issue));
+  } catch (error) {
+    return new Error("Failed to parse issue: " + error.message);
+  }
+}
+
+export function parse_created_issue_json(data) {
+  try {
+    const payload = data?.issueCreate;
+    const failed = payloadFailed(payload, "Issue create");
+    if (failed) {
+      return failed;
+    }
+
+    const issue = payload?.issue;
+    if (!issue) {
+      return new Error("Missing created issue data");
+    }
+
+    return new Ok(issueFromObject(issue));
+  } catch (error) {
+    return new Error("Failed to parse created issue: " + error.message);
+  }
+}
+
+export function parse_comment_json(data) {
+  try {
+    const payload = data?.commentCreate;
+    const failed = payloadFailed(payload, "Comment create");
+    if (failed) {
+      return failed;
+    }
+
+    const comment = payload?.comment;
+    if (!comment) {
+      return new Error("Missing created comment data");
+    }
+
+    return new Ok(new LinearComment(
+      comment.id || "",
+      comment.body || "",
+    ));
+  } catch (error) {
+    return new Error("Failed to parse created comment: " + error.message);
+  }
+}
+
+export function parse_archive_json(data) {
+  try {
+    const archive = data?.issueArchive;
+    if (!archive) {
+      return new Error("Missing issue archive data");
+    }
+    const failed = payloadFailed(archive, "Issue archive");
+    if (failed) {
+      return failed;
+    }
+
+    return new Ok(new LinearArchiveResult(Boolean(archive.success)));
+  } catch (error) {
+    return new Error("Failed to parse issue archive: " + error.message);
   }
 }

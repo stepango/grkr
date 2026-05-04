@@ -23,6 +23,19 @@ SCRIPT_DIR=$(cd "$(dirname "$SCRIPT_PATH")" && pwd)
 . "$SCRIPT_DIR/grkr-project-status.sh"
 . "$SCRIPT_DIR/grkr-issue-workflow.sh"
 
+usage() {
+  local exit_code=${1:-1}
+  echo "Usage: grkr init <project-id> | grkr --issue <number> | grkr --project <id>"
+  echo "Example: grkr init 42"
+  echo "Example: grkr --issue 1"
+  echo "Example: grkr --project 42"
+  exit "$exit_code"
+}
+
+if [ "${1:-}" = "--help" ]; then
+  usage 0
+fi
+
 mkdir -p "${HOME:-.}/.grkr/logs"
 LOGFILE="${HOME:-.}/.grkr/logs/grkr-$(date +%Y%m%d-%H%M%S).log"
 CURRENT_ISSUE=""
@@ -41,13 +54,6 @@ if command -v tee >/dev/null 2>&1; then
 else
   exec >>"$LOGFILE" 2>&1
 fi
-usage() {
-  echo "Usage: grkr init <project-id> | grkr --issue <number> | grkr --project <id>"
-  echo "Example: grkr init 42"
-  echo "Example: grkr --issue 1"
-  echo "Example: grkr --project 42"
-  exit 1
-}
 
 MAX_FILE_LINES=1000
 MAX_PR_BODY_CHARS=60000

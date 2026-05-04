@@ -50,7 +50,7 @@ grkr includes Gleam-owned progress tracking and Linear integration under `src/gr
 1. **Checkpoint stages**: Research, plan, refusal, implementation, test, and PR summary stages with validation and formatting
 2. **Idempotency**: Stable machine markers and idempotency keys for checkpoint comments to prevent duplicates
 3. **Markdown rendering**: Checkpoint comment formatting with optional PR links and refusal reasons
-4. **Progress CLI**: `gleam run -m grkr/progress/cli -- marker <stage> <task-slug>` renders the checkpoint marker used by the shell workflow, so `bin/grkr` and `worker-refuse-issue.sh` now delegate marker production to Gleam.
+4. **Progress CLI**: `gleam run -m grkr/progress/cli -- marker <stage> <task-slug>` renders the checkpoint marker used by the shell workflow, so `bin/grkr` and `worker-refuse-issue.sh` now delegate marker production to Gleam. The same CLI also exposes safe Linear planning commands (`linear-state`, `linear-comment-mutation`, `linear-state-mutation`, `mutation-debug`, and `check-token`) that print planned mutations or token status without contacting Linear by default.
 5. **Linear state mapping**: Configurable mapping from grkr phases to Linear workflow states via environment variables
 6. **Linear mutations**: GraphQL mutation planning for comment creation and issue state updates with idempotency markers
 7. **Token handling**: Safe failure when Linear access tokens are unavailable without treating OAuth app credentials as direct GraphQL tokens

@@ -8,6 +8,7 @@ trap 'rm -rf "$tmpdir"' EXIT
 cp bin/robot-main.sh "$tmpdir/robot-main.sh"
 cp bin/worker-sync-main.sh "$tmpdir/worker-sync-main.sh"
 cp bin/worker-pick-issue.sh "$tmpdir/worker-pick-issue.sh"
+cp bin/grkr-task-slug.sh "$tmpdir/grkr-task-slug.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
 chmod +x "$tmpdir/robot-main.sh" "$tmpdir/worker-sync-main.sh" "$tmpdir/worker-pick-issue.sh" "$tmpdir/doctor.sh"
 

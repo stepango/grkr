@@ -1,10 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
+repo_root=$(pwd)
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-worker-pick-issue.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
 cp bin/worker-pick-issue.sh "$tmpdir/worker-pick-issue.sh"
+cp bin/grkr-task-slug.sh "$tmpdir/grkr-task-slug.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
 chmod +x "$tmpdir/worker-pick-issue.sh" "$tmpdir/doctor.sh"
 
@@ -107,7 +109,7 @@ run_worker() {
 
   (
     cd "$tmpdir"
-    PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_TEST_SCENARIO="$scenario" bash "$tmpdir/worker-pick-issue.sh" >"$output_file"
+    PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_GLEAM_PROJECT_ROOT="$repo_root" GRKR_TEST_SCENARIO="$scenario" bash "$tmpdir/worker-pick-issue.sh" >"$output_file"
   )
 }
 

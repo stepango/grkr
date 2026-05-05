@@ -3,6 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$SCRIPT_DIR/doctor.sh"
+. "$SCRIPT_DIR/grkr-task-slug.sh"
 
 doctor_init
 
@@ -54,23 +55,6 @@ normalize_priority_mode() {
       printf '\n'
       ;;
   esac
-}
-
-slugify_text() {
-  printf '%s' "$1" \
-    | tr '[:upper:]' '[:lower:]' \
-    | sed 's/[^a-z0-9]/-/g; s/-\{2,\}/-/g; s/^-//; s/-$//' \
-    | cut -c1-80
-}
-
-task_slug_for_issue() {
-  local issue=$1
-  local title=$2
-  local title_slug
-
-  title_slug=$(slugify_text "$title")
-  [ -n "$title_slug" ] || title_slug="task"
-  printf 'issue-%s-%s\n' "$issue" "$title_slug"
 }
 
 require_config_value "REPO" "$REPO"

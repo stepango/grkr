@@ -7,6 +7,7 @@ trap 'rm -rf "$tmpdir"' EXIT
 cp bin/grkr "$tmpdir/grkr.sh"
 cp bin/grkr-issue-workflow.sh "$tmpdir/grkr-issue-workflow.sh"
 cp bin/grkr-project-status.sh "$tmpdir/grkr-project-status.sh"
+cp bin/grkr-task-slug.sh "$tmpdir/grkr-task-slug.sh"
 cp bin/grkr-templates.sh "$tmpdir/grkr-templates.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
 chmod +x "$tmpdir/grkr.sh"

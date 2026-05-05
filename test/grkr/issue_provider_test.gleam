@@ -624,6 +624,117 @@ pub fn linear_live_query_includes_filter_test() {
   |> should.equal(True)
 }
 
+pub fn linear_cli_viewer_query_builds_valid_graphql_test() {
+  let built = query.build_viewer_query()
+
+  string.contains(built, "query {")
+  |> should.equal(True)
+  string.contains(built, "viewer {")
+  |> should.equal(True)
+  string.contains(built, "id")
+  |> should.equal(True)
+  string.contains(built, "name")
+  |> should.equal(True)
+  string.contains(built, "displayName")
+  |> should.equal(True)
+  string.contains(built, "email")
+  |> should.equal(True)
+}
+
+pub fn linear_cli_teams_query_builds_valid_graphql_test() {
+  let built = query.build_teams_query()
+
+  string.contains(built, "query {")
+  |> should.equal(True)
+  string.contains(built, "viewer {")
+  |> should.equal(True)
+  string.contains(built, "teams {")
+  |> should.equal(True)
+  string.contains(built, "nodes {")
+  |> should.equal(True)
+  string.contains(built, "id")
+  |> should.equal(True)
+  string.contains(built, "key")
+  |> should.equal(True)
+  string.contains(built, "name")
+  |> should.equal(True)
+}
+
+pub fn linear_cli_team_projects_query_builds_valid_graphql_test() {
+  let built = query.build_team_projects_query("test-team-id")
+
+  string.contains(built, "query {")
+  |> should.equal(True)
+  string.contains(built, "team(id: \"test-team-id\") {")
+  |> should.equal(True)
+  string.contains(built, "projects {")
+  |> should.equal(True)
+  string.contains(built, "nodes {")
+  |> should.equal(True)
+  string.contains(built, "id")
+  |> should.equal(True)
+  string.contains(built, "name")
+  |> should.equal(True)
+  string.contains(built, "url")
+  |> should.equal(True)
+}
+
+pub fn linear_cli_issue_query_builds_valid_graphql_test() {
+  let built = query.build_issue_query("ENG-123")
+
+  string.contains(built, "query {")
+  |> should.equal(True)
+  string.contains(built, "issue(identifier: \"ENG-123\") {")
+  |> should.equal(True)
+  string.contains(built, "id")
+  |> should.equal(True)
+  string.contains(built, "identifier")
+  |> should.equal(True)
+  string.contains(built, "title")
+  |> should.equal(True)
+  string.contains(built, "state {")
+  |> should.equal(True)
+  string.contains(built, "priority")
+  |> should.equal(True)
+}
+
+pub fn linear_cli_assigned_issues_query_builds_valid_graphql_test() {
+  let filter = types.make_filter("Todo", "user-1", Ok("project-1"), Ok("team-1"))
+  let built = query.build_assigned_issues_query(100, Error(Nil), Ok(filter))
+
+  string.contains(built, "query {")
+  |> should.equal(True)
+  string.contains(built, "viewer {")
+  |> should.equal(True)
+  string.contains(built, "assignedIssues(first: 100")
+  |> should.equal(True)
+  string.contains(built, "assignee: { me: true }")
+  |> should.equal(True)
+}
+
+pub fn linear_cli_query_never_includes_credentials_test() {
+  let viewer_query = query.build_viewer_query()
+  let teams_query = query.build_teams_query()
+  let projects_query = query.build_team_projects_query("team-123")
+  let issue_query = query.build_issue_query("ENG-123")
+  let filter = types.make_filter("Todo", "user-1", Ok("project-1"), Ok("team-1"))
+  let assigned_query = query.build_assigned_issues_query(100, Error(Nil), Ok(filter))
+
+  let queries =
+    [viewer_query, teams_query, projects_query, issue_query, assigned_query]
+
+  list.each(queries, fn(query) {
+    string.contains(query, "secret")
+    |> should.equal(False)
+    string.contains(query, "token")
+    |> should.equal(False)
+    string.contains(query, "credential")
+    |> should.equal(False)
+    string.contains(query, "password")
+    |> should.equal(False)
+  })
+}
+
 fn json_error_to_string(err: String) -> String {
   err
 }

@@ -167,6 +167,44 @@ The Linear provider supports:
 - Live Linear GraphQL issue selection when `GRKR_LINEAR_ACCESS_TOKEN` contains an OAuth-derived access token
 - Safe blocked output when no derived token is available, without treating OAuth app credentials as API tokens
 
+### Linear Discovery Query CLI
+
+The Linear issue provider includes safe, non-mutating discovery/query CLI subcommands for inspecting GraphQL queries without accessing Linear or using credentials:
+
+```bash
+# Print the viewer GraphQL query
+gleam run -m grkr/issue_provider/main -- viewer-query
+
+# Print the teams discovery query
+gleam run -m grkr/issue_provider/main -- teams-query
+
+# Print the project discovery query for a team
+gleam run -m grkr/issue_provider/main -- team-projects-query <team-id>
+
+# Print a single issue query by identifier
+gleam run -m grkr/issue_provider/main -- issue-query <identifier>
+
+# Print the assigned-issues query using current Linear config
+gleam run -m grkr/issue_provider/main -- assigned-issues-query
+
+# View usage
+gleam run -m grkr/issue_provider/main
+```
+
+These discovery commands:
+- Print formatted GraphQL queries to stdout
+- Never read or print credentials or tokens
+- Never make HTTP requests to Linear
+- Are safe for debugging, planning, and documentation
+- Require minimal config (only `assigned-issues-query` needs `LINEAR_ASSIGNEE_ID` and `LINEAR_TODO_STATE`)
+
+For example, to see what GraphQL would be generated for assigned issues:
+
+```bash
+LINEAR_ASSIGNEE_ID=user-123 LINEAR_TODO_STATE=Todo \
+  gleam run -m grkr/issue_provider/main -- assigned-issues-query
+```
+
 ## Linear E2E Tests
 
 The project includes an opt-in Linear live e2e harness with its control flow implemented in Gleam under `src/grkr/linear/` and a thin shell wrapper at `test/e2e-linear-live.sh`.

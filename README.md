@@ -187,7 +187,11 @@ gleam run -m grkr/issue_provider/main -- issue-query <identifier>
 # Print the assigned-issues query using current Linear config
 gleam run -m grkr/issue_provider/main -- assigned-issues-query
 
-# View usage
+# View usage by passing an invalid discovery subcommand
+gleam run -m grkr/issue_provider/main -- help
+
+# With no subcommand, keep the existing worker-pick-issue behavior:
+# select a Linear issue and emit shell assignments.
 gleam run -m grkr/issue_provider/main
 ```
 

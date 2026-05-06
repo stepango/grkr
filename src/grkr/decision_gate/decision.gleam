@@ -1,24 +1,31 @@
 import gleam/list
 import gleam/string
-import gleam/result
 import grkr/decision_gate/types
 
-/// Parse a decision from Codex output
-/// Returns the first non-empty line that is exactly "proceed" or "refuse" (case-insensitive)
+/// Parse a decision from Codex output.
+/// The first non-empty trimmed line must be exactly "proceed" or "refuse"
+/// (case-insensitive). Later valid-looking lines are ignored so malformed
+/// Codex output fails closed instead of explaining first and proceeding later.
 pub fn parse_decision(output: String) -> Result(types.Decision, Nil) {
+  case first_meaningful_line(output) {
+    Ok(line) -> result_from_decision_line(line)
+    Error(Nil) -> Error(Nil)
+  }
+}
+
+fn first_meaningful_line(output: String) -> Result(String, Nil) {
   output
   |> string.split("\n")
-  |> list.filter(fn(line) { line != "" })
   |> list.map(string.trim)
-  |> list.map(string.lowercase)
-  |> list.find(fn(line) { line == "proceed" || line == "refuse" })
-  |> result.map(fn(line) {
-    case line {
-      "proceed" -> types.Proceed
-      "refuse" -> types.Refuse
-      _ -> types.Refuse
-    }
-  })
+  |> list.find(fn(line) { line != "" })
+}
+
+fn result_from_decision_line(line: String) -> Result(types.Decision, Nil) {
+  case string.lowercase(line) {
+    "proceed" -> Ok(types.Proceed)
+    "refuse" -> Ok(types.Refuse)
+    _ -> Error(Nil)
+  }
 }
 
 /// Check if a decision string is valid

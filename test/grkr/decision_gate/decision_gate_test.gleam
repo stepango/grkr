@@ -1,11 +1,11 @@
+import gleam/string
 import gleeunit
 import gleeunit/should
-import gleam/string
-import grkr/decision_gate/types
 import grkr/decision_gate/decision
+import grkr/decision_gate/main
 import grkr/decision_gate/prompt
 import grkr/decision_gate/refusal
-import grkr/decision_gate/main
+import grkr/decision_gate/types
 
 pub fn main() {
   gleeunit.main()
@@ -14,7 +14,7 @@ pub fn main() {
 // Decision parsing tests
 
 pub fn decision_parse_proceed_test() {
-  let output = "Some text here\nproceed\nmore text"
+  let output = "\n  PROCEED  \nmore text"
   let result = decision.parse_decision(output)
 
   result
@@ -22,7 +22,7 @@ pub fn decision_parse_proceed_test() {
 }
 
 pub fn decision_parse_refuse_test() {
-  let output = "Some text here\nrefuse\nmore text"
+  let output = "\nrefuse\nmore text"
   let result = decision.parse_decision(output)
 
   result
@@ -39,6 +39,14 @@ pub fn decision_parse_case_insensitive_test() {
 
 pub fn decision_parse_empty_test() {
   let output = "Some text but no decision"
+  let result = decision.parse_decision(output)
+
+  result
+  |> should.equal(Error(Nil))
+}
+
+pub fn decision_parse_rejects_later_decision_test() {
+  let output = "I need to explain first\nproceed"
   let result = decision.parse_decision(output)
 
   result
@@ -80,25 +88,31 @@ pub fn decision_is_valid_test() {
 // Refusal parsing tests
 
 pub fn refusal_parse_details_test() {
-  let output = "refuse\nunderspecified\nThe issue lacks clear acceptance criteria"
+  let output =
+    "refuse\nunderspecified\nThe issue lacks clear acceptance criteria"
   let result = refusal.parse_refusal_details(output)
 
   result
-  |> should.equal(Ok(types.RefusalDetails(
-    class: types.Underspecified,
-    reasoning: "The issue lacks clear acceptance criteria",
-  )))
+  |> should.equal(
+    Ok(types.RefusalDetails(
+      class: types.Underspecified,
+      reasoning: "The issue lacks clear acceptance criteria",
+    )),
+  )
 }
 
 pub fn refusal_parse_with_empty_lines_test() {
-  let output = "refuse\n\n\nunderspecified\n\nThe issue lacks clear acceptance criteria"
+  let output =
+    "refuse\n\n\nunderspecified\n\nThe issue lacks clear acceptance criteria"
   let result = refusal.parse_refusal_details(output)
 
   result
-  |> should.equal(Ok(types.RefusalDetails(
-    class: types.Underspecified,
-    reasoning: "The issue lacks clear acceptance criteria",
-  )))
+  |> should.equal(
+    Ok(types.RefusalDetails(
+      class: types.Underspecified,
+      reasoning: "The issue lacks clear acceptance criteria",
+    )),
+  )
 }
 
 pub fn refusal_parse_no_class_defaults_to_other_test() {
@@ -164,7 +178,10 @@ pub fn decision_gate_refuse_test() {
   let result = main.run_decision_gate(output)
 
   case result {
-    types.DecisionRefused(types.RefusalDetails(class: types.Underspecified, reasoning: r)) -> {
+    types.DecisionRefused(types.RefusalDetails(
+      class: types.Underspecified,
+      reasoning: r,
+    )) -> {
       r
       |> should.equal("Issue is unclear")
     }
@@ -184,10 +201,12 @@ pub fn decision_gate_invalid_defaults_to_refuse_test() {
     types.DecisionRefused(types.RefusalDetails(class: types.Other, reasoning: _)) -> {
       let _ = result
       result
-      |> should.equal(types.DecisionRefused(types.RefusalDetails(
-        class: types.Other,
-        reasoning: "Decision gate returned an invalid result. Defaulting to refuse for safety.",
-      )))
+      |> should.equal(
+        types.DecisionRefused(types.RefusalDetails(
+          class: types.Other,
+          reasoning: "Decision gate returned an invalid result. Defaulting to refuse for safety.",
+        )),
+      )
     }
     _ -> {
       let _ = result
@@ -201,18 +220,22 @@ pub fn decision_gate_is_proceed_test() {
   main.is_proceed(types.DecisionProceeded)
   |> should.be_true
 
-  main.is_proceed(types.DecisionRefused(types.RefusalDetails(
-    class: types.Other,
-    reasoning: "",
-  )))
+  main.is_proceed(
+    types.DecisionRefused(types.RefusalDetails(
+      class: types.Other,
+      reasoning: "",
+    )),
+  )
   |> should.be_false
 }
 
 pub fn decision_gate_is_refuse_test() {
-  main.is_refuse(types.DecisionRefused(types.RefusalDetails(
-    class: types.Other,
-    reasoning: "",
-  )))
+  main.is_refuse(
+    types.DecisionRefused(types.RefusalDetails(
+      class: types.Other,
+      reasoning: "",
+    )),
+  )
   |> should.be_true
 
   main.is_refuse(types.DecisionProceeded)
@@ -220,10 +243,11 @@ pub fn decision_gate_is_refuse_test() {
 }
 
 pub fn decision_gate_get_refusal_details_test() {
-  let result = types.DecisionRefused(types.RefusalDetails(
-    class: types.Underspecified,
-    reasoning: "Test reasoning",
-  ))
+  let result =
+    types.DecisionRefused(types.RefusalDetails(
+      class: types.Underspecified,
+      reasoning: "Test reasoning",
+    ))
 
   case main.get_refusal_details(result) {
     Ok(types.RefusalDetails(class: types.Underspecified, reasoning: r)) -> {
@@ -242,10 +266,12 @@ pub fn decision_gate_result_to_string_test() {
   main.decision_result_to_string(types.DecisionProceeded)
   |> should.equal("proceed")
 
-  main.decision_result_to_string(types.DecisionRefused(types.RefusalDetails(
-    class: types.Other,
-    reasoning: "",
-  )))
+  main.decision_result_to_string(
+    types.DecisionRefused(types.RefusalDetails(
+      class: types.Other,
+      reasoning: "",
+    )),
+  )
   |> should.equal("refuse")
 }
 
@@ -274,21 +300,25 @@ pub fn refusal_follow_up_recommendation_test() {
 }
 
 pub fn prompt_includes_issue_and_checkpoint_context_test() {
-  let context = main.create_context(
-    15,
-    "Add decision gate",
-    "https://github.com/stepango/grkr/issues/15",
-    "Gate must refuse unsafe work",
-    "/repo",
-    "/repo/.grkr/worktrees/issue-15",
-    "issue-15-add-decision-gate",
-    1000,
-  )
+  let context =
+    main.create_context(
+      15,
+      "Add decision gate",
+      "https://github.com/stepango/grkr/issues/15",
+      "Gate must refuse unsafe work",
+      "/repo",
+      "/repo/.grkr/worktrees/issue-15",
+      "issue-15-add-decision-gate",
+      1000,
+    )
   let built = prompt.build_decision_prompt(context)
 
   string.contains(built, "Issue #15: Add decision gate")
   |> should.be_true
-  string.contains(built, "/repo/.grkr/tasks/issue-15-add-decision-gate/research.md")
+  string.contains(
+    built,
+    "/repo/.grkr/tasks/issue-15-add-decision-gate/research.md",
+  )
   |> should.be_true
   string.contains(built, "proceed or refuse")
   |> should.be_true
@@ -297,14 +327,17 @@ pub fn prompt_includes_issue_and_checkpoint_context_test() {
 }
 
 pub fn implementation_refusal_marker_parse_test() {
-  let output = "work log\ngrkr-refuse-implementation\nmissing_dependency\nNeed upstream API first"
+  let output =
+    "work log\ngrkr-refuse-implementation\nmissing_dependency\nNeed upstream API first"
   let result = refusal.parse_implementation_refusal(output)
 
   result
-  |> should.equal(Ok(types.RefusalDetails(
-    class: types.MissingDependency,
-    reasoning: "Need upstream API first",
-  )))
+  |> should.equal(
+    Ok(types.RefusalDetails(
+      class: types.MissingDependency,
+      reasoning: "Need upstream API first",
+    )),
+  )
 }
 
 pub fn implementation_refusal_missing_marker_test() {

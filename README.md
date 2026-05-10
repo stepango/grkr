@@ -154,8 +154,10 @@ LINEAR_TODO_STATE="Todo"
 
 Linear credential setup:
 1. Create or install a Linear OAuth app for grkr.
-2. Store the OAuth app credentials in `~/.linear/secret.txt` as `client_id=...` and `client_secret=...`.
-3. Do not use those app credentials as a personal API key. Live Linear GraphQL access requires an OAuth installation/token exchange that produces an access token; export that derived token as `GRKR_LINEAR_ACCESS_TOKEN` only for the current run or store it in approved local secret storage once that flow is available. grkr sends it with Linear's required bearer authorization header, never reads `~/.linear/secret.txt` as an API token, and redacts token values from client errors.
+2. Store the OAuth app credentials in `~/.linear/secret.txt` as `client_id=...` and `client_secret=...` (`:` separators are also accepted).
+3. Complete the Linear OAuth installation/token exchange flow to obtain an access token.
+4. Store the access token at `~/.linear/token.txt` (or set `GRKR_LINEAR_TOKEN_PATH`), or set `GRKR_LINEAR_ACCESS_TOKEN` for the current run.
+5. Do not use OAuth app credentials as a personal API key. grkr sends only the derived token with Linear's required bearer authorization header, never reads `~/.linear/secret.txt` as an API token, and redacts token values from client errors.
 
 For fixture-backed selection, set `LINEAR_FIXTURE_PATH` to a JSON file containing Linear API response data. This slice returns shell-safe Linear issue metadata (`ISSUE_IDENTIFIER`, title, URL, state, priority, update time, job key, and task slug), but the supervisor only schedules executable work when a provider returns the GitHub `ISSUE_NUMBER` required by `grkr --issue`. Full Linear issue execution is still pending.
 
@@ -233,21 +235,71 @@ gleam test
 
 ### Linear OAuth Setup
 
-Live tests require Linear OAuth app credentials in `~/.linear/secret.txt`:
+Live tests require Linear OAuth app credentials and an access token obtained through the OAuth flow.
+
+#### Step 1: Create a Linear OAuth App
+
+1. Go to your Linear workspace settings
+2. Create a new OAuth application
+3. Note the `client_id` and `client_secret`
+
+#### Step 2: Store OAuth App Credentials
+
+Store the OAuth app credentials in `~/.linear/secret.txt` (or set `GRKR_LINEAR_SECRET_PATH`):
 
 ```text
-client_id: your_oauth_client_id
-client_secret: your_oauth_client_secret
+client_id=your_oauth_client_id
+client_secret=your_oauth_client_secret
 ```
 
-These are OAuth app credentials, not a personal API key. Complete the Linear app install/OAuth token exchange outside the repository, store the derived access token only in approved local secret storage, and expose it to the harness as `GRKR_LINEAR_ACCESS_TOKEN` for the current run. Do not commit the token or put it in tracked config.
+These are OAuth app credentials, not a personal API key. Never commit these values or use them directly as GraphQL tokens.
+
+#### Step 3: Complete OAuth Installation and Token Exchange
+
+The OAuth flow requires user interaction to authorize grkr:
+
+1. Construct the authorization URL using your client_id
+2. Open the URL in a browser and authorize the application
+3. Linear will redirect to your redirect URI with an authorization code
+4. Exchange the authorization code for an access token
+
+After completing the OAuth flow, store the access token in one of two ways:
+
+**Option A: Store in default token location** (recommended):
+```bash
+# Store the token at ~/.linear/token.txt
+mkdir -p ~/.linear
+umask 077
+printf '%s\n' "your_access_token_here" > ~/.linear/token.txt
+```
+
+**Option B: Store in custom location**:
+```bash
+# Set a custom token path
+export GRKR_LINEAR_TOKEN_PATH=/path/to/your/token.txt
+umask 077
+printf '%s\n' "your_access_token_here" > /path/to/your/token.txt
+```
+
+**Option C: Use environment variable** (for one-off runs):
+```bash
+export GRKR_LINEAR_ACCESS_TOKEN=your_access_token_here
+```
+
+The harness checks locations in this order:
+1. `GRKR_LINEAR_TOKEN_PATH` (or `~/.linear/token.txt` if not set)
+2. `GRKR_LINEAR_ACCESS_TOKEN` environment variable
+
+If no token is found, the harness exits with status 2 and reports the OAuth/access-token blocker without printing credential values.
+
+Do not commit the token or put it in tracked config.
 
 ### E2E Test Behavior
 
 When `GRKR_LINEAR_E2E=1` is set:
 - The wrapper delegates to `gleam run -m grkr/linear/e2e_main`.
 - The Gleam harness loads OAuth app credentials from `~/.linear/secret.txt` or `GRKR_LINEAR_SECRET_PATH`.
-- If `GRKR_LINEAR_ACCESS_TOKEN` is missing, the harness exits with status 2 and reports the OAuth/access-token blocker without printing credential values.
+- If no token is available from `GRKR_LINEAR_TOKEN_PATH`, `~/.linear/token.txt`, or `GRKR_LINEAR_ACCESS_TOKEN`, the harness exits with status 2 and reports the OAuth/access-token blocker without printing credential values.
 - If a derived token is provided, the harness performs live Linear checks through the Gleam Linear client path: it reads viewer/projects/teams, creates a clearly named temporary `grkr Linear live e2e temporary issue` in the first discovered team, reads that issue back, adds a `grkr:checkpoint:linear-live-e2e` checkpoint comment, and archives the temporary issue for cleanup. Output may include the temporary Linear issue URL and comment id, but never credentials or tokens.
 
 When `GRKR_LINEAR_E2E` is not set or equals `0`:

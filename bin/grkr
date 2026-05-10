@@ -33,9 +33,11 @@ usage() {
   exit "$exit_code"
 }
 
-if [ "${1:-}" = "--help" ]; then
-  usage 0
-fi
+case "${1:-}" in
+  --help|-h|help)
+    usage 0
+    ;;
+esac
 
 mkdir -p "${HOME:-.}/.grkr/logs"
 LOGFILE="${HOME:-.}/.grkr/logs/grkr-$(date +%Y%m%d-%H%M%S).log"
@@ -55,7 +57,6 @@ if command -v tee >/dev/null 2>&1; then
 else
   exec >>"$LOGFILE" 2>&1
 fi
-
 MAX_FILE_LINES=1000
 MAX_PR_BODY_CHARS=60000
 VALIDATION_OK=0

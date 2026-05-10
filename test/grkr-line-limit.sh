@@ -1,12 +1,14 @@
 #!/bin/bash
 set -euo pipefail
 
+repo_root=$(pwd)
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-line-limit.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
 cp bin/grkr "$tmpdir/grkr.sh"
 cp bin/grkr-issue-workflow.sh "$tmpdir/grkr-issue-workflow.sh"
 cp bin/grkr-project-status.sh "$tmpdir/grkr-project-status.sh"
+cp bin/grkr-task-slug.sh "$tmpdir/grkr-task-slug.sh"
 cp bin/grkr-templates.sh "$tmpdir/grkr-templates.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
 chmod +x "$tmpdir/grkr.sh"
@@ -131,7 +133,7 @@ output_file="$tmpdir/output.log"
 task_dir="$tmpdir/.grkr/tasks/issue-1-test-issue"
 (
   cd "$tmpdir"
-  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" bash "$tmpdir/grkr.sh" --project 1 >"$output_file" 2>&1 &
+  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_GLEAM_PROJECT_ROOT="$repo_root" bash "$tmpdir/grkr.sh" --project 1 >"$output_file" 2>&1 &
   pid=$!
 
   for _ in 1 2 3 4 5 6; do

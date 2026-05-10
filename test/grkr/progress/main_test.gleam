@@ -198,8 +198,65 @@ pub fn cli_plan_linear_mutation_test() {
 
   case result {
     Ok(mutation) -> {
-  string.contains(mutation.query, "commentCreate")
-  |> should.be_true()
+      string.contains(mutation.query, "commentCreate")
+      |> should.be_true()
+    }
+    Error(_) -> should.fail()
+  }
+}
+
+pub fn cli_plan_linear_comment_mutation_alias_test() {
+  let result =
+    main.cli_plan_linear_comment_mutation(
+      "LIN-556",
+      "Alias body",
+      "implementation",
+      "issue-556-mutation",
+    )
+
+  case result {
+    Ok(mutation) -> {
+      string.contains(mutation.variables_json, "grkr:checkpoint")
+      |> should.be_true()
+
+      mutation.idempotency_key
+      |> should.equal("grkr-checkpoint-implementation-issue-556-mutation")
+    }
+    Error(_) -> should.fail()
+  }
+}
+
+pub fn cli_plan_linear_state_mutation_test() {
+  let result = main.cli_plan_linear_state_mutation("LIN-557", "state-123")
+
+  case result {
+    Ok(mutation) -> {
+      string.contains(mutation.query, "issueUpdate")
+      |> should.be_true()
+
+      string.contains(mutation.variables_json, "state-123")
+      |> should.be_true()
+    }
+    Error(_) -> should.fail()
+  }
+}
+
+pub fn cli_format_mutation_debug_redacts_variables_test() {
+  let result =
+    main.cli_format_mutation_debug(
+      "LIN-558",
+      "checkpoint body that should not be echoed",
+      "plan",
+      "issue-558-debug",
+    )
+
+  case result {
+    Ok(debug) -> {
+      string.contains(debug, "[redacted]")
+      |> should.be_true()
+
+      string.contains(debug, "checkpoint body that should not be echoed")
+      |> should.be_false()
     }
     Error(_) -> should.fail()
   }

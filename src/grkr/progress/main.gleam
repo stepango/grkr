@@ -201,3 +201,31 @@ pub fn cli_plan_linear_mutation(
   use validated_stage <- result.try(validate_checkpoint_stage(stage))
   Ok(plan_linear_comment_mutation(linear_issue_id, body, validated_stage, task_slug))
 }
+
+pub fn cli_plan_linear_comment_mutation(
+  linear_issue_id: String,
+  body: String,
+  stage: String,
+  task_slug: String,
+) -> Result(linear_mutation.MutationRequest, String) {
+  use validated_stage <- result.try(validate_checkpoint_stage(stage))
+  Ok(plan_linear_comment_mutation(linear_issue_id, body, validated_stage, task_slug))
+}
+
+pub fn cli_plan_linear_state_mutation(
+  linear_issue_id: String,
+  state_id: String,
+) -> Result(linear_mutation.MutationRequest, String) {
+  Ok(plan_linear_state_mutation(linear_issue_id, state_id))
+}
+
+pub fn cli_format_mutation_debug(
+  linear_issue_id: String,
+  body: String,
+  stage: String,
+  task_slug: String,
+) -> Result(String, String) {
+  use validated_stage <- result.try(validate_checkpoint_stage(stage))
+  let mutation = plan_linear_comment_mutation(linear_issue_id, body, validated_stage, task_slug)
+  Ok(format_mutation_debug(mutation))
+}

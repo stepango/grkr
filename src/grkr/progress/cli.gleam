@@ -1,5 +1,6 @@
 import gleam/io
 import grkr/progress/main
+import grkr/progress/linear_mutation
 
 pub fn main() -> Nil {
   case argv() {
@@ -12,12 +13,30 @@ pub fn main() -> Nil {
       io.print(main.cli_render_refusal(task_slug, reason_class, reasoning))
     ["render-pr-summary", task_slug, pr_url, branch_url] ->
       io.print(main.cli_render_pr_summary(task_slug, pr_url, branch_url))
+    ["linear-state", stage] -> emit_linear_state(stage)
+    ["linear-comment-mutation", issue_id, body, stage, task_slug] ->
+      emit_mutation(main.cli_plan_linear_comment_mutation(issue_id, body, stage, task_slug))
+    ["linear-state-mutation", issue_id, state_id] ->
+      emit_mutation(main.cli_plan_linear_state_mutation(issue_id, state_id))
+    ["check-token"] -> emit_token_status()
+    ["mutation-debug", issue_id, body, stage, task_slug] ->
+      emit_debug(main.cli_format_mutation_debug(issue_id, body, stage, task_slug))
     _ -> {
-      io.println("Usage: gleam run -m grkr/progress/cli -- marker <stage> <task-slug>")
-      io.println("       gleam run -m grkr/progress/cli -- render-checkpoint <stage> <task-slug> <body>")
-      io.println("       gleam run -m grkr/progress/cli -- render-checkpoint-with-pr <stage> <task-slug> <body> <pr-url>")
-      io.println("       gleam run -m grkr/progress/cli -- render-refusal <task-slug> <reason-class> <reasoning>")
-      io.println("       gleam run -m grkr/progress/cli -- render-pr-summary <task-slug> <pr-url> <branch-url>")
+      io.println("Usage: gleam run -m grkr/progress/cli -- <command> [args...]")
+      io.println("")
+      io.println("Checkpoint commands:")
+      io.println("  marker <stage> <task-slug>                                    Generate checkpoint marker")
+      io.println("  render-checkpoint <stage> <task-slug> <body>                  Render checkpoint")
+      io.println("  render-checkpoint-with-pr <stage> <task-slug> <body> <pr-url> Render checkpoint with PR")
+      io.println("  render-refusal <task-slug> <reason-class> <reasoning>         Render refusal checkpoint")
+      io.println("  render-pr-summary <task-slug> <pr-url> <branch-url>           Render PR summary")
+      io.println("")
+      io.println("Linear integration commands:")
+      io.println("  linear-state <stage>                                          Show Linear state for stage")
+      io.println("  linear-comment-mutation <issue-id> <body> <stage> <task-slug> Show Linear comment mutation")
+      io.println("  linear-state-mutation <issue-id> <state-id>                   Show Linear state mutation")
+      io.println("  check-token                                                   Check Linear token availability")
+      io.println("  mutation-debug <issue-id> <body> <stage> <task-slug>          Show mutation debug info")
       exit(2)
     }
   }
@@ -43,8 +62,47 @@ fn emit_result(result: Result(String, String)) -> Nil {
   }
 }
 
+fn emit_linear_state(stage: String) -> Nil {
+  emit_result(main.cli_plan_linear_state(stage, env_get))
+}
+
+fn emit_mutation(result: Result(linear_mutation.MutationRequest, String)) -> Nil {
+  case result {
+    Ok(request) -> {
+      io.println(request.query)
+      io.println(request.variables_json)
+      io.println(request.idempotency_key)
+    }
+    Error(message) -> {
+      io.println("progress cli error: " <> message)
+      exit(1)
+    }
+  }
+}
+
+fn emit_token_status() -> Nil {
+  let status = main.check_linear_token_availability(fn() {
+    case env_get("GRKR_LINEAR_ACCESS_TOKEN") {
+      "" -> Error(Nil)
+      token -> Ok(token)
+    }
+  })
+  case status {
+    linear_mutation.TokenAvailable -> io.println("Token available")
+    linear_mutation.TokenUnavailable -> io.println("Token unavailable")
+    linear_mutation.TokenInvalid -> io.println("Token invalid")
+  }
+}
+
+fn emit_debug(result: Result(String, String)) -> Nil {
+  emit_result(result)
+}
+
 @external(javascript, "../progress/cli_ffi.mjs", "argv")
 fn argv() -> List(String)
+
+@external(javascript, "../progress/cli_ffi.mjs", "env_get")
+fn env_get(key: String) -> String
 
 @external(javascript, "process", "exit")
 fn exit(code: Int) -> Nil

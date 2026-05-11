@@ -155,7 +155,7 @@ LINEAR_TODO_STATE="Todo"
 Linear credential setup:
 1. Create or install a Linear OAuth app for grkr.
 2. Store the OAuth app credentials in `~/.linear/secret.txt` as `client_id=...` and `client_secret=...` (`:` separators are also accepted).
-3. Complete the Linear OAuth installation/token exchange flow to obtain an access token.
+3. Use the direct client_credentials grant (no browser interaction) to obtain an access token: curl -X POST https://api.linear.app/oauth/token -d "grant_type=client_credentials" -d "client_id=..." -d "client_secret=..." -d "scope=read write".
 4. Store the access token at `~/.linear/token.txt` (or set `GRKR_LINEAR_TOKEN_PATH`), or set `GRKR_LINEAR_ACCESS_TOKEN` for the current run.
 5. Do not use OAuth app credentials as a personal API key. grkr sends only the derived token with Linear's required bearer authorization header, never reads `~/.linear/secret.txt` as an API token, and redacts token values from client errors.
 
@@ -256,10 +256,6 @@ These are OAuth app credentials, not a personal API key. Never commit these valu
 
 #### Step 3: Complete OAuth Installation and Token Exchange
 
-The OAuth flow requires user interaction to authorize grkr:
-
-1. Construct the authorization URL using your client_id
-2. Open the URL in a browser and authorize the application
 3. Linear will redirect to your redirect URI with an authorization code
 4. Exchange the authorization code for an access token
 

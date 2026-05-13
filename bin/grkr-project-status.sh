@@ -1,39 +1,58 @@
 #!/bin/bash
 
-project_status_updates_enabled() {
-  case "${ENABLE_PROJECT_STATUS_UPDATES:-true}" in
-    false|False|FALSE|0|no|No|NO)
+# GitHub Project status management functions backed by Gleam
+# This script provides shell functions that route to the Gleam CLI
+
+# Determine the project root for running Gleam commands
+_grkr_project_root() {
+  echo "${GRKR_GLEAM_PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/..}"
+}
+
+# Run the Gleam project status CLI
+_grkr_run_cli() {
+  local project_root
+  project_root=$(_grkr_project_root)
+
+  if [ -f "$project_root/gleam.toml" ]; then
+    (cd "$project_root" && gleam run -m grkr/project_status_cli -- "$@")
+    return $?
+  fi
+
+  # Fallback if Gleam project is not available (for development)
+  case "${1:-}" in
+    check-enabled)
+      case "${ENABLE_PROJECT_STATUS_UPDATES:-true}" in
+        false|False|FALSE|0|no|No|NO) echo "disabled" ;;
+        *) echo "enabled" ;;
+      esac
+      ;;
+    normalize)
+      echo "${2:-}" | jq -Rr 'gsub("^\\s+|\\s+$"; "") | gsub("\\s+"; " ") | ascii_downcase'
+      ;;
+    *)
       return 1
       ;;
   esac
-  return 0
+}
+
+project_status_updates_enabled() {
+  local result
+  result=$(_grkr_run_cli check-enabled)
+  case "$result" in
+    enabled) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 normalize_project_option_name() {
-  printf '%s' "${1:-}" | jq -Rr '
-    gsub("^\\s+|\\s+$"; "")
-    | gsub("\\s+"; " ")
-    | ascii_downcase
-  '
+  _grkr_run_cli normalize "${1:-}"
 }
 
 issue_project_status_name() {
   local issue_json=$1
-  local project_status
+  local project_number=${PROJECT_NUMBER:-}
 
-  project_status=$(printf '%s' "$issue_json" | jq -r --arg project_number "$PROJECT_NUMBER" '
-    (.projectItems // [] | if type == "array" then . else [] end
-      | map(select(((.project.number // .number // "") | tostring) == $project_number))
-      | .[0].status.name) // empty
-  ')
-  if [ -n "$project_status" ]; then
-    printf '%s\n' "$project_status"
-    return 0
-  fi
-
-  printf '%s' "$issue_json" | jq -r '
-    (.projectItems // [] | if type == "array" then . else [] end | .[0].status.name) // empty
-  '
+  _grkr_run_cli extract-status-name "$issue_json" "$project_number"
 }
 
 issue_project_item_id() {
@@ -42,32 +61,19 @@ issue_project_item_id() {
   local item_id
   local items_json
 
-  item_id=$(printf '%s' "$issue_json" | jq -r --arg project_number "$PROJECT_NUMBER" '
-    (.projectItems // [] | if type == "array" then . else [] end
-      | map(select(((.project.number // .number // "") | tostring) == $project_number))
-      | .[0].id) // empty
-  ')
+  # First try to extract from issue JSON
+  item_id=$(_grkr_run_cli extract-item-id "$issue_json" "${PROJECT_NUMBER:-}")
+
   if [ -n "$item_id" ]; then
     printf '%s\n' "$item_id"
     return 0
   fi
 
-  item_id=$(printf '%s' "$issue_json" | jq -r '
-    (.projectItems // [] | if type == "array" then . else [] end | .[0].id) // empty
-  ')
-  if [ -n "$item_id" ]; then
-    printf '%s\n' "$item_id"
-    return 0
-  fi
-
+  # Fallback: query item list via gh and search
   items_json=$(gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit 1000 --format json 2>/dev/null || true)
   [ -n "$items_json" ] || return 0
 
-  printf '%s' "$items_json" | jq -r --arg issue "$issue" '
-    ((.items // .) | if type == "array" then . else [] end
-      | map(select(((.content.number // .content.issue.number // .issue.number // .number // "") | tostring) == $issue))
-      | .[0].id) // empty
-  '
+  _grkr_run_cli find-item-id "$items_json" "$issue"
 }
 
 move_issue_to_project_status() {
@@ -77,17 +83,17 @@ move_issue_to_project_status() {
   local missing_item_message=$4
   local already_message=$5
   local moved_message=$6
-  local item_id
-  local current_status
   local project_json
   local field_json
-  local project_id
-  local field_id
-  local option_id
+  local edit_output
+  local item_id
+  local current_status
   local normalized_current_status
   local normalized_target_status
+  local project_id
   local option_row
-  local edit_output
+  local field_id
+  local option_id
 
   if ! project_status_updates_enabled; then
     return 0
@@ -107,11 +113,13 @@ move_issue_to_project_status() {
     return 0
   fi
 
+  # Load project data via gh
   project_json=$(gh project view "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --format json 2>&1) || {
     echo "❌ Unable to load project #$PROJECT_NUMBER before starting issue #$issue: $project_json"
     return 1
   }
-  project_id=$(printf '%s' "$project_json" | jq -r '.id // .project.id // empty')
+
+  project_id=$(_grkr_run_cli project-id "$project_json")
   if [ -z "$project_id" ]; then
     echo "❌ Unable to determine project id for project #$PROJECT_NUMBER."
     return 1
@@ -121,30 +129,10 @@ move_issue_to_project_status() {
     echo "❌ Unable to load project fields for project #$PROJECT_NUMBER: $field_json"
     return 1
   }
-  field_id=$(printf '%s' "$field_json" | jq -r --arg field_name "$STATUS_FIELD_NAME" '
-    ((if type == "object" and has("fields") then .fields else . end) | if type == "array" then . else [] end
-      | map(select(.name == $field_name))
-      | .[0].id) // empty
-  ')
-  option_row=$(printf '%s' "$field_json" | jq -r --arg field_name "$STATUS_FIELD_NAME" --arg option_name "$target_status" '
-    def normalize:
-      gsub("^\\s+|\\s+$"; "")
-      | gsub("\\s+"; " ")
-      | ascii_downcase;
-    (((if type == "object" and has("fields") then .fields else . end) | if type == "array" then . else [] end
-      | map(select(.name == $field_name))
-      | .[0].options // []) as $options
-      | (($options | map(select(.name == $option_name)) | .[0])
-        // ($options | map(select((.name | normalize) == ($option_name | normalize))) | .[0])
-        // empty)
-      | [.id // "", .name // ""] | @tsv)
-  ')
+
+  option_row=$(_grkr_run_cli resolve-option "$field_json" "${STATUS_FIELD_NAME:-Status}" "$target_status")
   if [ -n "$option_row" ]; then
-    IFS="$(printf '\t')" read -r option_id _ <<EOF
-$option_row
-EOF
-  else
-    option_id=""
+    IFS=$'\t' read -r field_id option_id <<<"$option_row"
   fi
 
   if [ -z "$field_id" ] || [ -z "$option_id" ]; then
@@ -158,6 +146,7 @@ EOF
   }
 
   echo "$moved_message"
+  return 0
 }
 
 move_issue_to_in_progress() {

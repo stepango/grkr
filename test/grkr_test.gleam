@@ -8,6 +8,12 @@ import grkr/progress/checkpoint_stage_test
 import grkr/progress/linear_mutation_test
 import grkr/progress/linear_state_test
 import grkr/progress/main_test as progress_main_test
+import grkr/project_status/config_test as project_status_config_test
+import grkr/project_status/extraction_test
+import grkr/project_status/normalization_test
+import grkr/project_status/planning_test
+import grkr/project_status/resolution_test
+import grkr/project_status/types_test as project_status_types_test
 import grkr/resolve_pr/codex_test
 import grkr/resolve_pr/types_test
 import grkr/sync_main/main_test
@@ -26,4 +32,10 @@ pub fn main() {
   types_test.main()
   codex_test.main()
   main_test.main()
+  project_status_types_test.main()
+  project_status_config_test.main()
+  normalization_test.main()
+  extraction_test.main()
+  resolution_test.main()
+  planning_test.main()
 }

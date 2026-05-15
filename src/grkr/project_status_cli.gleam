@@ -33,6 +33,8 @@ pub fn main() -> Nil {
       resolve_option(fields_json, field_name, option_name)
     ["plan-move", issue_json, project_json, fields_json, target_status] ->
       plan_move(issue_json, project_json, fields_json, target_status)
+    ["plan-move-with-lookup", issue_json, project_json, fields_json, items_json, target_status] ->
+      plan_move_with_lookup(issue_json, project_json, fields_json, items_json, target_status)
     _ -> {
       io.println(
         "Usage: gleam run -m grkr/project_status_cli -- <subcommand> ...",
@@ -113,6 +115,42 @@ fn plan_move(
                     metadata,
                     fields,
                     issue_json,
+                    target,
+                  )
+                  |> output_move_plan
+                }
+              }
+          }
+      }
+  }
+}
+
+fn plan_move_with_lookup(
+  issue_json: String,
+  project_json: String,
+  fields_json: String,
+  items_json: String,
+  target_status: String,
+) -> Nil {
+  case project_config() {
+    Error(_) -> io.println("no_action\tresolution_failed")
+    Ok(status_config) ->
+      case status_config.updates_enabled {
+        False -> io.println("no_action\tdisabled")
+        True ->
+          case extraction.extract_project_metadata(project_json) {
+            Error(_) -> io.println("no_action\tresolution_failed")
+            Ok(metadata) ->
+              case resolution.parse_project_fields(fields_json) {
+                Error(_) -> io.println("no_action\tresolution_failed")
+                Ok(fields) -> {
+                  let target = parse_target_status(target_status, status_config)
+                  planning.plan_status_update_with_item_lookup(
+                    status_config,
+                    metadata,
+                    fields,
+                    issue_json,
+                    items_json,
                     target,
                   )
                   |> output_move_plan

@@ -83,70 +83,67 @@ move_issue_to_project_status() {
   local missing_item_message=$4
   local already_message=$5
   local moved_message=$6
-  local project_json
-  local field_json
-  local edit_output
-  local item_id
-  local current_status
-  local normalized_current_status
-  local normalized_target_status
-  local project_id
-  local option_row
-  local field_id
-  local option_id
 
   if ! project_status_updates_enabled; then
     return 0
   fi
 
-  item_id=$(issue_project_item_id "$issue" "$issue_json")
-  if [ -z "$item_id" ]; then
-    echo "$missing_item_message"
-    return 0
-  fi
-
-  current_status=$(issue_project_status_name "$issue_json")
-  normalized_current_status=$(normalize_project_option_name "$current_status")
-  normalized_target_status=$(normalize_project_option_name "$target_status")
-  if [ -n "$normalized_current_status" ] && [ "$normalized_current_status" = "$normalized_target_status" ]; then
-    echo "$already_message"
-    return 0
-  fi
-
-  # Load project data via gh
+  # Fetch required JSONs via gh (thin host adapter only)
+  local project_json
   project_json=$(gh project view "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --format json 2>&1) || {
-    echo "❌ Unable to load project #$PROJECT_NUMBER before starting issue #$issue: $project_json"
+    echo "❌ Unable to load project #$PROJECT_NUMBER before starting issue #$issue: $project_json" >&2
     return 1
   }
 
-  project_id=$(_grkr_run_cli project-id "$project_json")
-  if [ -z "$project_id" ]; then
-    echo "❌ Unable to determine project id for project #$PROJECT_NUMBER."
-    return 1
-  fi
-
-  field_json=$(gh project field-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --format json 2>&1) || {
-    echo "❌ Unable to load project fields for project #$PROJECT_NUMBER: $field_json"
+  local fields_json
+  fields_json=$(gh project field-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --format json 2>&1) || {
+    echo "❌ Unable to load project fields for project #$PROJECT_NUMBER: $fields_json" >&2
     return 1
   }
 
-  option_row=$(_grkr_run_cli resolve-option "$field_json" "${STATUS_FIELD_NAME:-Status}" "$target_status")
-  if [ -n "$option_row" ]; then
-    IFS=$'\t' read -r field_id option_id <<<"$option_row"
-  fi
+  local items_json
+  items_json=$(gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit 1000 --format json 2>/dev/null || true)
 
-  if [ -z "$field_id" ] || [ -z "$option_id" ]; then
-    echo "❌ Unable to resolve the \"$STATUS_FIELD_NAME\" option \"$target_status\" for project #$PROJECT_NUMBER."
-    return 1
-  fi
+  # Delegate full planning, extraction, normalization, resolution, and decision to Gleam production logic
+  local plan_result
+  plan_result=$(_grkr_run_cli plan-move-with-lookup "$issue_json" "$project_json" "$fields_json" "$items_json" "$target_status")
 
-  edit_output=$(gh project item-edit --id "$item_id" --field-id "$field_id" --project-id "$project_id" --single-select-option-id "$option_id" 2>&1) || {
-    echo "❌ Unable to move issue #$issue to $target_status: $edit_output"
-    return 1
-  }
-
-  echo "$moved_message"
-  return 0
+  case "$plan_result" in
+    move\t*)
+      local item_id field_id option_id project_id option_name
+      IFS=$'\t' read -r _ item_id field_id option_id project_id option_name <<<"$plan_result"
+      if [ -z "$item_id" ] || [ -z "$field_id" ] || [ -z "$option_id" ] || [ -z "$project_id" ]; then
+        echo "❌ Unable to resolve the \"$STATUS_FIELD_NAME\" option \"$target_status\" for project #$PROJECT_NUMBER." >&2
+        return 1
+      fi
+      local edit_output
+      edit_output=$(gh project item-edit --id "$item_id" --field-id "$field_id" --project-id "$project_id" --single-select-option-id "$option_id" 2>&1) || {
+        echo "❌ Unable to move issue #$issue to $target_status: $edit_output" >&2
+        return 1
+      }
+      echo "$moved_message"
+      return 0
+      ;;
+    no_action\tdisabled)
+      return 0
+      ;;
+    no_action\titem_missing)
+      echo "$missing_item_message"
+      return 0
+      ;;
+    no_action\talready)
+      echo "$already_message"
+      return 0
+      ;;
+    no_action\tresolution_failed|no_action\t*)
+      echo "❌ Unable to resolve the \"$STATUS_FIELD_NAME\" option \"$target_status\" for project #$PROJECT_NUMBER." >&2
+      return 1
+      ;;
+    *)
+      echo "❌ Unexpected plan result from Gleam: $plan_result" >&2
+      return 1
+      ;;
+  esac
 }
 
 move_issue_to_in_progress() {

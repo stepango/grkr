@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$SCRIPT_DIR/doctor.sh"
 . "$SCRIPT_DIR/grkr-task-slug.sh"
+. "$SCRIPT_DIR/grkr-project-status.sh"
 
 doctor_init
 

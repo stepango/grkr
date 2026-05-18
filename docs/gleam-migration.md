@@ -1,0 +1,9 @@
+# Gleam v2 Migration Status
+
+**Current implementation status:** the checkpointed issue flow now runs research, plan, a decision gate, refusal handling, isolated implementation in a dedicated issue worktree, test, and completion. The supervisor now syncs main through a Gleam-backed worker, recovers stale jobs, selects the next project issue, and actually schedules issue execution in the background. PR conflict resolution is also implemented via Gleam with a shell wrapper interface. Supervisor research + synthesis complete (T1: full bin/robot-main.sh 519LOC logic extraction + T2: spec/parts + T3: Gleam patterns); design finalized (t_e396dd70: exact 10-module Gleam structure + API + FFI + thin bin/robot-main.sh wrapper in supervisor-design-final.md, reviewed/approved in t_66b79e38); Gleam supervisor implementation in progress via child cards (t_f5d39df3 main/loop, t_3b98efb4 recovery/locking/state, t_42d616ef test+docs). `@:robot:` comment handling and the remaining worker worktree flows are still planned follow-up work.
+
+Detailed historical research summaries from the migration research phase (refusal-research-summary.md, supervisor-research-summary.md, refusal-synthesis.md) have been archived under `.grkr/archive/` (see git history for original content if needed; key findings incorporated into `spec/parts/` and `src/grkr/` implementation). Supervisor synthesis complete: `supervisor-synthesis.md` (consolidates T1+T2+T3, concrete Gleam module proposal for src/grkr/supervisor/, thin wrapper, test strategy) now in workspace root for design/implementation handoff. Supervisor design finalized in `supervisor-design-final.md`.
+
+See `spec/parts/` (especially supervisor, refusal, progress sections) and `src/grkr/` for current Gleam modules.
+
+This document can be expanded with migration notes, decisions, and progress as the v2 work continues.

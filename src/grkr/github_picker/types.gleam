@@ -1,4 +1,5 @@
 import gleam/int
+import gleam/string
 
 /// Supported priority field modes in GitHub Projects
 pub type PriorityMode {

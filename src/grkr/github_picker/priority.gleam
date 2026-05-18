@@ -1,10 +1,9 @@
-import gleam/int
 import gleam/list
 import gleam/result
 import gleam/string
 
 import grkr/github_picker/types.{
-  type PriorityMode, type PriorityValue, NoPriority, Number, NumberValue,
+  type PriorityMode, type PriorityValue, Number, NumberValue,
   SingleSelect, SingleSelectValue,
 }
 

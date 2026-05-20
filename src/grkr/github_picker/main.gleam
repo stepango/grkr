@@ -1,11 +1,9 @@
 import gleam/int
-import gleam/list
 import gleam/string
 import grkr/github_picker/config
 import grkr/github_picker/decoder
 import grkr/github_picker/selector
 import grkr/github_picker/types
-
 @external(javascript, "../github_picker/cli_ffi.mjs", "argv")
 fn argv() -> List(String)
 
@@ -17,14 +15,14 @@ fn exit(code: Int) -> Nil
 
 fn shell_quote(value: String) -> String {
   "\""
-  <> {
+    <> {
     value
     |> string.replace("\\", "\\\\")
     |> string.replace("\"", "\\\"")
     |> string.replace("$", "\\$")
     |> string.replace("`", "\\`")
   }
-  <> "\""
+    <> "\""
 }
 
 fn emit(key: String, value: String) {
@@ -55,9 +53,9 @@ pub fn main() {
         }
         Ok(items) -> {
           case selector.pick(items, cfg) {
-            Error(se) -> {
-              emit_error(types.provider_error_to_string(types.Selection(se)))
-              exit(1)
+            Error(_) -> {
+              emit("SELECTED", "0")
+              exit(0)
             }
             Ok(sel) -> {
               emit("SELECTED", "1")

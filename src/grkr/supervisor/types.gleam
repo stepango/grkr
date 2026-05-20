@@ -119,8 +119,8 @@ pub type SupervisorConfig {
     validation_ok: Bool,
     max_ticks: Option(Int),
     fail_phases: List(String),
-    project_v2_owner: String,
-    project_v2_number: Int,
+    project_owner: String,
+    project_number: Int,
   )
 }
 
@@ -134,6 +134,7 @@ pub type SupervisorError {
   PhaseFailed(phase: String, code: Int)
   Parse(String)
   SpawnFailed(String)
+  InvalidPhaseName(String)
   Other(String)
 }
 
@@ -147,6 +148,7 @@ pub fn supervisor_error_to_string(e: SupervisorError) -> String {
     PhaseFailed(p, c) -> "phase_failed:" <> p <> ":" <> int.to_string(c)
     Parse(msg) -> "parse:" <> msg
     SpawnFailed(msg) -> "spawn_failed:" <> msg
+    InvalidPhaseName(name) -> "invalid phase name: " <> name
     Other(msg) -> "other:" <> msg
   }
 }

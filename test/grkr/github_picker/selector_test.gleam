@@ -7,15 +7,14 @@ import gleeunit/should
 import grkr/github_picker/config
 import grkr/github_picker/selector
 import grkr/github_picker/types.{
-  type Candidate,
   type GitHubPickerConfig,
-  type IssueContent,
-  type PriorityMode,
-  type PriorityValue,
   type ProjectItem,
+  GitHubPickerConfig,
+  IssueContent,
   NoPriority,
   Number,
   NumberValue,
+  ProjectItem,
   SingleSelect,
   SingleSelectValue,
 }
@@ -91,7 +90,6 @@ pub fn compute_priority_sort_number_test() {
 
 pub fn compute_priority_sort_single_select_test() {
   let order = ["P0", "P1", "P2"]
-  let cfg = base_cfg(SingleSelect, order)
 
   selector.compute_priority_sort(SingleSelectValue("P1"), SingleSelect, order)
   |> should.equal(1)

@@ -6,6 +6,7 @@ import grkr/github_picker/types.{
   type ConfigError, type GitHubPickerConfig, type PriorityMode,
   GitHubPickerConfig, InvalidProjectNumber, MissingRequired,
 }
+import grkr/github_picker/priority
 
 @external(javascript, "../github_picker/env.mjs", "getEnv")
 fn get_env(name: String) -> String
@@ -41,7 +42,7 @@ pub fn load() -> Result(GitHubPickerConfig, ConfigError) {
                     get_env_with_default("PRIORITY_FIELD_NAME", "Priority")
 
                   let priority_mode_str = get_env("PRIORITY_MODE")
-                  let priority_mode = types.priority_mode_from_string(priority_mode_str)
+                  let priority_mode = priority.priority_mode_from_string(priority_mode_str)
 
                   let grkr_base =
                     get_env_with_default(

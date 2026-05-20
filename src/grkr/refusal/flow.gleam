@@ -8,8 +8,8 @@ import grkr/refusal/checkpoint
 import grkr/refusal/config
 import grkr/refusal/ffi
 import grkr/refusal/types.{
-  type RefusalConfig, type RefusalError, type RefusalResult, type RefusalClass,
-  OtherError, ProjectMoveFailed,
+  type RefusalConfig, type RefusalError, type RefusalResult,
+  OtherError, Other, normalize_refusal_class, to_string, RefusalResult,
 }
 import grkr/task_slug
 

@@ -1,21 +1,12 @@
 //// recovery.gleam
 //// Dead job recovery and stale lock purge for the GRKR supervisor (v2 Gleam port).
-//// Called at loop start (loop_recovery) and reap phase (reap_finished_jobs),
-//// plus periodic purge in cleanup.
-////
-//// Port of recover_dead_jobs() and purge_stale_lock_files() from bin/robot-main.sh
-//// Uses PID liveness (ffi.is_alive), lock_name fields in active_jobs.json,
-//// and check_stale_lock for safe orphan removal.
-////
-//// Logs to main/loop + per-job logs using same format as shell.
-//// Matches spec/parts/33-locking-and-concurrency.md and 35-failure-handling.md
-//// (recovery of dead PIDs, release of their locks, no hot-retry on config errs).
+//// Port of recover_dead_jobs() + purge_stale_lock_files() from bin/robot-main.sh:185-259
+//// Uses is_alive(PID), check_stale_lock (flock -n), atomic JSON state, structured logs.
+//// Follows design-final.md, spec/parts/33+35, AGENTS.md (small file, exact contracts).
 
 import gleam/dict
 import gleam/int
 import gleam/list
-import gleam/option.{None, Some}
-import gleam/result
 import gleam/string
 
 import grkr/supervisor/ffi
@@ -23,12 +14,10 @@ import grkr/supervisor/lock
 import grkr/supervisor/state
 import grkr/supervisor/types as t
 
-/// Recover jobs whose recorded PID is no longer alive (dead supervisor/worker).
-/// Unlinks their .lock file (using lock_name or derived from job_key),
-/// removes from active_jobs.json (atomic), logs WARN per stale job.
-/// If no stales after scan, logs INFO stale_jobs=0 (only if had entries).
-/// Returns count of recovered jobs, or Error on unrecoverable state read failure.
-/// Context phase is used for log "phase=..." (e.g. "loop_recovery", "reap_finished_jobs").
+/// Recover dead PIDs from active_jobs.json, unlink their locks, remove from state (atomic write first).
+/// Logs per-stale "stale_job pid=... recovered=true" (WARN) + zero case (INFO).
+/// Returns recovered count or Error on state read/write fail.
+/// Matches shell exactly (kill -0 equiv via is_alive, mktemp+mv atomic, jq del).
 pub fn recover_dead_jobs(
   config: t.SupervisorConfig,
   context_phase: String,
@@ -53,63 +42,56 @@ pub fn recover_dead_jobs(
               }
             })
           let count = list.length(stales)
-
-          // Unlink locks for stales first (safe because PID dead)
-          list.each(stales, fn(pair) {
-            let #(jk_str, aj) = pair
-            let ln =
-              case aj.lock_name == "" {
-                True ->
-                  case t.job_key_from_string(jk_str) {
-                    Ok(k) -> t.job_key_lock_name(k)
-                    Error(_) -> jk_str
-                  }
-                False -> aj.lock_name
-              }
-            let lp = lock.lock_path(config.locks_dir, ln)
-            let _ = ffi.unlink_file(lp)
-            Nil
+          let stale_keys = list.map(stales, fn(p) {
+            let #(k, _) = p
+            k
           })
-
-          // Build remaining and write atomically
-          let stale_keys = list.map(stales, fn(p) { let #(k, _) = p  k })
           let remaining =
             dict.filter(jobs, fn(k, _v) { !list.contains(stale_keys, k) })
-          let write_res = state.write_active_jobs_atomic(config.active_jobs_file, remaining)
 
-          case write_res {
+          // Write state FIRST (atomic), only then unlink locks (prevents inconsistent state)
+          case state.write_active_jobs_atomic(config.active_jobs_file, remaining) {
+            Error(_) -> {
+              log_error(config, context_phase, "-", entity, "active_jobs_update_failed=true")
+              Error(t.Io("active_jobs_update_failed"))
+            }
             Ok(_) -> {
-              // Log successful recoveries (per-job)
+              // Safe to unlink now
               list.each(stales, fn(pair) {
                 let #(jk_str, aj) = pair
+                let ln =
+                  case aj.lock_name == "" {
+                    True ->
+                      case t.job_key_from_string(jk_str) {
+                        Ok(k) -> t.job_key_lock_name(k)
+                        Error(_) -> jk_str
+                      }
+                    False -> aj.lock_name
+                  }
+                let lp = lock.lock_path(config.locks_dir, ln)
+                let _ = ffi.unlink_file(lp)
                 let entity2 = aj.entity_type <> "/" <> aj.entity_id
                 let msg = "stale_job pid=" <> int.to_string(aj.pid) <> " recovered=true"
                 log_warn(config, context_phase, jk_str, entity2, msg)
+                Nil
               })
-            }
-            Error(_) -> {
-              log_error(config, context_phase, "-", entity, "active_jobs_update_failed=true")
+
+              case count {
+                0 -> log_info(config, context_phase, "-", entity, "stale_jobs=0")
+                _ -> Nil
+              }
+              Ok(count)
             }
           }
-
-          // If no stales were found (but had entries), log the zero case
-          case count {
-            0 -> log_info(config, context_phase, "-", entity, "stale_jobs=0")
-            _ -> Nil
-          }
-
-          Ok(count)
         }
       }
     }
   }
 }
 
-/// Purge .lock files under locks/ that match pr-*/issue-*/comment-* but are
-/// NOT referenced by any lock_name in current active_jobs.json.
-/// Uses check_stale_lock (brief flock -n) before rm to avoid races.
-/// Logs INFO purged_stale_locks=N to cleanup phase.
-/// Errors (and logs) only on active_jobs parse failure.
+/// Purge unreferenced pr-*.lock / issue-*.lock / comment-*.lock under locks_dir.
+/// Uses check_stale_lock (flock -n) before rm. Always logs "purged_stale_locks=N".
+/// Errors only on active_jobs read or list dir fail. (shell: flock -n + find + rm)
 pub fn purge_stale_lock_files(config: t.SupervisorConfig) -> Result(Int, t.SupervisorError) {
   let entity = "repo/" <> config.repo
   let phase = "cleanup_stale_worktrees"
@@ -124,13 +106,16 @@ pub fn purge_stale_lock_files(config: t.SupervisorConfig) -> Result(Int, t.Super
         Ok(all_files) -> {
           let candidates =
             list.filter(all_files, fn(f) {
-              let has_prefix = string.starts_with(f, "pr-") || string.starts_with(f, "issue-") || string.starts_with(f, "comment-")
+              let has_prefix =
+                string.starts_with(f, "pr-")
+                || string.starts_with(f, "issue-")
+                || string.starts_with(f, "comment-")
               string.ends_with(f, ".lock") && has_prefix
             })
 
           let purged =
             list.fold(candidates, 0, fn(acc, f) {
-              let lock_name = string.drop_right(f, 5)
+              let lock_name = string.drop_end(f, 5)
               let used =
                 list.any(dict.values(jobs), fn(aj) { aj.lock_name == lock_name })
               case used {
@@ -162,7 +147,7 @@ pub fn purge_stale_lock_files(config: t.SupervisorConfig) -> Result(Int, t.Super
   }
 }
 
-// --- internal logging helpers (match shell log_event format) ---
+// --- internal logging (dupe ok until logging.gleam extracted; matches shell 51-79) ---
 
 fn escape_log_value(value: String) -> String {
   value
@@ -191,9 +176,9 @@ fn log_event(
     <> job_key
     <> " entity="
     <> entity
-    <> " msg=\\\""
+    <> " msg=\""
     <> msg_esc
-    <> "\\\""
+    <> "\""
 
   let _ = ffi.append_log(config.main_log_file, line)
   let _ = ffi.append_log(config.loop_log_file, line)

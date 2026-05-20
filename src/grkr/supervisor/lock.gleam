@@ -2,7 +2,7 @@
 //// Locking primitives for the GRKR supervisor (v2 Gleam port).
 //// Thin typed wrapper around the flock-based FFI in fs.mjs (acquire_lock / release_lock).
 ////
-//// - acquire_lock(path) returns LockResult (Acquired | Busy | LockError)
+//// - acquire_lock(path) returns LockResult (Acquired | Busy)
 //// - release_lock(path) -> Bool
 //// - check_stale_lock(path) for recovery / purge_stale_lock_files
 //// - convenience helpers for JobKey-based per-job locks (pr-N, issue-N, comment-ID)
@@ -22,14 +22,13 @@
 
 import grkr/supervisor/ffi
 import grkr/supervisor/types.{
-  type JobKey, type LockResult, type SupervisorError, Acquired, Busy, LockBusy,
-  LockError, job_key_lock_name,
+  type JobKey, type LockResult, type SupervisorError, Acquired, Busy,
+  job_key_lock_name,
 }
 
 /// Acquire non-blocking exclusive lock on the .lock file at `lock_path`.
 /// Returns Acquired if we now hold it (fd open in JS until release),
-/// Busy if another process holds it, or LockError on unexpected failure.
-/// (Current FFI maps all failures to Busy since it returns Result(Nil, Nil)).
+/// Busy if another process holds it.
 pub fn acquire_lock(lock_path: String) -> Result(LockResult, SupervisorError) {
   case ffi.acquire_lock(lock_path) {
     Ok(_) -> Ok(Acquired)

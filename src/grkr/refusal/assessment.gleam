@@ -1,6 +1,5 @@
 import gleam/int
 import gleam/option.{type Option, None, Some}
-import gleam/string
 
 import grkr/progress/checkpoint_id
 import grkr/progress/checkpoint_stage

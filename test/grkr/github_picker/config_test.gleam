@@ -2,6 +2,7 @@ import gleeunit
 import gleeunit/should
 
 import grkr/github_picker/config
+import grkr/github_picker/priority
 import grkr/github_picker/types.{Number, SingleSelect}
 
 pub fn main() {
@@ -9,36 +10,36 @@ pub fn main() {
 }
 
 pub fn priority_mode_from_string_test() {
-  types.priority_mode_from_string("number")
+  priority.priority_mode_from_string("number")
   |> should.equal(Number)
 
-  types.priority_mode_from_string("NUMBER")
+  priority.priority_mode_from_string("NUMBER")
   |> should.equal(Number)
 
-  types.priority_mode_from_string("single_select")
+  priority.priority_mode_from_string("single_select")
   |> should.equal(SingleSelect)
 
-  types.priority_mode_from_string("select")
+  priority.priority_mode_from_string("select")
   |> should.equal(SingleSelect)
 
-  types.priority_mode_from_string("")
+  priority.priority_mode_from_string("")
   |> should.equal(SingleSelect)
 
-  types.priority_mode_from_string("foo")
+  priority.priority_mode_from_string("foo")
   |> should.equal(SingleSelect)
 }
 
 pub fn normalize_priority_mode_test() {
-  types.normalize_priority_mode("number")
+  priority.normalize_priority_mode("number")
   |> should.equal("number")
 
-  types.normalize_priority_mode("single_select")
+  priority.normalize_priority_mode("single_select")
   |> should.equal("single_select")
 
-  types.normalize_priority_mode("Number")
+  priority.normalize_priority_mode("Number")
   |> should.equal("number")
 
-  types.normalize_priority_mode("foo")
+  priority.normalize_priority_mode("foo")
   |> should.equal("")
 }
 
@@ -59,7 +60,7 @@ pub fn make_test_config_test() {
       "robot",
     )
 
-    cfg.repo |> should.equal("stepango/grkr")
+  cfg.repo |> should.equal("stepango/grkr")
   cfg.project_owner |> should.equal("stepango")
   cfg.project_number |> should.equal(1)
   cfg.todo_value |> should.equal("Todo")

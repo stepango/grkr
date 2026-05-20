@@ -28,7 +28,7 @@ fn load_with_overrides(overrides: Dict(String, String)) -> Result(types.Supervis
     }
   }
 
-    let get_required = fn(key: String) -> Result(String, types.SupervisorError) {
+  let get_required = fn(key: String) -> Result(String, types.SupervisorError) {
     let v = case dict.get(overrides, key) {
       Ok(v) -> v
       Error(_) -> ffi.get_env(key)
@@ -93,10 +93,10 @@ fn load_with_overrides(overrides: Dict(String, String)) -> Result(types.Supervis
     |> list.map(string.trim)
     |> list.filter(fn(s) { s != "" })
 
-  // Project V2 config (for picker integration)
-  let project_v2_owner = get("PROJECT_V2_OWNER", "")
-  let project_v2_number =
-    get("PROJECT_V2_NUMBER", "0")
+  // Project config (for picker integration, matches github_picker/config and doctor.sh)
+  let project_owner = get("PROJECT_OWNER", "")
+  let project_number =
+    get("PROJECT_NUMBER", "0")
     |> int.parse
     |> result.unwrap(0)
   let config =
@@ -122,8 +122,8 @@ fn load_with_overrides(overrides: Dict(String, String)) -> Result(types.Supervis
       validation_ok: validation_ok,
       max_ticks: max_ticks,
       fail_phases: fail_phases,
-      project_v2_owner: project_v2_owner,
-      project_v2_number: project_v2_number,
+      project_owner: project_owner,
+      project_number: project_number,
     )
   Ok(config)
 }

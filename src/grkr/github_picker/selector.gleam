@@ -1,39 +1,20 @@
 import gleam/int
 import gleam/list
 import gleam/order
-import gleam/result
 import gleam/string
 
+import grkr/github_picker/priority
 import grkr/github_picker/types
 import grkr/task_slug
 
-/// Sentinel for no-priority (lowest) in sort key. Safe for JS number ( < 2^53 )
 /// Compute numeric sort key for priority (lower number = higher urgency, comes first in sort)
+/// Delegates to priority.gleam (consolidated, no dupe logic)
 pub fn compute_priority_sort(
   prio: types.PriorityValue,
   mode: types.PriorityMode,
   order: List(String),
 ) -> Int {
-  case mode {
-    types.Number ->
-      case prio {
-        types.NumberValue(n) -> 0 - n
-        _ -> 0
-      }
-    types.SingleSelect ->
-      case prio {
-        types.SingleSelectValue(name) -> index_of(order, name)
-        _ -> list.length(order) + 1
-      }
-  }
-}
-
-fn index_of(list: List(String), item: String) -> Int {
-  list
-  |> list.index_map(fn(x, i) { #(x, i) })
-  |> list.find(fn(p) { p.0 == item })
-  |> result.map(fn(p) { p.1 })
-  |> result.unwrap(list.length(list) + 1)
+  priority.compute_priority_sort(prio, mode, order)
 }
 
 /// Check if item is a valid candidate for picking:

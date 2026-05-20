@@ -3,7 +3,7 @@ import gleeunit/should
 import gleam/string
 import gleam/option.{Some}
 import grkr/refusal/assessment
-import grkr/refusal/types.{Underspecified, TooLarge, MissingDependency, NeedsDesignDecision, UnsafeAutonomousChange, RepoNotReady, Other}
+import grkr/refusal/types.{Underspecified, TooLarge, MissingDependency, RepoNotReady, Other}
 
 pub fn main() {
   gleeunit.main()

@@ -123,7 +123,16 @@ fn decode_priority_value(
   }
 }
 
-/// Decode all items from the GraphQL response JSON string
+/// General helper to treat a JsonValue as array (empty on null/missing per design)
+pub fn arrayify(v: ffi.JsonValue) -> List(ffi.JsonValue) {
+  case ffi.decode_array(v) {
+    Ok(a) -> a
+    Error(_) -> []
+  }
+}
+
+/// Decode all items from the GraphQL response JSON string.
+/// Stops on first decode error (early return style).
 pub fn decode_project_items(
   json_string: String,
   cfg: types.GitHubPickerConfig,
@@ -131,16 +140,27 @@ pub fn decode_project_items(
   case ffi.parse(json_string) {
     Ok(json) -> {
       let nodes = extract_items_nodes(json)
-      nodes
-      |> list.map(fn(node) { decode_project_item(node, cfg) })
-      |> list.fold(Ok([]), fn(acc, res) {
-        case acc, res {
-          Ok(items), Ok(item) -> Ok(list.append(items, [item]))
-          Error(e), _ -> Error(e)
-          _, Error(e) -> Error(e)
-        }
-      })
+      try_map_decode(nodes, cfg)
     }
     Error(e) -> Error("JSON parse failed: " <> e)
+  }
+}
+
+/// Internal early-exit mapper for decode (avoids processing all on error)
+fn try_map_decode(
+  nodes: List(ffi.JsonValue),
+  cfg: types.GitHubPickerConfig,
+) -> Result(List(types.ProjectItem), String) {
+  case nodes {
+    [] -> Ok([])
+    [head, ..tail] ->
+      case decode_project_item(head, cfg) {
+        Ok(item) ->
+          case try_map_decode(tail, cfg) {
+            Ok(rest) -> Ok([item, ..rest])
+            err -> err
+          }
+        Error(e) -> Error(e)
+      }
   }
 }

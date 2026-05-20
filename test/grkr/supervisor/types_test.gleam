@@ -30,7 +30,7 @@ pub fn job_key_roundtrip_test() {
 
 pub fn job_key_invalid_test() {
   types.job_key_from_string("foo:bar")
-  |> should.equal(Error("invalid job key format"))
+  |> should.equal(Error("unknown job key format: foo:bar"))
 }
 
 pub fn phase_to_string_test() {
@@ -42,7 +42,7 @@ pub fn phase_to_string_test() {
 
 pub fn supervisor_error_to_string_test() {
   types.supervisor_error_to_string(types.MissingRequiredEnv("REPO"))
-  |> should.equal("missing required env: REPO")
+  |> should.equal("missing_required_env:REPO")
 
   types.supervisor_error_to_string(types.InvalidPhaseName("foo"))
   |> should.equal("invalid phase name: foo")

@@ -28,16 +28,23 @@ pub fn walk_path(obj: ffi.JsonValue, path: List(String)) -> ffi.JsonValue {
 /// Try to extract the items.nodes array from GraphQL response (user or org fallback)
 /// Ported from decoder, now shared for potential fallback shape handling too.
 pub fn extract_items_nodes(json: ffi.JsonValue) -> List(ffi.JsonValue) {
-  // Try data.user.projectV2.items.nodes
-  let user_path = ["data", "user", "projectV2", "items", "nodes"]
-  case walk_path(json, user_path) |> ffi.decode_array {
+  // Prefer {items: [...]} shape returned by fetch_project_items_json
+  // (wraps graphql nodes from user/org queries, or flat items from gh project item-list fallback)
+  let items_path = ["items"]
+  case walk_path(json, items_path) |> ffi.decode_array {
     Ok(nodes) -> nodes
     Error(_) -> {
-      // Try data.organization.projectV2.items.nodes
-      let org_path = ["data", "organization", "projectV2", "items", "nodes"]
-      case walk_path(json, org_path) |> ffi.decode_array {
+      // Fallback: raw GraphQL responses with data.user... or data.organization...
+      let user_path = ["data", "user", "projectV2", "items", "nodes"]
+      case walk_path(json, user_path) |> ffi.decode_array {
         Ok(nodes) -> nodes
-        Error(_) -> []
+        Error(_) -> {
+          let org_path = ["data", "organization", "projectV2", "items", "nodes"]
+          case walk_path(json, org_path) |> ffi.decode_array {
+            Ok(nodes) -> nodes
+            Error(_) -> []
+          }
+        }
       }
     }
   }

@@ -51,3 +51,14 @@ export function decodeArray(obj) {
   }
   return new Error("Expected array");
 }
+
+/**
+ * Build the normalized {items: [...]} JSON string from a list of nodes.
+ * Used by client.gleam to return accumulated pages in the shape expected by decoder/field.
+ */
+export function buildItemsResponse(nodes) {
+  const arr = nodes && typeof nodes.toArray === "function"
+    ? nodes.toArray()
+    : (Array.isArray(nodes) ? nodes : []);
+  return JSON.stringify({ items: arr });
+}

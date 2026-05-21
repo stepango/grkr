@@ -147,25 +147,27 @@ pub fn to_candidates_test() {
 
   let cands = selector.to_candidates(items, cfg)
   list.length(cands) |> should.equal(2)
-  // P0 should have lower sort (0) than P1 (1)
-  case cands {
-    [c0, c1] -> {
-      c0.item.content.number |> should.equal(11)
-      c1.item.content.number |> should.equal(10)
-    }
-    _ -> should.fail()
-  }
+  // verify priority_sorts assigned correctly: P0->0 (better), P1->1 ; list order follows input (no sort here)
+  let has_p0 = list.any(cands, fn(c) {
+    c.item.content.number == 11 && c.priority_sort == 0
+  })
+  let has_p1 = list.any(cands, fn(c) {
+    c.item.content.number == 10 && c.priority_sort == 1
+  })
+  has_p0 |> should.be_true()
+  has_p1 |> should.be_true()
 }
 
 pub fn select_best_priority_test() {
   let cfg = base_cfg(Number, [])
   let items = [
+    // higher number=5 >1 so higher priority per spec, should win
     make_item(100, "Todo", "OPEN", "stepango/grkr", NumberValue(5), "2026-01-01"),
     make_item(101, "Todo", "OPEN", "stepango/grkr", NumberValue(1), "2026-01-01"),
   ]
   let cands = selector.to_candidates(items, cfg)
   case selector.select_best(cands) {
-    Ok(best) -> best.content.number |> should.equal(101)
+    Ok(best) -> best.content.number |> should.equal(100)
     Error(_) -> should.fail()
   }
 }

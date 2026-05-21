@@ -2,7 +2,29 @@
 
 AI-powered CLI that reads a GitHub issue and uses Codex to implement the changes.
 
-Current implementation status: see [docs/gleam-migration.md](./docs/gleam-migration.md) for v2 Gleam migration progress and research notes.
+Current implementation status: see [docs/gleam-migration.md](./docs/gleam-migration.md) for v2 Gleam migration progress and research notes (detailed snapshot + module lists + kanban refs updated in t_0b92efdf).
+
+## Gleam v2 Migration Progress
+
+**GitHub-only first, in progress on `v2` branch / PR #79 (https://github.com/stepango/grkr/pull/79).** Follows AGENTS.md: thick Gleam in `src/grkr/`, thin shell wrappers in `bin/` (preserve conventions), files <=1000 LOC, `spec/parts/` canonical. Large tasks decomposed into kanban slices to handle iteration budgets (90/90 max_iterations exhaustion on complex parents).
+
+See the expanded [docs/gleam-migration.md](./docs/gleam-migration.md) for:
+- Full file lists + LOC counts for github_picker/, refusal/, supervisor/, supporting modules
+- What compiles/runs today (`gleam build`, targeted tests, picker/refusal/supervisor partial paths)
+- Remaining work (supervisor phases integration complete in t_d5e8a0a9; thinning of refuse + issue workflow, comment scanning, cleanup, PR reviews, test fixes t_e26dc010)
+- Traceability to specific kanban tasks (e.g. t_35908210 staging, t_0b92efdf this docs, prior reviews/impls like t_7529c94a, blocked parents, t_d5e8a0a9 test+docs+sync, t_e26dc010 test errors)
+- Design refs (supervisor-design-final.md, supervisor-synthesis.md, gleam-migration-patterns.md)
+- Lock audit notes from this run
+
+**High-level snapshot:**
+- github_picker (client+main+picker), refusal (flow/assessment/checkpoint), supervisor (main/loop/recovery/state/lock/config/phases + FFI) implemented + reviewed in slices; phases.gleam extracted
+- Fully migrated: sync_main, resolve_pr (PR conflicts), issue_provider (Linear), progress (checkpoints/Linear), task_slug, project_status, linear e2e
+- Bin updates: worker-pick-issue.sh (40 LOC thin), worker-sync-main.sh (18 LOC), worker-resolve-pr.sh (43 LOC), robot-main.sh (58 LOC thin progress)
+- Still thick: worker-refuse-issue.sh (546), grkr-issue-workflow.sh (649) (thinning in follow-ups)
+- Supervisor design finalized + phases landed; impl via child cards (t_d5e8a0a9 sync, t_e26dc010 test)
+- All changes maintain 100% external contracts (logs, locks, JSON schemas, exit codes, env, gh/gh project behavior)
+
+No changes to user-facing commands, config, or entrypoints (still `robot-main.sh`, `grkr --issue`, etc.). Workflow accuracy preserved.
 
 ## Usage
 
@@ -73,7 +95,7 @@ These values are only enough to identify the OAuth app. Linear GraphQL calls sti
 
 ## How it works
 
-1. `robot-main.sh` creates the `.grkr` runtime layout, validates prerequisites, and runs the ordered supervisor phases on the configured interval
+1. `robot-main.sh` (now a thin ~58-line wrapper) sources doctor + config, runs validation, then `exec`s the Gleam supervisor at `src/grkr/supervisor/main` (v2, GitHub-only); the Gleam code creates the `.grkr` layout, validates, and runs the ordered phases on the configured interval
 2. The first supervisor phase delegates to `worker-sync-main.sh`, a thin shell wrapper around `grkr/sync_main/main`, which takes `.grkr/locks/main.lock`, fetches `origin/$MAIN_BRANCH` with pruning, checks out the configured main branch, and hard-resets the supervisor checkout to `origin/$MAIN_BRANCH`
 3. The supervisor writes structured loop logs to `.grkr/logs/main.log` and `.grkr/logs/loop.log`, keeps per-job logs under `.grkr/logs/jobs/`, recovers stale jobs from `.grkr/state/active_jobs.json`, and keeps later phases running when an earlier phase fails
 4. Phase 4 delegates to `worker-pick-issue.sh`, which reads the configured GitHub Project live, filters Todo issues assigned to the authenticated bot in the configured repo, excludes active issue jobs, orders candidates by priority and age, and emits the stable `issue:<n>:execution` job key plus task slug for the top match
@@ -97,7 +119,7 @@ These values are only enough to identify the OAuth app. Linear GraphQL calls sti
 - The installed `grkr` launcher resolves its real script path before loading helper files, so symlinked installs such as npm's global bin layout do not need `grkr-templates.sh` copied into the top-level bin directory.
 - `robot-main.sh` uses `MAIN_BRANCH` and `LOOP_INTERVAL_SECS` from `.grkr/config.sh`; `grkr init <id>` now writes both defaults into the generated config.
 - `worker-sync-main.sh` is the phase-1 supervisor worker; it delegates production sync logic to Gleam and always returns the main checkout to the configured `MAIN_BRANCH` before later phases run.
-- `worker-pick-issue.sh` is the phase-4 selector; it queries the live project through GitHub GraphQL, emits shell-safe key/value output for the next Todo issue candidate, and still tolerates the flat `gh project item-list` JSON shape as a fallback.
+- `worker-pick-issue.sh` is the phase-4 selector; now a thin ~40-line wrapper that delegates to `gleam run -m grkr/github_picker/main` (config + gh GraphQL+paginate+decode+pick+emit). Supports GITHUB_FIXTURE_PATH and items-query subcmd. Interface unchanged.
 - `worker-refuse-issue.sh` handles the refusal flow for issues that should not be implemented yet; it generates `refusal.md` with class and reasoning, posts a refusal checkpoint comment exactly once without duplication on resume, moves the project item from `Todo` to `Backlog` when `ENABLE_PROJECT_STATUS_UPDATES` and `REFUSAL_REQUIRES_BACKLOG_MOVE` allow it, marks the workflow as refused, and treats refusal as a valid terminal state.
 - `grkr init <id>` also writes `IN_PROGRESS_VALUE="In Progress"` so issue execution can move a project item out of Todo before branching; status option lookup tolerates casing differences such as `In progress`.
 - `grkr init <id>` also writes `DONE_VALUE="Done"` plus default `TEST_COMMAND` and `BUILD_COMMAND` entries so the test stage has explicit verification commands.

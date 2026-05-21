@@ -1,5 +1,3 @@
-import gleam/list
-
 /// Opaque JSON value from FFI
 pub type JsonValue
 
@@ -39,3 +37,16 @@ pub type ExecResult {
 /// Execute shell command with args (no stdin)
 @external(javascript, "../refusal/exec.mjs", "execute_command")
 pub fn execute_command(command: String, args: List(String)) -> ExecResult
+
+/// Write a file (for refusal.md checkpoint etc). Returns Result for error surfacing.
+@external(javascript, "../refusal/fs.mjs", "write_file")
+pub fn write_file(path: String, content: String) -> Result(Nil, String)
+
+/// Update progress.json to refused state (status, decision, reason_class, comment_id, skip test).
+/// Preserves existing fields in the json. Returns Result for consistency.
+@external(javascript, "../refusal/fs.mjs", "update_progress_for_refusal")
+pub fn update_progress_for_refusal(progress_file: String, reason_class: String, comment_id: String) -> Result(Nil, String)
+
+/// Check if a file exists (for idempotency checks on refusal.md).
+@external(javascript, "../refusal/fs.mjs", "exists_file")
+pub fn exists_file(path: String) -> Bool

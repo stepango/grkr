@@ -1,5 +1,4 @@
 import gleam/option.{type Option, None, Some}
-import gleam/result
 import gleam/int
 import grkr/refusal/types.{type RefusalConfig, type RefusalError, RefusalConfig}
 

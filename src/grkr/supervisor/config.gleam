@@ -48,7 +48,7 @@ fn load_with_overrides(overrides: Dict(String, String)) -> Result(types.Supervis
 
   let grkr_root = case get_required("GRKR_ROOT") {
     Ok(r) -> r
-    Error(e) -> {
+    Error(_) -> {
       // fallback for direct runs / tests
       let home = get("HOME", ".")
       home <> "/.grkr"

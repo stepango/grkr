@@ -2,7 +2,7 @@ import gleeunit
 import gleeunit/should
 import gleam/string
 import grkr/refusal/types.{
-  type RefusalClass, Other, Underspecified, TooLarge, MissingDependency,
+  Other, Underspecified, TooLarge, MissingDependency,
   NeedsDesignDecision, UnsafeAutonomousChange, RepoNotReady,
   normalize_refusal_class, from_string, to_string, to_display_name,
   default_class, parse_implementation_decision, Proceed, Refuse,

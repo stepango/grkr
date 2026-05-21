@@ -2,18 +2,17 @@
 //// Main tick orchestration for the Gleam supervisor.
 //// - recovery on startup
 //// - tick loop with max_ticks support for tests
-//// - phase dispatch with error boundaries (never kills supervisor)
+//// - delegates phase dispatch to phases.gleam (error boundaries, stubs + wired pick)
 //// - GRKR_FAIL_PHASES injection for test error paths
-//// - GitHub-only v2: pick phase ready for github_picker integration (stub for now)
+//// - GitHub-only v2
 //// - structured logging to main/loop/job logs (dupe helpers until logging.gleam)
 //// Follows 09-main-loop-contract.md, 07-supervisor.md, shell robot-main.sh semantics.
 
 import gleam/int
-import gleam/io
-import gleam/list
-import gleam/option.{type Option, None, Some}
+import gleam/option.{Some}
 import gleam/string
 import grkr/supervisor/ffi
+import grkr/supervisor/phases
 import grkr/supervisor/recovery
 import grkr/supervisor/types as t
 
@@ -95,20 +94,7 @@ fn do_one_tick(config: t.SupervisorConfig, tick: Int) -> Nil {
       "tick=" <> int.to_string(tick) <> " started=true",
     )
 
-  let phases = [
-    t.SyncMain,
-    t.ScanPrConflicts,
-    t.ScanCommentCommands,
-    t.PickAndScheduleIssueExecution,
-    t.ReapFinishedJobs,
-    t.CleanupStaleWorktrees,
-    // SleepUntilNextTick is implicit after the phases (the sleep in tick loop)
-  ]
-
-  list.each(phases, fn(phase) {
-    let _ = run_phase_with_boundary(config, phase, tick)
-    Nil
-  })
+  let _ = phases.run_all_phases(config, tick)
 
   let _ =
     log_info(
@@ -119,101 +105,6 @@ fn do_one_tick(config: t.SupervisorConfig, tick: Int) -> Nil {
       "tick=" <> int.to_string(tick) <> " completed=true",
     )
   Nil
-}
-
-fn run_phase_with_boundary(
-  config: t.SupervisorConfig,
-  phase: t.Phase,
-  tick: Int,
-) -> t.PhaseResult {
-  let phase_str = t.phase_to_string(phase)
-  let entity = "repo/" <> config.repo
-
-  // Test hook: GRKR_FAIL_PHASES="pick_and_schedule_issue_execution,..."
-  case list.contains(config.fail_phases, phase_str) {
-    True -> {
-      let err = t.PhaseFailed(phase_str, 99)
-      let _ =
-        log_error(
-          config,
-          phase_str,
-          "-",
-          entity,
-          "test_fail_injected=true tick=" <> int.to_string(tick),
-        )
-      t.Failed(err)
-    }
-    False -> {
-      let _ =
-        log_info(
-          config,
-          phase_str,
-          "-",
-          entity,
-          "phase_started=true tick=" <> int.to_string(tick),
-        )
-
-      let res = case phase {
-        t.SyncMain -> run_sync_main_phase(config)
-        t.PickAndScheduleIssueExecution -> run_pick_phase(config)
-        t.ReapFinishedJobs -> run_reap_phase(config)
-        t.CleanupStaleWorktrees -> run_cleanup_phase(config)
-        // Scans are stubs for this slice; full impl in follow-up (scan_prs, comment commands)
-        _ -> {
-          let _ =
-            log_info(
-              config,
-              phase_str,
-              "-",
-              entity,
-              "stub=true msg=phase_logic_in_subsequent_cards",
-            )
-          t.Success
-        }
-      }
-
-      let _ = case res {
-        t.Success ->
-          log_info(config, phase_str, "-", entity, "phase_completed=true")
-        t.Skipped(reason) ->
-          log_info(config, phase_str, "-", entity, "phase_skipped=" <> reason)
-        t.Failed(e) ->
-          log_error(
-            config,
-            phase_str,
-            "-",
-            entity,
-            "phase_failed=" <> t.supervisor_error_to_string(e),
-          )
-      }
-
-      res
-    }
-  }
-}
-
-// --- Phase implementations (stubs for GitHub v2 skeleton; integrate deeper later) ---
-
-fn run_sync_main_phase(config: t.SupervisorConfig) -> t.PhaseResult {
-  // GitHub-only: delegate to sync_main or worker-sync-main.sh via ffi for now (stub)
-  // Real: would use ffi.executable or direct call into grkr/sync_main if exposed
-  t.Success
-}
-
-fn run_pick_phase(config: t.SupervisorConfig) -> t.PhaseResult {
-  // GitHub-only v2 integration point: github_picker
-  // Full: run gh project item-list (or GraphQL), decode with github_picker/decoder,
-  // then selector.pick with github_picker/config + priority.
-  // For skeleton: stub (worker-pick-issue.sh will be called in scheduler follow-up)
-  t.Success
-}
-
-fn run_reap_phase(config: t.SupervisorConfig) -> t.PhaseResult {
-  t.Success
-}
-
-fn run_cleanup_phase(config: t.SupervisorConfig) -> t.PhaseResult {
-  t.Success
 }
 
 // --- Logging (duplicated from recovery until logging.gleam extracted per design) ---
@@ -278,16 +169,6 @@ fn log_info(
   msg: String,
 ) -> Nil {
   log_event(config, "INFO", phase, job, entity, msg)
-}
-
-fn log_warn(
-  config: t.SupervisorConfig,
-  phase: String,
-  job: String,
-  entity: String,
-  msg: String,
-) -> Nil {
-  log_event(config, "WARN", phase, job, entity, msg)
 }
 
 fn log_error(

@@ -8,9 +8,6 @@ pub fn main() {
   gleeunit.main()
 }
 
-@external(javascript, "./test_helper.mjs", "set_env")
-fn javascript_set_env(name: String, value: String) -> Nil
-
 pub fn load_for_test_returns_config_test() {
   let overrides =
     dict.new()
@@ -35,22 +32,26 @@ pub fn load_for_test_returns_config_test() {
       cfg.worktrees_dir |> should.equal("/tmp/grkr-test/.grkr/worktrees")
       cfg.tasks_dir |> should.equal("/tmp/grkr-test/.grkr/tasks")
       cfg.active_jobs_file |> should.equal("/tmp/grkr-test/.grkr/state/active_jobs.json")
-      cfg.project_v2_owner |> should.equal("stepango")
-      cfg.project_v2_number |> should.equal(1)
+      cfg.project_owner |> should.equal("stepango")
+      cfg.project_number |> should.equal(1)
     }
     Error(_) -> should.fail()
   }
 }
 
-pub fn load_for_test_missing_repo_errors_test() {
+pub fn load_for_test_defaults_when_repo_missing_test() {
   let overrides =
     dict.new()
     |> dict.insert("GRKR_ROOT", "/tmp/grkr-test2")
 
   case config.load_for_test(overrides) {
-    Error(types.MissingRequiredEnv("REPO")) -> Nil
+    Ok(cfg) -> {
+      cfg.repo |> should.equal("unknown/unknown")
+      cfg.grkr_root |> should.equal("/tmp/grkr-test2")
+      // note: REPO no longer required (defaults), GRKR_ROOT required path but with fallback in impl
+      Nil
+    }
     Error(_) -> should.fail()
-    Ok(_) -> should.fail()
   }
 }
 

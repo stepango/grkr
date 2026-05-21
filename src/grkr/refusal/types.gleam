@@ -1,7 +1,4 @@
-import gleam/int
 import gleam/list
-import gleam/option.{type Option, None, Some}
-import gleam/result
 import gleam/string
 
 /// Refusal class enum matching the 7 classes from spec and bash

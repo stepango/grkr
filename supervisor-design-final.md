@@ -408,7 +408,7 @@ All phases use Result + explicit error logging; never let uncaught kill the supe
 
 ## Key Decisions & Risks
 
-- **Compat first**: worker-pick-issue.sh + emit parse for pick (avoids duplicating 400+ LOC GraphQL now); pure Gleam github_picker integration in next slice.
+- **Compat first (initial)**: worker-pick-issue.sh + emit parse for pick; **pure Gleam github_picker integration completed** in t_a0cbcd49 (direct pick_next() call from supervisor/loop pick phase, no emit parse, no dupe logic).
 - **Spawn model**: bash -c wrapper string for flock redirect + worker cmd (matches shell exactly); supervisor never holds worker locks.
 - **FFI ownership**: per-supervisor/ .mjs this slice (proven pattern); shared grkr/ffi/ after.
 - **Config**: always via shell wrapper (doctor + sourcing) — Gleam never sources .sh

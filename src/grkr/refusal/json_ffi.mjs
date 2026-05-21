@@ -70,3 +70,19 @@ export function getString(obj, key, defaultVal) {
   }
   return defaultVal;
 }
+
+export function getFieldPathString(obj, path) {
+  const v = getFieldPath(obj, path);
+  if (v === null || v === undefined) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  return "";
+}
+
+export function getFieldString(obj, key) {
+  const v = getField(obj, key);
+  if (v === null || v === undefined) return "";
+  if (typeof v === "string") return v;
+  if (typeof v === "number" || typeof v === "boolean") return String(v);
+  return "";
+}

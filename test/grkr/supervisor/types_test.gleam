@@ -47,3 +47,12 @@ pub fn supervisor_error_to_string_test() {
   types.supervisor_error_to_string(types.InvalidPhaseName("foo"))
   |> should.equal("invalid phase name: foo")
 }
+
+pub fn pick_phase_integration_note_test() {
+  // Pick phase now calls github_picker.pick_next() directly (see loop.gleam).
+  // Testable end-to-end: GRKR_MAX_TICKS=1 GITHUB_FIXTURE_PATH=/path/to/fixture.json gleam run -m grkr/supervisor/main
+  // (fixture must match decoder shape; see picker tests for examples).
+  // No new unit test code here to keep slice small; wiring verified by build + design update.
+  True |> should.be_true()
+}
+

@@ -28,3 +28,15 @@ pub fn is_null(val: JsonValue) -> Bool
 /// Decode a JsonValue as an array
 @external(javascript, "../github_picker/json_ffi.mjs", "decodeArray")
 pub fn decode_array(val: JsonValue) -> Result(List(JsonValue), String)
+
+/// Build normalized {items: [nodes...]} JSON string from accumulated Gleam List (for pagination)
+@external(javascript, "../github_picker/json_ffi.mjs", "buildItemsResponse")
+pub fn build_items_json(nodes: List(JsonValue)) -> String
+
+// --- GH EXEC (gh_exec.mjs) for GraphQL fetch + fallback (GitHub-only v2) ---
+
+@external(javascript, "../github_picker/gh_exec.mjs", "runGhApiGraphql")
+pub fn run_gh_api_graphql(query: String) -> Result(String, String)
+
+@external(javascript, "../github_picker/gh_exec.mjs", "runGhProjectItemList")
+pub fn run_gh_project_item_list(project_number: String, owner: String) -> Result(String, String)

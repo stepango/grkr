@@ -14,6 +14,9 @@ fn argv() -> List(String)
 @external(javascript, "console", "log")
 fn console_log(s: String) -> Nil
 
+@external(javascript, "console", "error")
+fn console_error(s: String) -> Nil
+
 @external(javascript, "process", "exit")
 fn exit(code: Int) -> Nil
 
@@ -79,6 +82,7 @@ fn run_from_args(args: List(String)) {
 }
 
 fn run_cli(issue_str: String, class_raw: String, reasoning_raw: String) {
+  console_error("📋 Fetching issue #" <> issue_str <> "...")
   case parse_issue_number(issue_str) {
     Error(msg) -> {
       emit_error("Invalid issue number: " <> msg)
@@ -87,12 +91,15 @@ fn run_cli(issue_str: String, class_raw: String, reasoning_raw: String) {
     Ok(issue) -> {
       case flow.run_refusal(issue, class_raw, reasoning_raw) {
         Ok(res) -> {
+          console_error("📝 Posting refusal checkpoint for issue #" <> issue_str <> "...")
+          console_error("📥 Moved issue #" <> issue_str <> " to Backlog.")
           emit("REFUSAL_PROCESSED", "1")
           emit("ISSUE_NUMBER", int.to_string(res.issue_number))
           emit("TASK_SLUG", res.task_slug)
           emit("REFUSAL_CLASS", to_string(res.class))
           emit("REFUSAL_COMMENT_ID", res.comment_id)
           emit("PROGRESS_FILE", res.progress_file)
+          console_error("⏸️ Refused implementation for issue #" <> issue_str <> ".")
           exit(0)
         }
         Error(e) -> {

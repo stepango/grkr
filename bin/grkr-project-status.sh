@@ -108,10 +108,11 @@ move_issue_to_project_status() {
   local plan_result
   plan_result=$(_grkr_run_cli plan-move-with-lookup "$issue_json" "$project_json" "$fields_json" "$items_json" "$target_status")
 
-  case "$plan_result" in
-    move\t*)
+  local TAB=$'	'
+  case $plan_result in
+    move${TAB}*)
       local item_id field_id option_id project_id option_name
-      IFS=$'\t' read -r _ item_id field_id option_id project_id option_name <<<"$plan_result"
+      IFS=$'	' read -r _ item_id field_id option_id project_id option_name <<<"$plan_result"
       if [ -z "$item_id" ] || [ -z "$field_id" ] || [ -z "$option_id" ] || [ -z "$project_id" ]; then
         echo "❌ Unable to resolve the \"$STATUS_FIELD_NAME\" option \"$target_status\" for project #$PROJECT_NUMBER." >&2
         return 1
@@ -124,18 +125,18 @@ move_issue_to_project_status() {
       echo "$moved_message"
       return 0
       ;;
-    no_action\tdisabled)
+    no_action${TAB}disabled)
       return 0
       ;;
-    no_action\titem_missing)
+    no_action${TAB}item_missing)
       echo "$missing_item_message"
       return 0
       ;;
-    no_action\talready)
+    no_action${TAB}already)
       echo "$already_message"
       return 0
       ;;
-    no_action\tresolution_failed|no_action\t*)
+    no_action${TAB}resolution_failed|no_action${TAB}*)
       echo "❌ Unable to resolve the \"$STATUS_FIELD_NAME\" option \"$target_status\" for project #$PROJECT_NUMBER." >&2
       return 1
       ;;

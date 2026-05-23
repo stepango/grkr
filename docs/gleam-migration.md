@@ -18,7 +18,7 @@ The migration uses small kanban-driven slices (decomposition required because la
 - **supervisor/** (loop orchestration, recovery, locking, state + phases; per design in supervisor-design-final.md; phases extraction complete):
   - main.gleam (56 LOC), phases.gleam (284 LOC new extraction), loop.gleam (182 LOC, now delegates dispatch + pick to phases), recovery.gleam (214), config.gleam (163), types.gleam (168), state.gleam (189), lock.gleam (88), ffi.gleam (125)
   - + process/exec/file/env/fs mjs
-  - Entry point; thin bin/robot-main.sh (58 LOC) delegates to `gleam run -m grkr/supervisor/main`
+  - Entry point; thin bin/robot-main.sh (57 LOC) delegates to `gleam run -m grkr/supervisor/main`
 
 - **Fully or substantially migrated supporting modules:**
   - sync_main/main.gleam (205 LOC) + thin bin/worker-sync-main.sh (18 LOC)
@@ -30,7 +30,7 @@ The migration uses small kanban-driven slices (decomposition required because la
   - linear/ (e2e 272 + oauth 353, client 209, config 147, graphql 106, types 75, e2e_main 20)
 
 **Shell / bin/ status (per AGENTS.md: preserve existing shell-script conventions in bin/ and test/; keep changes small/explicit):**
-- Thin Gleam delegates: worker-sync-main.sh (18 LOC), worker-resolve-pr.sh (43 LOC), worker-pick-issue.sh (40 LOC), robot-main.sh (58 LOC)
+- Thin Gleam delegates: worker-sync-main.sh (18 LOC), worker-resolve-pr.sh (43 LOC), worker-pick-issue.sh (40 LOC), robot-main.sh (57 LOC thin complete)
 - Thick (full reimpl pending in follow-up cards): worker-refuse-issue.sh (546 LOC), grkr-issue-workflow.sh (649 LOC), doctor.sh (221), grkr-project-status.sh (189), grkr-templates.sh (317), grkr-task-slug.sh (17)
 - Launcher bin/grkr updated in places to call Gleam CLIs (e.g. progress, task_slug, issue_provider)
 
@@ -70,3 +70,40 @@ The migration uses small kanban-driven slices (decomposition required because la
 See README.md (updated in same task) for usage details and cross-refs. Expand this doc as more slices land.
 
 This update in t_d5e8a0a9 per kanban lifecycle (orient via kanban_show, reads, fixes, test runs, docs edits, spec sync, complete with metadata).
+
+**Update in commit task t_d3a4d148 (2026-05-21):**
+- Staged + committed all uncommitted progress from review t_fdd83fb1: thin wrappers (bin/robot-main.sh now 58LOC, worker-pick-issue.sh 40LOC), new Gleam/FFI (client.gleam, gh_exec.mjs, cli.gleam, cli_ffi.mjs, fs.mjs, phases.gleam 284LOC), docs/gleam-migration.md + README + supervisor-design-final.md, tests, .grkr/audit-cleanup.md
+- Skipped temp .grkr/logs/ and .grkr/state/ (per task guidance, .gitignore partial)
+- Additional fixes during prep: removed unused imports in phases.gleam (option, lock, recovery) and config_test.gleam (types) → now `gleam build` fully clean (no warnings), tests 222/222 pass
+- Ran `git add` for relevant, `git commit -m "v2: thin wrappers + supervisor phases + docs updates (review t_fdd83fb1)"`, `git push origin v2`
+- Verified: gleam build clean, tests pass, AGENTS.md followed (no file >1000 LOC), no secrets/temp logs committed, kanban task oriented via kanban_show
+- This makes PR #79 current with all v2 GitHub-only progress for further slices/reviews.
+
+This commit task per kanban lifecycle (orient, work in project, verify, commit+push, update docs, complete).
+
+**Update for t_202da8aa docs+sync (2026-05-21):**
+- Oriented with kanban_show, read AGENTS, README, this doc, recent run summaries
+- Cleaned old locks: rm -f build/gleam-*.lock build/*.lock (0B files from earlier today; verified no active processes holding via ps/lsof; safe per kanban-worker)
+- Updated this file: header, bin status (57 LOC), supervisor entry, remaining (phases and robot thin marked complete, lock note updated), added this section
+- Updated README.md high-level snapshot and migration progress to reference latest cards (t_507df923, t_35cbdf05, t_326501e8 etc) and accurate thin LOCs
+- Executed scripts/sync-spec.sh (refreshed spec/spec.md and spec/parts/README.md)
+- Verified no file exceeds 1000 LOC (source max 754 in test, 649 in thick shell; all Gleam src <430; followed AGENTS.md)
+- GitHub-only v2, spec/parts/ as canonical
+- Referenced completed impl cards in updates
+- Per AGENTS: post any functional (phases, thin, tests, review), updated README + docs, ran sync harness
+
+This completes the docs+sync per task spec and kanban lifecycle.
+
+**Update for t_9024ff95 (lock + .grkr stale cleanup, 2026-05-23):**
+- Oriented via kanban_show(t_9024ff95), read spec/parts/36-cleanup-policy.md, AGENTS.md, .grkr/audit-cleanup.md, prior cards
+- Inventory + verification: ls -lT, stat, lsof (only gateway held), ps (gateway 859, gleam lsp 8513, workers), grep for lock usage in hermes-agent/ and grkr/src/
+- Removed successfully (workspace-local rm -rf, no gate): .grkr/locks/ logs/ state/ tasks/ worktrees/ (stale untracked/empty from May 21; git clean now; v2 creates on demand)
+- .gitignore patched with additional .grkr/ runtime ignores (logs/state/locks/worktrees/)
+- Hermes locks (auth, memories/*, skills/usage) confirmed safe stale 0B unheld but ~ rm gated by terminal safety (pending_approval "delete in root path"); full proposed commands in kanban comments + this note
+- build/ locks left active (touched concurrent with gleam lsp)
+- Updated README.md (high-level + this hygiene section) and this file for traceability
+- No spec change so no sync-harness run; AGENTS.md followed (docs updated post change)
+- References this task, spec 36, cleanup lineage; fulfills cron clean via kanban
+- See kanban comments on t_9024ff95 for complete audit, exact commands, verification outputs, removed files list
+
+This keeps migration docs accurate.

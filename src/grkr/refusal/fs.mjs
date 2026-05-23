@@ -1,9 +1,11 @@
 import { writeFileSync, readFileSync, existsSync, mkdirSync } from "fs";
 import { dirname } from "path";
+import { Ok, Error } from "../../gleam.mjs";
 
 /**
  * FFI file helpers for refusal module (write refusal.md, update progress.json)
  * Modeled after resolve_pr/fs.mjs and supervisor/fs.mjs
+ * Standardized to return Gleam Result via Ok/Error ctors (was array style).
  */
 
 export function write_file(path, content) {
@@ -13,9 +15,9 @@ export function write_file(path, content) {
       mkdirSync(dir, { recursive: true });
     }
     writeFileSync(path, content, { encoding: "utf-8" });
-    return ["Ok", undefined];
+    return new Ok(undefined);
   } catch (error) {
-    return ["Error", String(error.message || error)];
+    return new Error(String(error.message || error));
   }
 }
 
@@ -53,10 +55,10 @@ export function update_progress_for_refusal(progress_file, reason_class, comment
       mkdirSync(dir, { recursive: true });
     }
     writeFileSync(progress_file, JSON.stringify(progress, null, 2) + "\n", { encoding: "utf-8" });
-    return ["Ok", undefined];
+    return new Ok(undefined);
   } catch (error) {
     console.error("update_progress_for_refusal failed:", error);
-    return ["Error", String(error.message || error)];
+    return new Error(String(error.message || error));
   }
 }
 

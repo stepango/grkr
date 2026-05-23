@@ -19,9 +19,9 @@ See the expanded [docs/gleam-migration.md](./docs/gleam-migration.md) for:
 **High-level snapshot:**
 - github_picker (client+main+picker), refusal (flow/assessment/checkpoint), supervisor (main/loop/recovery/state/lock/config/phases + FFI) implemented + reviewed in slices; phases.gleam extracted
 - Fully migrated: sync_main, resolve_pr (PR conflicts), issue_provider (Linear), progress (checkpoints/Linear), task_slug, project_status, linear e2e
-- Bin updates: worker-pick-issue.sh (40 LOC thin), worker-sync-main.sh (18 LOC), worker-resolve-pr.sh (43 LOC), robot-main.sh (58 LOC thin progress)
-- Still thick: worker-refuse-issue.sh (546), grkr-issue-workflow.sh (649) (thinning in follow-ups)
-- Supervisor design finalized + phases landed; impl via child cards (t_d5e8a0a9 sync, t_e26dc010 test)
+- Bin updates: worker-pick-issue.sh (40 LOC thin), worker-sync-main.sh (18 LOC), worker-resolve-pr.sh (43 LOC), robot-main.sh (58 LOC thin progress), worker-refuse-issue.sh (57 LOC thin wrapper calling `gleam run -m grkr/refusal/cli`)
+- Still thick: grkr-issue-workflow.sh (649) (thinning in follow-ups)
+- Supervisor design finalized + phases landed; remaining phases (sync/reap/cleanup/scans) in t_0aac1fa7; impl via child cards (t_d5e8a0a9, t_0aac1fa7)
 - All changes maintain 100% external contracts (logs, locks, JSON schemas, exit codes, env, gh/gh project behavior)
 
 No changes to user-facing commands, config, or entrypoints (still `robot-main.sh`, `grkr --issue`, etc.). Workflow accuracy preserved.
@@ -333,3 +333,28 @@ When `GRKR_LINEAR_E2E` is not set or equals `0`:
 - Node.js (for global install and Gleam JavaScript target)
 - Git repository with an `origin` remote configured
 - Linear OAuth app credentials in `~/.linear/secret.txt` or `GRKR_LINEAR_SECRET_PATH` (optional, for Linear issue provider fixture/live-token setup and live E2E tests)
+
+**Update for t_202da8aa (docs+sync after v2 phases + thin + review):**
+- High-level snapshot refreshed with latest kanban cards: t_507df923 (robot-main thin 57LOC complete), t_35cbdf05 (supervisor/phases.gleam 284LOC), t_326501e8 (PR #79 review), t_e26dc010 (test fix), t_202da8aa (this docs+sync + lock clean)
+- robot-main.sh now confirmed 57 LOC thin wrapper exec'ing Gleam supervisor
+- Old build locks cleaned during this task
+- Spec sync run, file size limit verified (<=1000 LOC)
+- GitHub-only v2 workflow documented accurately for user (thin shells, Gleam supervisor run via robot-main.sh, GitHub project config)
+- See docs/gleam-migration.md for full traceability
+
+This keeps user-facing docs accurate per AGENTS.md after the recent functional slices.
+
+**Update for t_9024ff95 (clean: audit + safe remove old .hermes/*.lock + build/*.lock + .grkr stale for GitHub-only v2):**
+- Full audit of locks + .grkr (commands: ls -lT, stat, lsof, ps aux | grep, find, git status, grep in src/ for paths)
+- Successfully removed (in workspace, no safety gate): .grkr/locks/ .grkr/logs/ .grkr/state/ .grkr/tasks/ .grkr/worktrees/ (stale May 21 untracked/empty runtime artifacts; v2 Gleam recreates as needed per config.gleam/lock.gleam; git status now clean for .grkr/)
+- .gitignore updated: added .grkr/logs/ .grkr/state/ .grkr/locks/ .grkr/worktrees/ (alongside existing tasks/archive/)
+- Proposed (safe, 0B unheld, verified no holders/processes): rm -f ~/.hermes/auth.lock ~/.hermes/memories/MEMORY.md.lock ~/.hermes/memories/USER.md.lock ~/.hermes/skills/.usage.json.lock
+  (auth.lock for hermes auth.json; memory locks from memory_tool.py; usage lock; all confirmed stale/old via dates/lsof/code review)
+- Left: gateway.lock (held by pid 859), cron/.tick.lock (recent active), build/gleam-*.lock + packages/gleam.lock (0B but touched at gleam lsp 8513 start 06:22, active), all package/yarn/uv locks, .grkr/archive/ + config* (historical, referenced in docs)
+- Also noted legacy ~/.grkr/ (May 2 logs only) as candidate for manual clean
+- Terminal safety gated the ~ deletes (pending_approval for home path); proposed commands + full verification (lsof/ps recheck, no breakage) recorded in kanban comments on this task (t_9024ff95)
+- References: spec/parts/36-cleanup-policy.md (stale lock purge), AGENTS.md, prior cleanup cards (t_980b7473, t_4bb0bafc etc.), .grkr/audit-cleanup.md, docs/gleam-migration.md
+- No impact on running gateway/kanban workers/gleam dev; fulfills cron "Clean any old locks" item
+- README updated for user accuracy post-hygiene change
+
+See kanban task t_9024ff95 comments for exact commands, output, and removed list.

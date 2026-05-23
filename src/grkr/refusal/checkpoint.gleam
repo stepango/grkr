@@ -160,7 +160,11 @@ pub fn ensure_refusal_checkpoint(
       // restore file from existing comment body
       case extract_comment_body_with_marker(issue_json, marker) {
         Some(body) -> {
-          let _ = ffi.write_file(checkpoint_file, body)
+          // best-effort restore from comment (non-fatal)
+          let _ = case ffi.write_file(checkpoint_file, body) {
+            Ok(_) -> Nil
+            Error(_) -> Nil
+          }
           Ok(RefusalCheckpoint(comment_id: Some(id)))
         }
         None -> {

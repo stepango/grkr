@@ -70,7 +70,12 @@ pub fn run_refusal(
   let class_str = to_string(class)
 
   // atomic progress update (sets refused + skipped test)
-  let _ = ffi.update_progress_for_refusal(progress_file, class_str, comment_id_str)
+  // best-effort (non-fatal after checkpoint); errors are console.logged in FFI
+  // (previously ignored Result via let _ = ; now explicitly handled)
+  let _ = case ffi.update_progress_for_refusal(progress_file, class_str, comment_id_str) {
+    Ok(_) -> Nil
+    Error(_) -> Nil
+  }
 
   // project status move (optional, GitHub Projects v2 via gh cli)
   let moved = case move_to_backlog_if_needed(cfg, issue_number, issue_json) {

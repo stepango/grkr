@@ -117,8 +117,8 @@ fn extract_page_info(json: ffi.JsonValue, scope: String) -> #(Bool, String) {
     _ -> ["data", "organization", "projectV2", "items", "pageInfo"]
   }
   let pi = field.walk_path(json, path)
-  let has = case ffi.get_field(pi, "hasNextPage") |> ffi.decode_string {
-    Ok("true") -> True
+  let has = case ffi.get_field(pi, "hasNextPage") |> ffi.decode_bool {
+    Ok(True) -> True
     _ -> False
   }
   let cursor = case ffi.get_field(pi, "endCursor") |> ffi.decode_string {

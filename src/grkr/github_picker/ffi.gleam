@@ -21,6 +21,10 @@ pub fn decode_string(val: JsonValue) -> Result(String, String)
 @external(javascript, "../github_picker/json_ffi.mjs", "decodeInt")
 pub fn decode_int(val: JsonValue) -> Result(Int, String)
 
+/// Decode a JsonValue as a bool
+@external(javascript, "../github_picker/json_ffi.mjs", "decodeBool")
+pub fn decode_bool(val: JsonValue) -> Result(Bool, String)
+
 /// Check if a JsonValue is null
 @external(javascript, "../github_picker/json_ffi.mjs", "isNull")
 pub fn is_null(val: JsonValue) -> Bool

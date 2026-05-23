@@ -41,6 +41,13 @@ export function decodeInt(obj) {
   return new Error("Expected int");
 }
 
+export function decodeBool(obj) {
+  if (typeof obj === "boolean") {
+    return new Ok(obj);
+  }
+  return new Error("Expected bool");
+}
+
 export function isNull(val) {
   return val === null || val === undefined;
 }

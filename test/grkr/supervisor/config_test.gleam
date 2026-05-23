@@ -1,6 +1,5 @@
 import gleam/dict
 import grkr/supervisor/config
-import grkr/supervisor/types
 import gleeunit
 import gleeunit/should
 

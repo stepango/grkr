@@ -13,7 +13,7 @@ The migration uses small kanban-driven slices (decomposition required because la
 
 - **refusal/** (refusal assessment + full flow + checkpoints per spec 21/23/27):
   - flow.gleam (347 LOC), assessment.gleam (111), types.gleam (165), config.gleam (57), checkpoint.gleam (182), ffi.gleam (52) + json_ffi.mjs, fs.mjs
-  - Used by (still-thick) bin/worker-refuse-issue.sh (546 LOC)
+  - Wired via thin bin/worker-refuse-issue.sh (57 LOC wrapper: doctor+env+`exec gleam run -m grkr/refusal/cli -- "$@"`)
 
 - **supervisor/** (loop orchestration, recovery, locking, state + phases; per design in supervisor-design-final.md; phases extraction complete):
   - main.gleam (56 LOC), phases.gleam (284 LOC new extraction), loop.gleam (182 LOC, now delegates dispatch + pick to phases), recovery.gleam (214), config.gleam (163), types.gleam (168), state.gleam (189), lock.gleam (88), ffi.gleam (125)
@@ -30,8 +30,8 @@ The migration uses small kanban-driven slices (decomposition required because la
   - linear/ (e2e 272 + oauth 353, client 209, config 147, graphql 106, types 75, e2e_main 20)
 
 **Shell / bin/ status (per AGENTS.md: preserve existing shell-script conventions in bin/ and test/; keep changes small/explicit):**
-- Thin Gleam delegates: worker-sync-main.sh (18 LOC), worker-resolve-pr.sh (43 LOC), worker-pick-issue.sh (40 LOC), robot-main.sh (57 LOC thin complete)
-- Thick (full reimpl pending in follow-up cards): worker-refuse-issue.sh (546 LOC), grkr-issue-workflow.sh (649 LOC), doctor.sh (221), grkr-project-status.sh (189), grkr-templates.sh (317), grkr-task-slug.sh (17)
+- Thin Gleam delegates: worker-sync-main.sh (18 LOC), worker-resolve-pr.sh (43 LOC), worker-pick-issue.sh (40 LOC), robot-main.sh (57 LOC thin complete), worker-refuse-issue.sh (57 LOC thin complete)
+- Thick (full reimpl pending in follow-up cards): grkr-issue-workflow.sh (649 LOC), doctor.sh (221), grkr-project-status.sh (189), grkr-templates.sh (317), grkr-task-slug.sh (17)
 - Launcher bin/grkr updated in places to call Gleam CLIs (e.g. progress, task_slug, issue_provider)
 
 **Design & Spec artifacts (canonical):**
@@ -51,7 +51,7 @@ The migration uses small kanban-driven slices (decomposition required because la
 **Remaining (from 39-order.md + kanban + design):**
 - Supervisor phases full integration (sync_main, pick via github_picker done; schedule bg jobs with per-issue locks, reap, cleanup, stub pr_scan/comment_scan pending deeper)
 - Full thin wrapper for bin/robot-main.sh (after supervisor complete)
-- Thinning + full wiring for worker-refuse-issue.sh and remaining issue workflow stages (implement, test, decision gate)
+- Thinning for grkr-issue-workflow.sh and remaining issue workflow stages (implement, test, decision gate) -- worker-refuse-issue.sh now thin (57 LOC complete)
 - Comment scanning + @:robot: command handling (phase 3 per spec)
 - Full PR review of open slices, test+docs+sync cards, e2e validation (t_e26dc010 for remaining test failures in selector/config_test)
 - Cleanup polish, stale worktree/lock handling per 36-policy
@@ -62,7 +62,7 @@ The migration uses small kanban-driven slices (decomposition required because la
 **Traceability & process:**
 - Kanban: this task t_d5e8a0a9 (test+docs+sync: fixed all easy unused import/warnings in refusal/types/ffi/checkpoint/config, supervisor/config/loop/phases + tests; ran full `gleam build` (clean) + `gleam test --target javascript` (219 passed, 3 failures known in selector/config_test -- see parallel t_e26dc010); updated README + this docs with thin bins 40/58 LOC, phases extraction, current LOCs + cards; executed scripts/sync-spec.sh; verified no file >1000 LOC; added this note). Prior work: t_0b92efdf (docs), t_35908210 (stage+commit+push), review cards t_db6a39a6 / t_45bde826 (picker), t_7529c94a (supervisor recovery/state), t_0df8ce54 (pick thin), t_f4e0c86e (review), many others. Large impl cards decomposed to avoid iteration exhaustion.
 - Git: changes staged in this run (warnings fixes, docs); untracked/new include client.gleam, gh_exec.mjs, fs.mjs, phases.gleam, .grkr/ (logs/state from runs)
-- Follows AGENTS.md strictly: files <=1000 LOC (max resolve_pr/main 426, test 754, refuse 546, all others <400), spec/parts/ canonical (sync run), update README on functional/docs changes, preserve bin/ shell, prefer split specs.
+- Follows AGENTS.md strictly: files <=1000 LOC (max resolve_pr/main 426, test 754, grkr-issue-workflow 649, all others <400), spec/parts/ canonical (sync run), update README on functional/docs changes, preserve bin/ shell, prefer split specs.
 - During this run: oriented via kanban_show, read all required (AGENTS, README, this doc, supervisor-*.md, gleam-migration-patterns.md, listed spec/parts, prior cards), fixed warnings via targeted patches, re-ran build/tests clean for src, updated docs/traceability, ran sync, LOC audit via wc.
 
 **No user-facing workflow changes yet** — entrypoints (robot-main.sh, grkr --issue, worker-*.sh) and config remain identical; Gleam is internal thick logic + thin adapters.

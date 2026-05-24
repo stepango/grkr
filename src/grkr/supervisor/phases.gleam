@@ -5,12 +5,12 @@
 //// Follows types, exact phase order/names from types + design, error boundaries.
 //// run_pick uses direct github_picker/main.pick_next (no shell emit parse).
 //// Implemented remaining: reap (recovery), cleanup (purge + wt count), scan_pr_conflicts (resolve_pr list + conflicted + !active), scan_comment_commands (lock + last_scan + stub schedule).
-//// Tiny slice to avoid budget exhaustion; full scheduler and comment worker in later cards.
+//// Scheduler now wired (t_58ea0e02); pick phase records+spawns; comment worker and full Linear still later.
 
 import gleam/dict
 import gleam/int
 import gleam/list
-import gleam/option.{None}
+import gleam/option.{None, Some}
 import gleam/string
 import grkr/github_picker/main as github_picker
 import grkr/github_picker/types as picker_types
@@ -18,6 +18,7 @@ import grkr/resolve_pr/github as resolve_pr_github
 import grkr/supervisor/ffi
 import grkr/supervisor/lock
 import grkr/supervisor/recovery
+import grkr/supervisor/scheduler
 import grkr/supervisor/state
 import grkr/supervisor/types as t
 
@@ -170,7 +171,6 @@ fn run_pick_and_schedule_issue_execution_phase(
   case lock.acquire_lock(lpath) {
     Ok(_) -> {
       let _ = log_info(config, "pick", "-", entity, "lock_acquired=issues")
-      let _ = log_info(config, "pick", "-", entity, "phase_started=true")
 
       // Direct Gleam call to github_picker (same process, no exec/emit parse).
       // pick_next() is pure, respects GITHUB_FIXTURE_PATH + active_jobs filter from env.
@@ -190,15 +190,32 @@ fn run_pick_and_schedule_issue_execution_phase(
                 <> " title="
                 <> escape_log_value(sel.issue_title),
             )
-          // Schedule stub (per scope of this + sibling scheduler card): full record+spawn in scheduler.gleam
-          let _ =
-            log_info(
-              config,
-              "pick",
-              "-",
-              entity,
-              "schedule_stub=true note=would_record_active_job_and_spawn_execution_workflow",
-            )
+          let proj_id = case sel.project_item_id {
+            "" -> None
+            p -> Some(p)
+          }
+          let _ = case scheduler.spawn_issue_execution(config, sel.issue_number, sel.task_slug, proj_id) {
+            Ok(_pid) -> {
+              log_info(
+                config,
+                "pick_and_schedule_issue_execution",
+                sel.job_key,
+                "issue/" <> int.to_string(sel.issue_number),
+                "scheduled_jobs=1 selected_issue=" <> int.to_string(sel.issue_number) <> " task_slug=" <> sel.task_slug,
+              )
+              Nil
+            }
+            Error(e) -> {
+              log_error(
+                config,
+                "pick_and_schedule_issue_execution",
+                sel.job_key,
+                "issue/" <> int.to_string(sel.issue_number),
+                "spawn_failed=" <> t.supervisor_error_to_string(e),
+              )
+              Nil
+            }
+          }
           t.Success
         }
         Error(e) -> {

@@ -53,6 +53,19 @@ pub fn job_key_log_basename(key: JobKey) -> String {
   |> string.replace("/", "-")
 }
 
+/// Minimal GitHub comment record for scan_comment_commands (from REST /repos/.../issues/comments)
+/// Per spec/parts/15-phase-3, 11-state-model (id + updated_at for idempotency)
+pub type GitHubComment {
+  GitHubComment(
+    id: String,
+    body: String,
+    created_at: String,
+    updated_at: String,
+    user_login: String,
+    html_url: String,
+  )
+}
+
 /// Active job record (matches active_jobs.json schema + shell)
 pub type ActiveJob {
   ActiveJob(

@@ -187,3 +187,59 @@ pub fn count_active_issue_executions(jobs: Dict(String, t.ActiveJob)) -> Int {
   })
   |> list.length
 }
+
+/// Read processed_comments.json (array of comment id strings).
+/// Empty list on missing/empty/[] .
+/// Errors on parse failure.
+pub fn read_processed_comments(path: String) -> Result(List(String), t.SupervisorError) {
+  case ffi.read_text(path) {
+    Error(e) -> Error(t.Io("read processed_comments: " <> e))
+    Ok(content) -> {
+      let trimmed = string.trim(content)
+      case trimmed {
+        "" | "[]" | "null" -> Ok([])
+        json -> {
+          case ffi.parse(json) {
+            Error(e) -> Error(t.Parse("processed_comments json: " <> e))
+            Ok(root) ->
+              case ffi.decode_array(root) {
+                Error(e) -> Error(t.Parse("decode array: " <> e))
+                Ok(arr) ->
+                  case list.try_map(arr, fn(v) { ffi.decode_string(v) }) {
+                    Ok(ids) -> Ok(ids)
+                    Error(e) -> Error(t.Parse("decode comment id: " <> e))
+                  }
+              }
+          }
+        }
+      }
+    }
+  }
+}
+
+/// Append new comment ids to processed_comments.json (dedup, atomic write).
+/// Safe if some already present.
+pub fn mark_comments_processed(
+  path: String,
+  new_ids: List(String),
+) -> Result(Nil, t.SupervisorError) {
+  use current <- result.try(read_processed_comments(path))
+  let updated =
+    list.fold(new_ids, current, fn(acc, id) {
+      case list.contains(acc, id) {
+        True -> acc
+        False -> list.append(acc, [id])
+      }
+    })
+  let json_list =
+    "["
+    <> string.join(
+        list.map(updated, fn(id) { "\"" <> string.replace(id, "\"", "\\\"") <> "\"" }),
+        ",",
+      )
+    <> "]"
+  case ffi.atomic_write_json(path, json_list) {
+    Ok(_) -> Ok(Nil)
+    Error(e) -> Error(t.Io("write processed_comments: " <> e))
+  }
+}

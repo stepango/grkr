@@ -17,11 +17,11 @@ See the expanded [docs/gleam-migration.md](./docs/gleam-migration.md) for:
 - Lock audit notes from this run
 
 **High-level snapshot:**
-- github_picker (client+main+picker), refusal (flow/assessment/checkpoint), supervisor (main/loop/recovery/state/lock/config/phases + FFI) implemented + reviewed in slices; phases.gleam extracted
+- github_picker (client+main+picker), refusal (flow/assessment/checkpoint + cli), supervisor (main/loop/recovery/state/lock/config/phases 500LOC + FFI) implemented + reviewed in slices; phases.gleam fully expanded with sync/pick/scan_pr/scan_comment/reap/cleanup
 - Fully migrated: sync_main, resolve_pr (PR conflicts), issue_provider (Linear), progress (checkpoints/Linear), task_slug, project_status, linear e2e
-- Bin updates: worker-pick-issue.sh (40 LOC thin), worker-sync-main.sh (18 LOC), worker-resolve-pr.sh (43 LOC), robot-main.sh (58 LOC thin progress), worker-refuse-issue.sh (57 LOC thin wrapper calling `gleam run -m grkr/refusal/cli`)
+- Bin updates: worker-pick-issue.sh (40 LOC thin), worker-sync-main.sh (18 LOC), worker-resolve-pr.sh (43 LOC), robot-main.sh (57 LOC thin), worker-refuse-issue.sh (57 LOC thin wrapper calling `gleam run -m grkr/refusal/cli`)
 - Still thick: grkr-issue-workflow.sh (649) (thinning in follow-ups)
-- Supervisor design finalized + phases landed; remaining phases (sync/reap/cleanup/scans) in t_0aac1fa7; impl via child cards (t_d5e8a0a9, t_0aac1fa7)
+- Supervisor phases + scheduler (active_jobs record + detached spawn under flock for pick_and_schedule) landed (t_61c5af7b + t_58ea0e02); pick now fully records+spawns real workflows; comment worker still pending; child cards (t_767a0b08 etc)
 - All changes maintain 100% external contracts (logs, locks, JSON schemas, exit codes, env, gh/gh project behavior)
 
 No changes to user-facing commands, config, or entrypoints (still `robot-main.sh`, `grkr --issue`, etc.). Workflow accuracy preserved.
@@ -358,3 +358,18 @@ This keeps user-facing docs accurate per AGENTS.md after the recent functional s
 - README updated for user accuracy post-hygiene change
 
 See kanban task t_9024ff95 comments for exact commands, output, and removed list.
+
+
+**Update for t_32b4ad11 (cleanup: purge prep superseded kanban ws t_e2503a20 4.5M stale copy, GitHub-only v2):**
+- Oriented via kanban_show(t_32b4ad11); read task body, AGENTS.md, spec/parts/36-cleanup-policy.md, .grkr/audit-cleanup.md (full recent entries incl t_78a7818e)
+- Verified safety for purge of /Users/claw/.hermes/kanban/workspaces/t_e2503a20 (ls/du/lsof/ps/sqlite3 on kanban.db/git worktree/diff state.gleam): 4.5M, no procs, only historical db ref by its own blocked task, divergent stale snapshot (state.gleam older), active ws /work/grkr-v2-cron unaffected at same commit base
+- Ran `gleam build` (clean 0.08s) + /bin/bash scripts/sync-spec.sh (no spec change, index 50 lines)
+- Appended rich prep note with before/after commands, post-steps, metadata template to .grkr/audit-cleanup.md
+- Added hygiene notes to docs/gleam-migration.md and this README.md per AGENTS.md + task acceptance (no functional change, just kanban hygiene reclaim prep)
+- Per kanban-worker skill: terminal safety blocks rm -rf (as in t_980b7473); documented ready-to-run purge command in audit; will block this task with review-required
+- No impact on active workspace, .git, builds, gateway, or other ws (t_7a26300d/t_d3a4d148 0B empties out of scope)
+- ~4.5M reclaim targeted; part of GitHub-only v2 board cleanup (see t_075882be audit for full ~14MB plan)
+- References: .grkr/audit-cleanup.md (detailed), kanban task t_32b4ad11, spec/parts/36 + 39, prior clean cards
+- This keeps README accurate for user post-hygiene prep (no user-facing workflow change)
+
+See .grkr/audit-cleanup.md for exact verification output, purge command, and handoff.

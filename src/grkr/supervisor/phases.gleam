@@ -6,6 +6,7 @@
 //// run_pick uses direct github_picker/main.pick_next (no shell emit parse).
 //// Implemented remaining: reap (recovery), cleanup (purge + wt count), scan_pr_conflicts (resolve_pr list + conflicted + !active), scan_comment_commands (lock + last_scan + stub schedule).
 //// Scheduler now wired (t_58ea0e02); pick phase records+spawns; comment worker and full Linear still later.
+//// Lock acquire pattern fixed (t_17c4b022): Ok(Acquired) vs Ok(Busy)|Ok(LockError)|Error(_) in pick/scan_pr/scan_comment.
 
 import gleam/dict
 import gleam/int
@@ -169,7 +170,7 @@ fn run_pick_and_schedule_issue_execution_phase(
   let entity = "repo/" <> config.repo
   let lpath = lock.lock_path(config.locks_dir, "issues")
   case lock.acquire_lock(lpath) {
-    Ok(_) -> {
+    Ok(t.Acquired) -> {
       let _ = log_info(config, "pick", "-", entity, "lock_acquired=issues")
 
       // Direct Gleam call to github_picker (same process, no exec/emit parse).
@@ -242,7 +243,7 @@ fn run_pick_and_schedule_issue_execution_phase(
       let _ = lock.release_lock(lpath)
       res
     }
-    Error(_) -> {
+    Ok(t.Busy) | Ok(t.LockError(_)) | Error(_) -> {
       let _ = log_info(config, "pick", "-", entity, "issues_lock_busy=true")
       t.Skipped("issues_lock_busy")
     }
@@ -313,7 +314,7 @@ fn run_scan_pr_conflicts_phase(config: t.SupervisorConfig) -> t.PhaseResult {
   let entity = "repo/" <> config.repo
   let lpath = lock.lock_path(config.locks_dir, "prs")
   case lock.acquire_lock(lpath) {
-    Ok(_) -> {
+    Ok(t.Acquired) -> {
       let _ = log_info(config, "scan_pr_conflicts", "-", entity, "lock_acquired=prs")
 
       // GitHub-only detection per spec/parts/14-phase-2 and 09-main-loop-contract
@@ -389,7 +390,7 @@ fn run_scan_pr_conflicts_phase(config: t.SupervisorConfig) -> t.PhaseResult {
       let _ = lock.release_lock(lpath)
       detection
     }
-    Error(_) -> {
+    Ok(t.Busy) | Ok(t.LockError(_)) | Error(_) -> {
       let _ = log_info(config, "scan_pr_conflicts", "-", entity, "prs_lock_busy=true")
       t.Skipped("prs_lock_busy")
     }
@@ -400,47 +401,169 @@ fn run_scan_comment_commands_phase(config: t.SupervisorConfig) -> t.PhaseResult 
   let entity = "repo/" <> config.repo
   let lpath = lock.lock_path(config.locks_dir, "comments")
   case lock.acquire_lock(lpath) {
-    Ok(_) -> {
+    Ok(t.Acquired) -> {
       let _ = log_info(config, "scan_comment_commands", "-", entity, "lock_acquired=comments")
 
-      // Structure per spec/parts/15, 09, 07; full discovery + last_scan/processed update + worker-handle
-      // deferred to dedicated card (item 10 per 39-recommended). For now: read state files, log 0, keep resilient.
-      let _ =
-        case ffi.read_text(config.last_comment_scan_file) {
-          Ok(ts) if ts != "" ->
-            log_info(
-              config,
-              "scan_comment_commands",
-              "-",
-              entity,
-              "last_scan=" <> escape_log_value(string.trim(ts)) <> " processed_state_present",
-            )
-          _ ->
-            log_info(
-              config,
-              "scan_comment_commands",
-              "-",
-              entity,
-              "last_scan=never comments_scanned=0 scheduler_pending=true msg=use_last_comment_scan_processed_in_later_card",
-            )
+      // Full impl per spec/parts/15-phase-3, 09-main-loop-contract, 07-supervisor, 39 item10 (GitHub-only v2)
+      // Idempotent discovery of @:robot: comments via gh api /issues/comments?since= , filter vs processed_comments.json + last_scan
+      // Schedule via scheduler (flock + record_active_job + job log), advance checkpoint.
+      // Resilient: errors logged, lock released, always Success (or Skipped on busy). No supervisor crash.
+      let last_scan = case state.read_last_comment_scan(config.last_comment_scan_file) {
+        Ok(ts) if ts != "" ->
+          ts
+        _ ->
+          ""
+      }
+      let last_log = case last_scan {
+        "" -> "last_scan=never"
+        ts -> "last_scan=" <> escape_log_value(ts)
+      }
+      let _ = log_info(config, "scan_comment_commands", "-", entity, last_log <> " processed_state_present")
+
+      let fetched = case fetch_recent_comments(config.repo, last_scan) {
+        Ok(cs) -> cs
+        Error(e) -> {
+          let _ = log_error(config, "scan_comment_commands", "-", entity, "fetch_failed=" <> escape_log_value(e) <> " using_empty")
+          []
         }
-      // TODO later: gh api for recent comments containing @:robot: , filter new vs processed_comments.json, schedule Comment jobs
-      let _ =
-        log_info(
-          config,
-          "scan_comment_commands",
-          "-",
-          entity,
-          "comments_scanned=0 scheduler_pending=true",
-        )
+      }
+
+      let actionable = list.filter(fetched, fn(c) {
+        string.starts_with(string.trim(c.body), "@:robot:")
+      })
+
+      let processed = case state.read_processed_comments(config.processed_comments_file) {
+        Ok(p) -> p
+        Error(e) -> {
+          let _ = log_error(config, "scan_comment_commands", "-", entity, "processed_read_failed=" <> escape_log_value(t.supervisor_error_to_string(e)) <> " using_empty")
+          []
+        }
+      }
+
+      let new_comments = list.filter(actionable, fn(c) { !list.contains(processed, c.id) })
+      let new_count = list.length(new_comments)
+      let _ = log_info(
+        config,
+        "scan_comment_commands",
+        "-",
+        entity,
+        "fetched=" <> int.to_string(list.length(fetched)) <>
+          " actionable=" <> int.to_string(list.length(actionable)) <>
+          " new=" <> int.to_string(new_count) <>
+          " scheduler_pending=true",
+      )
+
+      // Schedule thin worker-handle for each new (will be no-op stub until full handle slice)
+      let scheduled = list.fold(new_comments, 0, fn(acc, c) {
+        let key = t.Comment(c.id)
+        let task_slug = "comment-" <> c.id
+        let worker_sh = config.grkr_root <> "/bin/worker-handle-comment.sh"
+        let sj = scheduler.ScheduledJob(key, task_slug, None, [worker_sh, c.id])
+        case scheduler.spawn_workflow(config, sj) {
+          Ok(pid) -> {
+            let _ =
+              log_info(
+                config,
+                "scan_comment_commands",
+                "comment:" <> c.id,
+                "comment/" <> c.id,
+                "scheduled=true pid=" <> int.to_string(pid) <> " body_preview=" <> escape_log_value(string.slice(c.body, 0, 60)),
+              )
+            acc + 1
+          }
+          Error(e) -> {
+            let _ = log_error(config, "scan_comment_commands", "comment:" <> c.id, "comment/" <> c.id, "spawn_failed=" <> t.supervisor_error_to_string(e))
+            acc
+          }
+        }
+      })
+
+      // Mark + advance checkpoint (best effort, after schedule attempt)
+      let _ = case state.mark_comments_processed(config.processed_comments_file, list.map(new_comments, fn(c) { c.id })) {
+        Ok(_) -> log_info(config, "scan_comment_commands", "-", entity, "marked_processed=" <> int.to_string(new_count))
+        Error(e) -> log_error(config, "scan_comment_commands", "-", entity, "mark_failed=" <> t.supervisor_error_to_string(e))
+      }
+
+      let now = ffi.utc_timestamp()
+      let _ = case state.write_last_comment_scan(config.last_comment_scan_file, now) {
+        Ok(_) -> log_info(config, "scan_comment_commands", "-", entity, "last_scan_updated=" <> escape_log_value(now))
+        Error(e) -> log_error(config, "scan_comment_commands", "-", entity, "last_scan_write_failed=" <> t.supervisor_error_to_string(e))
+      }
+
       let _ = lock.release_lock(lpath)
       t.Success
     }
-    Error(_) -> {
+    Ok(t.Busy) | Ok(t.LockError(_)) | Error(_) -> {
       let _ = log_info(config, "scan_comment_commands", "-", entity, "comments_lock_busy=true")
       t.Skipped("comments_lock_busy")
     }
   }
+}
+
+// --- Comment scan helpers (GitHub-only, gh api + manual decode via supervisor ffi; keep <1000 LOC total) ---
+fn fetch_recent_comments(repo: String, since: String) -> Result(List(t.GitHubComment), String) {
+  let path = case since {
+    "" -> "repos/" <> repo <> "/issues/comments?per_page=100"
+    _ -> "repos/" <> repo <> "/issues/comments?since=" <> since <> "&per_page=100"
+  }
+  let cmd = [
+    "gh", "api", path,
+    "--jq",
+    "[.[] | {id: (.id | tostring), body: .body, created_at: .created_at, updated_at: .updated_at, user_login: .user.login, html_url: .html_url}]",
+  ]
+  case ffi.executable("gh", cmd, None) {
+    ffi.ExecResult(0, stdout, _) -> parse_comment_list_json(stdout)
+    ffi.ExecResult(code, _, stderr) ->
+      Error("gh api exit=" <> int.to_string(code) <> " " <> string.trim(stderr))
+  }
+}
+
+fn parse_comment_list_json(json: String) -> Result(List(t.GitHubComment), String) {
+  let trimmed = string.trim(json)
+  case trimmed {
+    "" | "[]" | "null" -> Ok([])
+    _ ->
+      case ffi.parse(trimmed) {
+        Error(e) -> Error("parse json: " <> e)
+        Ok(root) ->
+          case ffi.decode_array(root) {
+            Error(e) -> Error("decode array: " <> e)
+            Ok(items) -> list.try_map(items, decode_github_comment)
+          }
+      }
+  }
+}
+
+fn decode_github_comment(item: ffi.JsonValue) -> Result(t.GitHubComment, String) {
+  let id = case ffi.get_field(item, "id") |> ffi.decode_string {
+    Ok(s) -> s
+    _ ->
+      case ffi.get_field(item, "id") |> ffi.decode_int {
+        Ok(n) -> int.to_string(n)
+        _ -> ""
+      }
+  }
+  let body = case ffi.get_field(item, "body") |> ffi.decode_string {
+    Ok(s) -> s
+    _ -> ""
+  }
+  let created_at = case ffi.get_field(item, "created_at") |> ffi.decode_string {
+    Ok(s) -> s
+    _ -> ""
+  }
+  let updated_at = case ffi.get_field(item, "updated_at") |> ffi.decode_string {
+    Ok(s) -> s
+    _ -> ""
+  }
+  let user_login = case ffi.get_field(item, "user_login") |> ffi.decode_string {
+    Ok(s) -> s
+    _ -> ""
+  }
+  let html_url = case ffi.get_field(item, "html_url") |> ffi.decode_string {
+    Ok(s) -> s
+    _ -> ""
+  }
+  Ok(t.GitHubComment(id, body, created_at, updated_at, user_login, html_url))
 }
 
 // --- Logging (duplicated from loop/recovery until logging.gleam extracted; matches shell) ---

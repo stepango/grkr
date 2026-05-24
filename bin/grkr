@@ -879,14 +879,32 @@ process_issue() {
   }
   decision=$IMPLEMENTATION_DECISION
   if [ "$decision" != "proceed" ]; then
-    refusal_result=$(complete_issue_refusal "$ISSUE" "$ISSUE_JSON" "$TASK_SLUG" "$TASK_DIR" "$TITLE" "$PROGRESS_FILE" "$decision_output_file" "$ISSUE_WORKTREE_DIR") || {
-      rm -f "$decision_prompt_file" "$decision_output_file"
+    parsed_refusal=$(parse_refusal_decision_output "$decision_output_file")
+    refusal_class_candidate=$(printf '%s\n' "$parsed_refusal" | awk 'NR == 1 {print}')
+    refusal_class=$(normalize_refusal_class_candidate "$refusal_class_candidate")
+    reasoning=$(printf '%s\n' "$parsed_refusal" | awk 'found {print} /^---$/ {found=1}' | sed '/^$/d')
+    if [ -z "$reasoning" ]; then
+      reasoning="The issue does not appear ready for safe autonomous implementation in its current state."
+    fi
+    refusal_emits=$(mktemp "${TMPDIR:-/tmp}/grkr-refusal-emits.XXXXXX")
+    PROJECT_ROOT=${GRKR_GLEAM_PROJECT_ROOT:-$(dirname "$SCRIPT_DIR")}
+    gleam_status=0
+    if [ -f "$PROJECT_ROOT/gleam.toml" ]; then
+      set +e
+      (cd "$PROJECT_ROOT" && gleam run -m grkr/refusal/cli -- "$ISSUE" "$refusal_class" "$reasoning") 2>&1 | tee "$refusal_emits"
+      gleam_status=$?
+      set -e
+    else
+      echo "❌ Missing gleam.toml at $PROJECT_ROOT (required for v2 refusal/cli)" >&2
+      gleam_status=1
+    fi
+    if [ "$gleam_status" -ne 0 ]; then
+      rm -f "$refusal_emits" "$decision_prompt_file" "$decision_output_file"
       return 1
-    }
-    refusal_class=$(printf '%s\n' "$refusal_result" | tail -n2 | head -n1)
-    refusal_comment_id=$(printf '%s\n' "$refusal_result" | tail -n1)
+    fi
+    refusal_comment_id=$(grep '^REFUSAL_COMMENT_ID=' "$refusal_emits" | head -1 | sed 's/[^=]*=//' | tr -d '"' || true)
     mark_task_progress_refused "$PROGRESS_FILE" "$refusal_class" "$refusal_comment_id"
-    rm -f "$decision_prompt_file" "$decision_output_file"
+    rm -f "$refusal_emits" "$decision_prompt_file" "$decision_output_file"
     CURRENT_ISSUE_WORKTREE=""
     echo "⏸️ Refused implementation for issue #$ISSUE."
     ATTACH_ISSUE_LOGS=0
@@ -901,7 +919,6 @@ process_issue() {
   write_issue_prompt_file "$prompt_file" "$ISSUE" "$TITLE" "$URL" "$BODY" "$TASK_SLUG" "$ISSUE_WORKTREE_DIR"
   codex_output_file="$TASK_DIR/implementation.log"
   run_codex_prompt "$prompt_file" "$codex_output_file" "implement the issue" replace "$ISSUE_WORKTREE_DIR"
-
   implementation_refusal=$(detect_implementation_refusal "$codex_output_file")
   if [ -n "$implementation_refusal" ]; then
     echo "⚠️ Implementation discovered blockers that require refusal."
@@ -930,7 +947,6 @@ process_issue() {
     attach_issue_logs
     return 0
   fi
-
   ensure_publishable_file_sizes "$ISSUE" "$TITLE" "$TASK_SLUG" "$prompt_file" "$codex_output_file" || {
     CURRENT_ISSUE_WORKTREE=""
     return 1

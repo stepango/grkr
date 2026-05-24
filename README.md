@@ -2,7 +2,7 @@
 
 AI-powered CLI that reads a GitHub issue and uses Codex to implement the changes.
 
-Current implementation status: see [docs/gleam-migration.md](./docs/gleam-migration.md) for v2 Gleam migration progress and research notes (detailed snapshot + module lists + kanban refs updated in t_0b92efdf).
+Current implementation status: see [docs/gleam-migration.md](./docs/gleam-migration.md) for v2 Gleam migration progress and research notes (detailed snapshot + module lists + kanban refs updated in t_20695489 + t_65d650b7 review + t_55147911 docs follow-up).
 
 ## Gleam v2 Migration Progress
 
@@ -11,17 +11,17 @@ Current implementation status: see [docs/gleam-migration.md](./docs/gleam-migrat
 See the expanded [docs/gleam-migration.md](./docs/gleam-migration.md) for:
 - Full file lists + LOC counts for github_picker/, refusal/, supervisor/, supporting modules
 - What compiles/runs today (`gleam build`, targeted tests, picker/refusal/supervisor partial paths)
-- Remaining work (supervisor phases integration complete in t_d5e8a0a9; thinning of refuse + issue workflow, comment scanning, cleanup, PR reviews, test fixes t_e26dc010)
-- Traceability to specific kanban tasks (e.g. t_35908210 staging, t_0b92efdf this docs, prior reviews/impls like t_7529c94a, blocked parents, t_d5e8a0a9 test+docs+sync, t_e26dc010 test errors)
+- Remaining work (supervisor scheduler wiring + prep in t_20695489 + docs refresh in t_55147911 post t_65d650b7 review; comment scanning full, Linear full, thinning thick shells, cleanup polish per 36, PR reviews of #79 slices)
+- Traceability to specific kanban tasks (e.g. t_58ea0e02 scheduler impl, t_20695489 test+docs+sync, t_78a7818e cleanup prune, t_767a0b08 prior test+docs, t_65d650b7 review (supervisor slice), t_55147911 docs follow-up, PR#79 reviews t_2abfcacc/t_e1b63fc6/t_1ef6c1a8 etc)
 - Design refs (supervisor-design-final.md, supervisor-synthesis.md, gleam-migration-patterns.md)
 - Lock audit notes from this run
 
 **High-level snapshot:**
-- github_picker (client+main+picker), refusal (flow/assessment/checkpoint + cli), supervisor (main/loop/recovery/state/lock/config/phases 500LOC + FFI) implemented + reviewed in slices; phases.gleam fully expanded with sync/pick/scan_pr/scan_comment/reap/cleanup
+- github_picker (client+main+picker), refusal (flow/assessment/checkpoint + cli), supervisor (main/loop/recovery/state/lock/config/phases 517LOC + scheduler 130 + FFI) implemented + reviewed in slices; phases.gleam fully expanded with sync/pick (real scheduler wired)/scan_pr/scan_comment (prep)/reap/cleanup
 - Fully migrated: sync_main, resolve_pr (PR conflicts), issue_provider (Linear), progress (checkpoints/Linear), task_slug, project_status, linear e2e
 - Bin updates: worker-pick-issue.sh (40 LOC thin), worker-sync-main.sh (18 LOC), worker-resolve-pr.sh (43 LOC), robot-main.sh (57 LOC thin), worker-refuse-issue.sh (57 LOC thin wrapper calling `gleam run -m grkr/refusal/cli`)
 - Still thick: grkr-issue-workflow.sh (649) (thinning in follow-ups)
-- Supervisor phases + scheduler (active_jobs record + detached spawn under flock for pick_and_schedule) landed (t_61c5af7b + t_58ea0e02); pick now fully records+spawns real workflows; comment worker still pending; child cards (t_767a0b08 etc)
+- Supervisor phases + scheduler (active_jobs record + detached spawn under flock for pick_and_schedule) landed (t_61c5af7b + t_58ea0e02) + wired in pick phase (t_20695489); pick now fully records+spawns real workflows; comment scan prep (state fns + GitHubComment type) landed; comment worker full pending; recent child cards (t_767a0b08, t_20695489 test+docs+sync, t_78a7818e cleanup, t_65d650b7 review + t_55147911 docs fix)
 - All changes maintain 100% external contracts (logs, locks, JSON schemas, exit codes, env, gh/gh project behavior)
 
 No changes to user-facing commands, config, or entrypoints (still `robot-main.sh`, `grkr --issue`, etc.). Workflow accuracy preserved.

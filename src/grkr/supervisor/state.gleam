@@ -243,3 +243,21 @@ pub fn mark_comments_processed(
     Error(e) -> Error(t.Io("write processed_comments: " <> e))
   }
 }
+
+/// Read last_comment_scan_at (plain text UTC timestamp or empty on missing/blank).
+/// Used for incremental gh /issues/comments?since=... discovery per spec/parts/15.
+pub fn read_last_comment_scan(path: String) -> Result(String, t.SupervisorError) {
+  case ffi.read_text(path) {
+    Error(_) -> Ok("")
+    Ok(content) -> Ok(string.trim(content))
+  }
+}
+
+/// Write current timestamp to last_comment_scan_at (plain text).
+/// Advances the checkpoint after successful scan + processed update.
+pub fn write_last_comment_scan(path: String, ts: String) -> Result(Nil, t.SupervisorError) {
+  case ffi.write_text(path, ts) {
+    Ok(_) -> Ok(Nil)
+    Error(e) -> Error(t.Io("write last_comment_scan: " <> e))
+  }
+}

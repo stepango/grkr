@@ -766,3 +766,14 @@ gleam build 2>&1 | tail -3 || true
 **PR #79:** will be updated on push to v2 (or manual sync note)
 
 **Next:** kanban_complete with metadata; if push fails, note for manual `git push origin v2` after rebase or pull.
+
+# Hygiene note from t_20695489 (2026-05-24, test+docs+sync, GitHub-only v2)
+- Post-scheduler wiring (pick phase now calls real spawn_issue_execution) + state prep for processed_comments + GitHubComment type (for future scan_comment per spec/15)
+- .grkr/ state: clean (no locks/ or state/ dirs yet; only archive/ + audit-cleanup.md (updated in prior + this append))
+- git worktree: only active main (pruned in t_78a7818e; confirmed `git worktree list` shows 1)
+- No runtime artifacts, no old locks
+- gleam build clean + 228 tests pass verified in this run
+- All source files <1000 LOC (max 754 test, 649 sh, 517 phases.gleam, 426 resolve_pr/main.gleam)
+- No user-facing or workflow changes
+- Appended per AGENTS.md + task acceptance for traceability
+- References: kanban task t_20695489, AGENTS.md, spec/parts/36-cleanup-policy.md

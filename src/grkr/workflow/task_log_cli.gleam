@@ -3,11 +3,10 @@
 /// Split per t_491dd327; thin facade keeps the -m name stable.
 
 import gleam/int
-import gleam/string
 import grkr/workflow/ffi as w
 import grkr/workflow/task_log_core as core
 import grkr/workflow/task_log_persist as persist
-import grkr/workflow/task_log_types.{type LogMode, Append, Replace}
+import grkr/workflow/task_log_types.{Append, Replace}
 
 pub fn main() -> Nil {
   case w.argv() {

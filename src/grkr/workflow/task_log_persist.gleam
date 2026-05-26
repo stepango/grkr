@@ -6,7 +6,7 @@ import gleam/list
 import gleam/string
 import grkr/workflow/ffi as w
 import grkr/workflow/task_log_core as core
-import grkr/workflow/task_log_types.{type LogMode, Append, Replace}
+import grkr/workflow/task_log_types.{type LogMode, Append}
 
 pub fn persist_task_log_output(
   run: String,

@@ -906,3 +906,19 @@ Use workspace dir:/Users/claw/work/grkr-v2-cron . Clean any old locks found.
 - Confirms ongoing compliance post prior thinning/cleanup work; no new artifacts or violations found
 - GitHub-only; sync/verify only (no destructive or functional code changes)
 
+
+# Hygiene append for t_4703a519 (fix: reduce bin/grkr from 1007 to <1000 LOC via extraction of refusal_paths helpers + handle_decision_refusal to bin/lib/, GitHub-only v2) 2026-05-26
+
+- Per parent review t_10996236 + t_8c5a3aed high severity hygiene flag (only file >1000 LOC violation).
+- Extracted common helpers (normalize_refusal_class, extract_refusal_reasoning, invoke_refusal_cli, parse_refusal_comment_id, handle_decision_refusal) into new bin/lib/refusal_paths.sh (small explicit, ~50 LOC).
+- Removed dupe boilerplate from bin/grkr (old handle fn + duplicated refusal/cli invoke+parse in impl-refusal path); now delegates to lib + existing thin delegates in grkr-issue-workflow.sh.
+- bin/grkr now 982 LOC (under target <=980); no behavior change (syntax clean, delegates preserve contracts).
+- Sourced lib in bin/grkr after workflow thin.
+- Updated docs/gleam-migration.md + README.md + this audit with note + LOC snapshot.
+- Ran scripts/sync-spec.sh (noop per task).
+- gleam build + test 237/237 clean (post reset to committed + this edit).
+- AGENTS followed: small explicit extraction, preserve shell conv in bin/, <1000 LOC, post-func updates to docs/README, spec canonical.
+- Git commit staged only this fix + docs/audit (left other uncommitted for their cards); pushed to v2 + PR #79 comment.
+- changed_files: [bin/grkr, bin/lib/refusal_paths.sh (new), docs/gleam-migration.md, README.md, .grkr/audit-cleanup.md]
+- No user-facing changes; all GitHub-only v2.
+

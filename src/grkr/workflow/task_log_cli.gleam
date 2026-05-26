@@ -1,7 +1,6 @@
 /// CLI entry for task_log (persist/emit/is-sharded etc).
 /// Invoked as: gleam run -m grkr/workflow/task_log -- persist ...
 /// Split per t_491dd327; thin facade keeps the -m name stable.
-
 import gleam/int
 import grkr/workflow/ffi as w
 import grkr/workflow/task_log_core as core

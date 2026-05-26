@@ -198,3 +198,44 @@ This audit completes t_0af23386 per lifecycle (orient via kanban_show, reads, gr
 
 All findings grounded in live source (no speculation). Ready for thin impl cards.
 **Post t_d704484d worktree split:** worktree.gleam split into 4 small files per proposal (types/ops/stage/facade); FFI path fixes applied; main updated; completes the worktree portion of thinning (sibling to task_log/decision splits). See docs/gleam-migration.md . (2026-05-25)
+
+**Post t_c4ea323f test+docs+sync + clean build (GitHub-only v2, 2026-05-26):**
+
+- Oriented: kanban_show(t_c4ea323f); workspace=/Users/claw/work/grkr-v2-cron (post 12cdfd1 commit); read AGENTS.md, full .grkr/audit-grkr-issue-workflow-thinning.md (ends with d704 worktree), spec/parts/08-worker-scripts.md 12-worktree-model.md 17-issue-workflow-overview.md 22-stage-3-implement-or-refuse-decision-gate.md 32-detailed-issue-workflow-pseudocode.md 39-recommended-implementation-order.md + others, docs/gleam-migration.md (full 375 lines, stale top), README.md, current src (workflow/ 15 files, 1108 total LOC split), bin/grkr-issue-workflow.sh (58 LOC thin), bin/grkr, git log/status (only minor M from this run's fixes), .grkr/audit-cleanup.md
+- Ran full `gleam build` (clean, 0.06s; fixed 2 unused import warnings left from splits: task_log_persist dropped Replace ctor, task_log_cli dropped gleam/string + LogMode type)
+- Ran `gleam test` (237 passed, 0 failures; includes decision_test + task_log_test 5 scenarios for sharding parity)
+- Updated docs/gleam-migration.md + README.md (refreshed top status/LOCs/key list/remaining/capabilities/traceability for completed workflow thinning; added this task entry; per AGENTS post any functional)
+- Ran `bash scripts/sync-spec.sh` (refreshed spec/spec.md + parts/README.md)
+- LOC/AGENTS audit: 
+  - wc verified: no src/*.gleam or bin/*.sh or test/*.sh >1000 LOC (src max: phases.gleam 640, resolve_pr/main 426, workflow/decision 264, task_log_core 187; bin max grkr-templates 317, worker-handle-comment 296; tests max ~754; build/ stdlib excluded as vendored)
+  - All workflow splits <200 except decision 264 (compliant, no further split needed per prior decision in t_3f2b0507)
+  - grkr-issue-workflow.sh now 58 LOC thin wrapper (gleam_wf delegates for main/decision/task_log + minimal compat)
+  - No old locks in .grkr/ or /tmp (clean)
+  - AGENTS followed: small explicit changes (only import hygiene + docs), spec/parts canonical (sync run), bin/ shell conv preserved (thins), files <=1000, update README on change, GitHub-only
+- Hygiene append: this section to audit + note in audit-cleanup.md if applicable; also fixed the 2 warnings as post-thinning hygiene
+- No behavior change; full parity + clean state for v2
+- Handoff ready for kanban_complete on t_c4ea323f
+
+This completes the post-workflow-thinning test+docs+sync per task + kanban lifecycle. All grounded in live source + runs.
+
+
+# Hygiene append for t_bfa55e76 (sync: run scripts/sync-spec.sh + verify spec/spec.md index + parts/README + AGENTS compliance, GitHub-only v2) 2026-05-26 ~13:10
+
+- Oriented via kanban_show(t_bfa55e76); confirmed workspace /Users/claw/work/grkr-v2-cron on v2 branch; read AGENTS.md, scripts/sync-spec.sh, current spec/spec.md + parts/README.md + parts/ (40 non-README .md files: 00-39), .grkr/audit-*.md (prior hygiene for t_c4ea323f), git status (uncommitted from prior: audits, README, docs, some src)
+- Ran `bash scripts/sync-spec.sh` (exit 0, silent success per design)
+- Verified output: no errors; spec/spec.md (50 lines) and parts/README.md updated (timestamps to 13:08); content identical to prior (idempotent; git diff --stat empty, no content change)
+- Confirmed index covers all parts exactly: 40 entries for 00-overview.md .. 39-recommended-implementation-order.md (README.md correctly skipped by script logic)
+- Ran `gleam build`: Compiled in 0.06s (clean, 0 warnings)
+- Ran `gleam test`: 237 passed, no failures (full suite)
+- LOC/AGENTS audit via wc -l:
+  - All src/*.gleam <=1000 (max: supervisor/phases.gleam 640, resolve_pr/main.gleam 426, workflow/decision.gleam 264, task_log_core 187 etc; build/ vendored stdlib excluded)
+  - bin/*.sh <=1000 (max: grkr-templates.sh 317, worker-handle-comment.sh 296, grkr-project-status.sh 190, grkr-issue-workflow.sh 58 thin)
+  - test/*.sh <=1000 (max ~291 grkr-smoke.sh)
+  - scripts/*.sh small (sync-spec 44)
+  - All compliant with AGENTS "every file at 1000 lines or fewer"
+- AGENTS.md compliance: spec/parts/ as canonical source (verified), spec/spec.md kept as generated index (sync run), sync harness executed before finishing this spec-related work, preferred split files (did not load full spec blob), shell-script conventions in bin/ + test/ preserved (no mods), README updated only on functional (none here; prior t_c4ea323f handled), GitHub-only v2
+- Appended this hygiene note to .grkr/audit-grkr-issue-workflow-thinning.md (and will to audit-cleanup.md)
+- No spec changes requiring commit from this run (sync idempotent); verifies post-thinning + post-prior-sync state remains fully AGENTS compliant and ready
+- Per task acceptance: sync harness success, index/parts/README current, build/test clean, LOC audit passes, AGENTS confirmed
+- References: AGENTS.md, spec/parts/39-recommended-implementation-order.md + 00-overview.md etc, scripts/sync-spec.sh, docs/gleam-migration.md, t_c4ea323f, t_767a0b08
+

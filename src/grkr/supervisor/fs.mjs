@@ -1,6 +1,6 @@
 import { closeSync, mkdirSync, openSync, writeFileSync, readFileSync, renameSync, appendFileSync, existsSync, readdirSync, unlinkSync } from "fs";
 import { spawnSync } from "child_process";
-import { Ok, Error } from "../../gleam.mjs";
+import { Ok, Error, toList } from "../../gleam.mjs";
 
 export function get_env(name) {
   return process.env[name] || "";

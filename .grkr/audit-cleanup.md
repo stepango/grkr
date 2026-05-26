@@ -723,3 +723,186 @@ echo "=== hygiene complete for t_e943a98a ==="
 This completes the verification/prep slice for t_e943a98a per kanban-worker lifecycle (orient via kanban_show, safe inspections + prune + verifs inside workspace, edit audit, comment+block for review). GitHub-only v2.
 
 # End of t_e943a98a hygiene prep append (2026-05-25 12:54 PDT)
+
+# --- Fresh Re-Audit + Proposed Safe Cleanup Commands for t_eea21836 (2026-05-26) ---
+
+**Date:** Tue May 26 01:01:02 PDT 2026 (re-run full discovery)
+**Worker:** default (kanban-worker)
+**Workspace:** /Users/claw/work/grkr-v2-cron
+**References:**
+- This task t_eea21836 + prior t_980b7473 (blocked clean), t_075882be (audit), t_93e360e9 (todo exec), t_e943a98a (auth prep), t_1c3c4a70, t_35a3cfc0 etc
+- AGENTS.md, spec/parts/36-cleanup-policy.md, 33-locking-and-concurrency.md, 12-worktree-model.md, 07-supervisor.md, 09-main-loop-contract.md, 18-task-folder-and-progress-tracking.md, 35-failure-handling.md, 39-recommended-implementation-order.md, 00-overview.md, docs/gleam-migration.md, .grkr/audit-grkr-issue-workflow-thinning.md
+- Full re-verif: kanban_show, read_file on audit+specs, terminal ls/du/sqlite3/lsof/ps/git/find + kanban db queries
+
+## Execution Summary (Non-Destructive)
+- Re-ran all discovery per task spec step 1-2 (ls -la/du on ws + .claude + .hermes/locks, sqlite3 queries on tasks+workspace_path+status for the 8 t_*, lsof/ps cross-ref, git worktree list --porcelain + .git/worktrees ls, find for other stale)
+- 8 stale kanban ws confirmed (per task body + fresh: 7x0B + t_bd5a4fc5 52K + t_e2503a20 4.5M with stale grkr-v2 copy)
+- .claude/projects: 19 total (du/ls); keep ONLY main (-Users-claw-work-grkr-v2-cron 680K); remove 18 stale ( -Users-claw 12K + 17x --automation-worktrees-* ~14M+)
+- git worktrees: only active main at 12cdfd1 [v2]; .git/worktrees/ absent (no prunables); git worktree prune = safe noop
+- .hermes/auth.lock: 0B May 24 18:42:29, unheld (lsof grep no match on it; ps no holder); gateway.lock (held by 859), cron/.tick.lock (May26 current) KEEP
+- build/*.lock: main workspace ones fresh (KEEP); old copies inside t_e2503a20 covered by ws rm
+- Scans clean: no /tmp/grkr* dirs (some .txt temp bodies + /tmp/grkr-kanban-review/ with 5 json review artifacts + /tmp/grkr-test-layout - out of scope, leave); no ~/.grkr/locks; .grkr/ clean (only audits+config+empty worktrees/+archive May17 - leave); no .automation/
+- lsof/ps: ONLY gateway pid 859 on .hermes/hermes-agent logs/state.db + internals; current kanban-worker procs (t_c4ea323f, t_1cca18ff, this t_eea21836, t_f8eab5d9, t_e51eeee4, t_8c5a3aed + cli 916) use main workspace; ZERO hits on any stale ws, stale claude projects, auth.lock
+- kanban.db: 6 running, 87 todo, 72 blocked, 95 done, 17 archived; the 8 stale ws referenced EXCLUSIVELY by 8 blocked tasks (see list + titles below); ALL running/todo/active tasks use workspace_path=/Users/claw/work/grkr-v2-cron (dir); no open task touches stale ws
+- Git status: M scripts/sync-spec.sh (pre-existing from prior work)
+- Est reclaim ~4.55M (ws) + ~14M (claude stale, based on du 232K-2.1M x17 +12K) ≈ 18.5MB (prior est was 14MB; more ws/claude now)
+- No deletes/mods except this md append + safe non-dest verifs (e.g. git prune noop); all rm proposed as commented commands
+- This card follows strict kanban-worker safety: will kanban_block(reason=review-required...) after proposing/verifying exact commands in audit + this comment
+- GitHub-only v2 prep; independent of parallel review t_8c5a3aed / commit t_e51eeee4 / e2e t_f8eab5d9
+
+## 1. Stale Kanban Workspaces (fresh May26 verification)
+**Current (from ls -la /Users/claw/.hermes/kanban/workspaces/ + du -sh + sqlite3 owner query):**
+- t_12b2d72c (0B, May 24 12:42): blocked task t_12b2d72c "fix: bin/grkr exceeds 1000 LOC after recent refusal thinning (per t_f89c3f2b review)"
+- t_65f7ffd8 (0B, May 24 12:42): blocked task t_65f7ffd8 "fix: unused `scheduled` var warning in phases.gleam:457 scan_comment (t_f89c3f2b review)"
+- t_6fa89f50 (0B, May 24 12:42): blocked task t_6fa89f50 "impl: src/grkr/workflow/worktree.gleam (prepare_issue_worktree, cleanup, git_in_issue_context, stage_relevant, collect paths) + FFI + CLI (GitHub-only v2)"
+- t_7a26300d (0B, May 21 07:19): blocked task t_7a26300d "fix: ignore Result for update_progress_for_refusal in flow.gleam (log or propagate) GitHub-only v2 tiny slice"
+- t_bd5a4fc5 (52K, May 24 12:53): blocked task t_bd5a4fc5 "impl: src/grkr/workflow/task_log.gleam (sharding, persist, emit, manifest for codex outputs >1000 lines) + thin CLI entry (GitHub-only v2)"
+- t_d3a4d148 (0B, May 21 07:18): blocked task t_d3a4d148 "commit: stage+commit uncommitted v2 Gleam thins/phases/docs/tests to update PR #79 (GitHub-only)"
+- t_e2503a20 (4.5M, May 23 12:28): blocked task t_e2503a20 "fix: implement full comment scanning phase (@:robot: gh api, processed state, schedule) for supervisor (GitHub-only v2)" -- inside: stale grkr-v2/ checkout at commit 91af723 + uncommitted src/grkr/supervisor/state.gleam (has read_processed_comments etc)
+- t_ee96a4a4 (0B, May 24 19:00): blocked task t_ee96a4a4 "fix: workflow/ build blockers (task_log.gleam name clash with task_log.mjs, unused var, decision @external paths, decision_test.gleam syntax error) + wire decision CLI + persist to bin/grkr (GitHub-only v2)" (was scratch kind)
+
+**Note on safety (cross-ref blocked/todo):** These 8 blocked tasks are suspended from early v2 Gleam migration (pre the successful splits/thins in done cards t_2ddd4dce, t_491dd327, t_3f2b0507, t_8e681646, t_67554f3b etc May25). Their ws are divergent stale snapshots; current active development, all running workers, and todo tasks exclusively use the shared main workspace /Users/claw/work/grkr-v2-cron + .grkr/. Removing reclaims space with zero impact on active work or the blocked tasks themselves (only their old dispatch artifacts gone).
+
+**Proposed commands:**
+```bash
+# 1. stale kanban workspaces (empty dirs + superseded grkr-v2 copy at old commit + small 52K; safe per db/lsof/ps cross-ref + no active use + superseded by later done work)
+rm -rf /Users/claw/.hermes/kanban/workspaces/t_12b2d72c
+rm -rf /Users/claw/.hermes/kanban/workspaces/t_65f7ffd8
+rm -rf /Users/claw/.hermes/kanban/workspaces/t_6fa89f50
+rm -rf /Users/claw/.hermes/kanban/workspaces/t_7a26300d
+rm -rf /Users/claw/.hermes/kanban/workspaces/t_bd5a4fc5
+rm -rf /Users/claw/.hermes/kanban/workspaces/t_d3a4d148
+rm -rf /Users/claw/.hermes/kanban/workspaces/t_e2503a20
+rm -rf /Users/claw/.hermes/kanban/workspaces/t_ee96a4a4
+```
+
+## 2. Stale Git Worktree Registrations
+**Current (git worktree list --porcelain + ls .git/worktrees/ + ls .grkr/worktrees/):**
+- Only active checkout: /Users/claw/work/grkr-v2-cron HEAD 12cdfd1f825a5805ce02763b429318b962dc7ef9 [v2]
+- .git/worktrees/: does not exist (absent)
+- .grkr/worktrees/: empty dir
+- No prunable entries at all
+
+**Proposed (idempotent, safe metadata only; no files lost):**
+```bash
+# 2. git worktree cleanup (safe; noop in current clean state)
+cd /Users/claw/work/grkr-v2-cron && git worktree prune
+```
+
+## 3. .hermes Stale Locks
+**Current (ls -lT + find *.lock + lsof + ps):**
+- auth.lock (0B, May 24 18:42:29 2026): stale, unheld (lsof grep returned no matches for auth.lock; no ps proc references it)
+- gateway.lock (154B, May 23 00:18, held by gateway pid 859): **KEEP** (active)
+- cron/.tick.lock (May 26 00:57:56 2026): current cron tick, **KEEP**
+- Other .hermes locks found: package/ (uv 783K Apr, yarn in ui-tui/web/lsp/node_modules, flake), memories/MEMORY.md.lock + USER.md.lock (Apr), skills/.usage.json.lock (May10), venv/.lock, hermes-agent/uv.lock -- **LEAVE** (package + per prior audits + not "old unheld" in scope of cron clean rule for this card)
+- Stale build/*.lock (6x 0B May23 inside t_e2503a20/grkr-v2/build/ + packages/): covered by ws rm in #1
+
+**Proposed:**
+```bash
+# 3. .hermes root locks (only auth is stale/unheld per lsof/ps; clean per cron "Clean any old locks")
+rm -f /Users/claw/.hermes/auth.lock
+```
+
+## 4. .claude/projects Stale
+**Keep exactly:** /Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron (680K, main project with .jsonl sessions)
+
+**Remove exactly these 18 (old + 17 automation-worktree registrations; no active use per lsof/ps; dates Apr26-May13):**
+- /Users/claw/.claude/projects/-Users-claw (12K)
+- /Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-issue-15-implement-or-refuse-gate (980K)
+- /Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-issue-72-linear-e2e-oauth (328K)
+- /Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-15-gleam-decision-gate (852K)
+- /Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-16-refusal-flow (472K)
+- /Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-20-resolve-pr (1.7M)
+- /Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-69-gleam-linear-auth (232K)
+- /Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-69-gleam-linear-oauth-exchange-20260503115621 (848K)
+- /Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-70-gleam-linear-discovery-cli-202605050048 (400K)
+- /Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-70-gleam-linear-query (2.1M)
+- /Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-70-gleam-linear-selection-20260503111557 (648K)
+- /Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-71-gleam-linear-progress (764K)
+- /Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-71-gleam-linear-progress-20260504132725 (292K)
+- /Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-72-gleam-linear-e2e (328K)
+- /Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-72-gleam-linear-live-mutations-20260502222705 (460K)
+- /Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-77-gleam-sync-main (452K)
+- /Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-86-gleam-task-slug (520K)
+- /Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-88-gleam-project-status (2.1M)
+
+**Proposed commands (.claude - exact names from ls; use quotes for safety):**
+```bash
+# 4. .claude stale worktree/project registrations (keep ONLY the main -Users-claw-work-grkr-v2-cron)
+rm -rf /Users/claw/.claude/projects/-Users-claw
+rm -rf "/Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-issue-15-implement-or-refuse-gate"
+rm -rf "/Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-issue-72-linear-e2e-oauth"
+rm -rf "/Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-15-gleam-decision-gate"
+rm -rf "/Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-16-refusal-flow"
+rm -rf "/Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-20-resolve-pr"
+rm -rf "/Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-69-gleam-linear-auth"
+rm -rf "/Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-69-gleam-linear-oauth-exchange-20260503115621"
+rm -rf "/Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-70-gleam-linear-discovery-cli-202605050048"
+rm -rf "/Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-70-gleam-linear-query"
+rm -rf "/Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-70-gleam-linear-selection-20260503111557"
+rm -rf "/Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-71-gleam-linear-progress"
+rm -rf "/Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-71-gleam-linear-progress-20260504132725"
+rm -rf "/Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-72-gleam-linear-e2e"
+rm -rf "/Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-72-gleam-linear-live-mutations-20260502222705"
+rm -rf "/Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-77-gleam-sync-main"
+rm -rf "/Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-86-gleam-task-slug"
+rm -rf "/Users/claw/.claude/projects/-Users-claw-work-grkr-v2-cron--automation-worktrees-v2-issue-88-gleam-project-status"
+```
+
+## 5. Other Findings + Scope Notes (May26)
+- /tmp/grkr-* : several .txt (e.g. grkr-review-body.txt, grkr-thin-body.txt etc from recent kanban review outputs) + dirs /tmp/grkr-kanban-review/ (5 json), /tmp/grkr-test-layout/ -- **LEAVE** (temp/review artifacts; not in card scope of kanban ws / .claude / git wt / auth.lock)
+- .grkr/archive/: 3x research md May17 -- **LEAVE** (intentional per .grkr/ design)
+- .grkr/worktrees/: empty -- good (per worktree model in spec)
+- No other artifacts matching scan criteria (no /tmp/grkr dirs, no ~/.grkr/locks, .grkr/ clean of runtime locks/artifacts, no .automation/ left)
+- Per cron "Clean any old locks" rule: auth.lock is the sole qualifying stale/unheld root-level lock found in this run; all others current/active or package/scope-excluded
+
+## Safety Verification (May26 fresh - repeated pre-block)
+- **Active processes (ps aux | grep -E 'hermes|kanban|claude|gleam|gateway' | grep -v grep):** gateway (859, long-running since Sat), 6 kanban-worker python procs for the 6 running tasks (t_c4ea323f, t_1cca18ff, t_eea21836, t_f8eab5d9, t_e51eeee4, t_8c5a3aed) + 1 cli hermes; ZERO claude/gleam/lsp procs. All current workers use main ws.
+- **lsof on locks/paths (grep .hermes/kanban/workspaces/ + .claude/projects/ + auth.lock + t_e2503a20 etc):** ONLY matches for gateway pid 859 (its logs, state.db, hermes-agent internals, no stale paths). Zero hits on any to-be-removed item.
+- **kanban.db cross-ref (sqlite3 queries for workspace_path + status + title for t_* + open tasks):** confirmed 8 stale ws owned only by the 8 blocked tasks listed in section 1; 0 running/todo tasks reference any stale ws (all point to /Users/claw/work/grkr-v2-cron); 72 blocked total but only these 8 have the ws paths.
+- **git:** single clean checkout, no prunables, .git/worktrees absent; `git worktree prune` would be pure noop (ran in verif, no change).
+- **Code staleness (t_e2503a20):** contains old grkr-v2 snapshot (commit 91af723 + uncommitted supervisor/state.gleam with older processed_comments logic); main workspace now has post-thinning workflow/ (small modules task_log/decision/worktree/main per done t_491dd327 etc) + supervisor updates. Safe to remove divergent copy.
+- **No doubt cases per kanban-worker:** no active pid on targets, no referenced in open/running/todo tasks (only blocked/suspended), no .git risk, no active claude on stale projects (main kept), no other procs. All verifs repeated fresh this run.
+- Per AGENTS.md (small explicit hygiene, update README post-functional, keep files <=1000L, prefer spec/parts, run sync-spec), kanban-worker skill (terminal safety for rm, block for review-required on destructive, workspace dir:), spec/parts/36-cleanup-policy.md (purge stale locks/worktrees), 33-locking (dead proc recovery but here no overlap), 12-worktree-model (prune stale), 09-main-loop (has cleanup_stale_worktrees phase but this is kanban ws separate).
+- **No breakage risk:** active gateway/cron/kanban unaffected (their locks/paths distinct + held); current v2 work (reviews, commits, e2e) on main; Linear paths untouched (GitHub-only v2 card).
+
+## Next Steps (After Human Review)
+1. Human reviews updated .grkr/audit-cleanup.md (full fresh evidence) + kanban comment thread on t_eea21836
+2. Approve via `hermes kanban unblock t_eea21836` (or explicit comment "approve exec" / "lgtm")
+3. On unblock: exec the exact verified commands from sections 1-4 above (terminal tool, with pre/post verif echoes + || true on rms for safety if needed, re-verify post rm with ls/du)
+4. Post-exec re-audit (ls/du/sqlite for ws refs in blocked/todo, git worktree list, lsof/ps, .claude ls), append before/after evidence + reclaimed stats + success note to this md
+5. Update docs/gleam-migration.md + README.md (small hygiene note + traceability to t_eea21836 + prior cleans), run scripts/sync-spec.sh (fix perm if needed)
+6. kanban_complete with structured handoff: summary + metadata per task body (executed_commands list, reclaimed_bytes, remaining_artifacts, changed_files=[.grkr/audit-cleanup.md, docs/gleam-migration.md, README.md], tests_run=0, decisions=["safe exec post human review", "no active use confirmed via lsof/ps/db/git", "only superseded blocked tasks affected", "locks cleaned per cron rule"], lock_cleaned=true, refs to t_980b7473, t_075882be, t_8c5a3aed etc)
+
+**Safety (kanban-worker + spec/36 + cron rules - repeated):** NEVER execute destructive without prior review-required block + explicit human unblock. This run: 100% non-destructive audit/verify + propose only. If any doubt during exec, re-block. GitHub-only v2; no impact on Linear paths or active state (build locks, gateway 859, current ws, main .claude project).
+
+**Acceptance:** Stale artifacts removed safely (post-approve), space reclaimed, audit updated with full evidence chain (before/after), no breakage to active work, AGENTS.md followed (no file >1000L, spec/parts used for context, README+sync post change), full traceability to all prior clean cards.
+
+This cleanup card is independent of code impl (parallel with review t_8c5a3aed, commit t_e51eeee4, e2e t_f8eab5d9); depends on human approval for exec phase. Prep for clean e2e/commit. GitHub-only v2.
+
+Use workspace dir:/Users/claw/work/grkr-v2-cron . Clean any old locks found.
+
+# Generated by kanban task t_eea21836 on 2026-05-26
+# Do not execute any rm -rf or destructive commands without human review/approve per kanban-worker skill + terminal safety + spec/36-cleanup-policy.md
+
+# End of t_eea21836 fresh audit append (2026-05-26 ~01:10 PDT)
+
+
+# Hygiene append for t_c4ea323f (test+docs+sync post workflow thinning, GitHub-only v2) 2026-05-26
+
+- Full build/test clean post fixes (237/237, 0 warnings after import hygiene in task_log_*)
+- docs/gleam-migration.md + README.md updated with post-thinning snapshot (workflow splits detailed, 58LOC thin sh, LOCs, capabilities)
+- scripts/sync-spec.sh run
+- .grkr/audit-grkr-issue-workflow-thinning.md appended with completion note + LOC/AGENTS audit
+- Verified max LOC <1000 in project sources (excl build/); no locks; AGENTS.md followed
+- Per kanban: this is the final sync/docs/audit for the thinning effort (t_0af23386 + children + 12cdfd1)
+- changed_files in this run: [src/grkr/workflow/task_log_*.gleam (2 fixes), docs/gleam-migration.md, README.md, .grkr/audit-grkr-issue-workflow-thinning.md, .grkr/audit-cleanup.md, spec/spec.md (via sync)]
+
+
+# Hygiene append for t_bfa55e76 (sync + verify spec index/parts/README + AGENTS compliance, GitHub-only v2) 2026-05-26
+
+- Ran scripts/sync-spec.sh + full verification + LOC/AGENTS audit (build clean, 237 tests pass, all files <1000 LOC per AGENTS, index covers 40 parts exactly)
+- Appended matching hygiene note to .grkr/audit-grkr-issue-workflow-thinning.md
+- Confirms ongoing compliance post prior thinning/cleanup work; no new artifacts or violations found
+- GitHub-only; sync/verify only (no destructive or functional code changes)
+

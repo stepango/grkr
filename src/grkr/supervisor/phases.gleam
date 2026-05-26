@@ -4,8 +4,8 @@
 //// GitHub-only v2. Logging + escape duplicated (until logging.gleam).
 //// Follows types, exact phase order/names from types + design, error boundaries.
 //// run_pick uses direct github_picker/main.pick_next (no shell emit parse).
-//// Implemented remaining: reap (recovery), cleanup (purge + wt count), scan_pr_conflicts (resolve_pr list + conflicted + !active), scan_comment_commands (lock + last_scan + stub schedule).
-//// Scheduler now wired (t_58ea0e02); pick phase records+spawns; comment worker and full Linear still later.
+//// Implemented remaining: reap (recovery), cleanup (purge + wt count), scan_pr_conflicts (resolve_pr list + conflicted + !active), scan_comment_commands (lock + last_scan + schedule to full worker-handle-comment.sh per spec/15).
+//// Scheduler now wired (t_58ea0e02); pick phase records+spawns; comment worker full (reactions, worktree, codex prompt+dispatch, reactions update, cleanup) landed in t_13a8a733; full Linear still later.
 //// Lock acquire pattern fixed (t_17c4b022): Ok(Acquired) vs Ok(Busy)|Ok(LockError)|Error(_) in pick/scan_pr/scan_comment.
 
 import gleam/dict
@@ -453,8 +453,8 @@ fn run_scan_comment_commands_phase(config: t.SupervisorConfig) -> t.PhaseResult 
           " scheduler_pending=true",
       )
 
-      // Schedule thin worker-handle for each new (will be no-op stub until full handle slice)
-      let scheduled = list.fold(new_comments, 0, fn(acc, c) {
+      // Schedule full worker-handle-comment.sh for each new (reactions + worktree + codex per spec/15; state already marked processed here for dedup)
+      let _scheduled = list.fold(new_comments, 0, fn(acc, c) {
         let key = t.Comment(c.id)
         let task_slug = "comment-" <> c.id
         let worker_sh = config.grkr_root <> "/bin/worker-handle-comment.sh"

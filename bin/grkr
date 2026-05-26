@@ -687,6 +687,7 @@ extract_codex_pr_body() {
   local issue=$5
   local url=$6
 
+  # task_log_is_sharded + emit_task_log_stream now delegate to Gleam (t_ef6b855f wiring; persist already was)
   if [ -s "$codex_output_file" ] || task_log_is_sharded "$codex_output_file"; then
     emit_task_log_stream "$codex_output_file" | awk '
       /^## / {found=1}
@@ -825,6 +826,32 @@ EOF
 )" >/dev/null
 }
 
+handle_decision_refusal() {
+  local ISSUE=$1 PROGRESS_FILE=$2 decision_output_file=$3 decision_prompt_file=$4 ISSUE_WORKTREE_DIR=$5
+  local parsed_refusal=$(cd "${GRKR_GLEAM_PROJECT_ROOT:-$(dirname "$SCRIPT_DIR")}" && gleam run -m grkr/workflow/decision -- parse-refusal "$decision_output_file" 2>/dev/null || echo "other\n---\n")
+  local refusal_class_candidate=$(printf '%s\n' "$parsed_refusal" | awk 'NR == 1 {print}')
+  local refusal_class=$(printf '%s' "${refusal_class_candidate:-}" | tr '[:upper:]' '[:lower:]' | tr ' -' '__' | tr -cd 'a-z0-9_')
+  case "$refusal_class" in
+    underspecified|too_large|missing_dependency|needs_design_decision|unsafe_autonomous_change|repo_not_ready|other) ;;
+    *) refusal_class=other ;;
+  esac
+  local reasoning=$(printf '%s\n' "$parsed_refusal" | awk 'found {print} /^---$/ {found=1}' | sed '/^$/d')
+  [ -z "$reasoning" ] && reasoning="The issue does not appear ready for safe autonomous implementation in its current state."
+  local refusal_emits=$(mktemp "${TMPDIR:-/tmp}/grkr-refusal-emits.XXXXXX")
+  local PROJECT_ROOT=${GRKR_GLEAM_PROJECT_ROOT:-$(dirname "$SCRIPT_DIR")}
+  local gleam_status=0
+  if [ -f "$PROJECT_ROOT/gleam.toml" ]; then set +e; (cd "$PROJECT_ROOT" && gleam run -m grkr/refusal/cli -- "$ISSUE" "$refusal_class" "$reasoning") 2>&1 | tee "$refusal_emits"; gleam_status=$?; set -e; else echo "❌ Missing gleam.toml at $PROJECT_ROOT (required for v2 refusal/cli)" >&2; gleam_status=1; fi
+  if [ "$gleam_status" -ne 0 ]; then rm -f "$refusal_emits" "$decision_prompt_file" "$decision_output_file"; return 1; fi
+  local refusal_comment_id=$(grep '^REFUSAL_COMMENT_ID=' "$refusal_emits" | head -1 | sed 's/[^=]*=//' | tr -d '"' || true)
+  mark_task_progress_refused "$PROGRESS_FILE" "$refusal_class" "$refusal_comment_id"
+  rm -f "$refusal_emits" "$decision_prompt_file" "$decision_output_file"
+  CURRENT_ISSUE_WORKTREE=""
+  echo "⏸️ Refused implementation for issue #$ISSUE."
+  ATTACH_ISSUE_LOGS=0
+  attach_issue_logs
+  return 0
+}
+
 process_issue() {
   local ISSUE=$1
   local decision
@@ -873,42 +900,22 @@ process_issue() {
   decision_prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-decision-prompt.XXXXXX")
   decision_output_file=$(mktemp "${TMPDIR:-/tmp}/grkr-decision-output.XXXXXX")
   write_decision_prompt_file "$decision_prompt_file" "$ISSUE" "$TITLE" "$URL" "$BODY" "$TASK_SLUG" "$ISSUE_WORKTREE_DIR"
-  run_implementation_decision_gate "$ISSUE" "$PROGRESS_FILE" "$decision_prompt_file" "$decision_output_file" "$ISSUE_WORKTREE_DIR" || {
-    rm -f "$decision_prompt_file" "$decision_output_file"
-    return 1
-  }
-  decision=$IMPLEMENTATION_DECISION
-  if [ "$decision" != "proceed" ]; then
-    parsed_refusal=$(parse_refusal_decision_output "$decision_output_file")
-    refusal_class_candidate=$(printf '%s\n' "$parsed_refusal" | awk 'NR == 1 {print}')
-    refusal_class=$(normalize_refusal_class_candidate "$refusal_class_candidate")
-    reasoning=$(printf '%s\n' "$parsed_refusal" | awk 'found {print} /^---$/ {found=1}' | sed '/^$/d')
-    if [ -z "$reasoning" ]; then
-      reasoning="The issue does not appear ready for safe autonomous implementation in its current state."
-    fi
-    refusal_emits=$(mktemp "${TMPDIR:-/tmp}/grkr-refusal-emits.XXXXXX")
-    PROJECT_ROOT=${GRKR_GLEAM_PROJECT_ROOT:-$(dirname "$SCRIPT_DIR")}
-    gleam_status=0
-    if [ -f "$PROJECT_ROOT/gleam.toml" ]; then
-      set +e
-      (cd "$PROJECT_ROOT" && gleam run -m grkr/refusal/cli -- "$ISSUE" "$refusal_class" "$reasoning") 2>&1 | tee "$refusal_emits"
-      gleam_status=$?
-      set -e
-    else
-      echo "❌ Missing gleam.toml at $PROJECT_ROOT (required for v2 refusal/cli)" >&2
-      gleam_status=1
-    fi
-    if [ "$gleam_status" -ne 0 ]; then
-      rm -f "$refusal_emits" "$decision_prompt_file" "$decision_output_file"
+  # Inlined from removed run_implementation_decision_gate (small explicit; uses thin sh delegates)
+  run_codex_prompt "$decision_prompt_file" "$decision_output_file" "decide whether to implement the issue" replace "$ISSUE_WORKTREE_DIR"
+  decision=$(extract_decision_from_output "$decision_output_file")
+  case "$decision" in
+    proceed|refuse)
+      update_task_progress_decision "$PROGRESS_FILE" "$decision"
+      IMPLEMENTATION_DECISION=$decision
+      ;;
+    *)
+      echo "❌ Decision gate for issue #$ISSUE returned an invalid result."
+      rm -f "$decision_prompt_file" "$decision_output_file"
       return 1
-    fi
-    refusal_comment_id=$(grep '^REFUSAL_COMMENT_ID=' "$refusal_emits" | head -1 | sed 's/[^=]*=//' | tr -d '"' || true)
-    mark_task_progress_refused "$PROGRESS_FILE" "$refusal_class" "$refusal_comment_id"
-    rm -f "$refusal_emits" "$decision_prompt_file" "$decision_output_file"
-    CURRENT_ISSUE_WORKTREE=""
-    echo "⏸️ Refused implementation for issue #$ISSUE."
-    ATTACH_ISSUE_LOGS=0
-    attach_issue_logs
+      ;;
+  esac
+  if [ "$decision" != "proceed" ]; then
+    handle_decision_refusal "$ISSUE" "$PROGRESS_FILE" "$decision_output_file" "$decision_prompt_file" "$ISSUE_WORKTREE_DIR" || return 1
     return 0
   fi
   rm -f "$decision_prompt_file" "$decision_output_file"

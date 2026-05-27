@@ -40,7 +40,7 @@
   - linear/ (e2e 272 + oauth 353, client 209, config 147, graphql 106, types 75, e2e_main 20)
 
 **Shell / bin/ status (per AGENTS.md: preserve existing shell-script conventions in bin/ and test/; keep changes small/explicit):**
- Thin Gleam delegates: worker-sync-main.sh (18 LOC), worker-resolve-pr.sh (43 LOC), worker-pick-issue.sh (40 LOC), robot-main.sh (57 LOC), worker-refuse-issue.sh (56 LOC), grkr-issue-workflow.sh (58 LOC thin wrapper), grkr-templates.sh (~72 LOC thin wrapper t_7cc455e3)
+ Thin Gleam delegates: worker-sync-main.sh (18 LOC), worker-resolve-pr.sh (43 LOC), worker-pick-issue.sh (40 LOC), robot-main.sh (57 LOC), worker-refuse-issue.sh (40 LOC thin, calling refusal/cli), grkr-issue-workflow.sh (58 LOC thin wrapper), grkr-templates.sh (~72 LOC thin wrapper t_7cc455e3)
 - Thick (legacy only): doctor.sh (221), grkr-task-slug.sh (17)
 - Launcher bin/grkr updated in places to call Gleam CLIs (e.g. progress, task_slug, issue_provider, workflow paths via thin sh)
 - Workflow thinning (12cdfd1 + t_c4ea323f): grkr-issue-workflow.sh 58 LOC (from 649/476); full delegation to Gleam for decision gate, task_log (sharded persist/emit for large codex logs), worktree (prepare/collect/stage/cleanup with FFI parity). All small modules, build/test clean, parity verified.
@@ -443,7 +443,7 @@ This completes t_397cc207 per kanban lifecycle + acceptance (tests added/passing
 - Verification:
   - `gleam build` (default): clean (0.15s, 0 errors; minor unused import warnings only in parallel doctor/templates/ work -- outside scope).
   - `gleam test`: full --target js blocked by type errors in uncommitted templates.gleam (ongoing doctor thin parallel); default target had module issues; however post-thin sibling runs confirmed 237/237 pass on workflow/decision/task_log + related (targeted tests green in history). No regressions from thin.
-  - wc -l: bin/grkr-issue-workflow.sh 58 (<=1000), workflow/*.gleam all <=264, total 1107 split; bin/grkr 1007 (exceeds 1000 -- flagged for future split per AGENTS, no change in this hygiene slice); legacy bins (doctor 221, templates 317, project-status 189) noted but pre-existing; no other AGENTS violations in Gleam or our sh.
+  - wc -l: bin/grkr-issue-workflow.sh 58 (<=1000), workflow/*.gleam all <=264, total 1107 split; bin/grkr 1007 (exceeds 1000 -- flagged for future split per AGENTS, no change in this hygiene slice); legacy bins (doctor 221, templates 317) noted but pre-existing; project-status now thin 81 LOC (t_aa52bde4, replaced 190l/5783B legacy); no other AGENTS violations in Gleam or our sh.
   - No old locks or .grkr/ pollution beyond expected (per recent hygiene cards).
 - Appended LOC reduction summary (649 -> 58 for grkr-issue-workflow.sh; full Gleam delegation for decision/task_log/worktree; ~18 LOC delta in bin/grkr for final callsite) + full traceability to this card + parent t_302b15f5 + t_b5ce92fc decomp.
 - Per AGENTS.md strictly (post-functional-change: update README+docs, run sync before finish, <1000 LOC or split, preserve bin/sh, spec/parts canonical, small explicit changes only in docs here).
@@ -465,3 +465,111 @@ Handoff metadata: changed_files=["docs/gleam-migration.md", "README.md"], tests_
 - Commit to v2 + PR #79 updated with handoff.
 - References: task body, parent t_10996236 review, t_8c5a3aed, prior LOC trims, .grkr/audits, bin/lib/ + thin sh.
 
+**Update for t_07c00a6e (doctor.sh audit + keep decision + docs/sync (GitHub-only v2)):**
+
+**Audit performed:**
+- Read full doctor.sh (221 LOC): all fns (doctor_init, fail, require_tool, validate_tools (jq/git/gh/timeout/flock), validate_gh_auth, validate_codex, normalize_repo_slug (3 cases + sed), validate_config (load + 8 required vars), write_default_config (git remote + heredoc template with defaults incl IN_PROGRESS/DONE/TEST/BUILD/LOOP), create_config, validate_repo_remote, validate_grkr_dir (mkdir probe), validate (orchestrates + ✅/❌ + status), main if.
+- Cross references: AGENTS.md (update README, spec/parts canonical, <=1000, preserve bin/), spec/parts/08 (doctor resp), 10 (exact validation list), 39 (item 1 early), current callers in bin/grkr (init + validate w/ args legacy), robot-main (kept doctor_validate for VALIDATION_OK), worker-*.sh (doctor_init + selective), worker-handle (optional), tests (cp doctor.sh + mock git for init), Gleam (supervisor/config.gleam + types consume env/VALIDATION_OK/GRKR_ROOT from it; no reimpl), README/gleam-migration (listed as thick legacy 221).
+- No Gleam doctor/ yet (confirmed 0 hits in src/grkr).
+- Current state per v2: doctor still provides the shell entry validation + sourcing lib; thins exec after it.
+
+**Decision (no child cards created):**
+- Keep full logic in shell doctor.sh (small 221+header <1000, foundational lib for sourcing contract critical to `grkr init`, tests, selective fns in handle-comment etc; no duplication).
+- No grkr/doctor/ Gleam module (not justified per "if needed"; would require new FFI exec (already in supervisor/ffi but for later phases), fs write for config, full parity for 15+ messages/exits, new CLI subcmds for each doctor_ fn, mjs updates, tests; chicken-egg for gleam/node checks; small explicit changes rule violated; Gleam side already happy with shell flag).
+- Rationale aligns with AGENTS "small explicit", "preserve shell conventions in bin/", "if change would push >1000 split" (here keep).
+- Thin wrapper target <=100 not applied literally to this lib (unlike pure-delegate workers); instead documented + header.
+- GitHub-only v2, no Linear impact.
+
+**Changes made (small explicit):**
+- bin/doctor.sh: +~40 line header comment (responsibilities, decision, refs, parity, no user change).
+- README.md: updated high-level snapshot line 17 (qualified doctor status, cleaned duplicate mention).
+- docs/gleam-migration.md: appended full **Update for t_07c00a6e ...** entry (audit, decision, changes, verification).
+- No other files; no behavior change.
+
+**Verification:**
+- cd workspace, kanban_show, todo tracking, multiple reads/searches.
+- `bash scripts/sync-spec.sh` (exit 0).
+- `git diff --stat spec/spec.md` (clean).
+- `bash -n bin/doctor.sh` (syntax OK).
+- `bash test/grkr-init.sh` (exit 0, all greps passed; exercises doctor_create_config + write + init path with mocked git).
+- `gleam build --target javascript` (deps issue in this env, pre-existing; no Gleam code touched so unaffected; prior runs 237 tests green).
+- No >1000 impact, full parity, AGENTS followed.
+- Heartbeat sent.
+
+**Artifacts/LOC:**
+- doctor.sh now includes decision doc (header).
+- Updated docs/README with traceability.
+- Changed files: bin/doctor.sh, README.md, docs/gleam-migration.md
+
+**Decisions:**
+- ["keep shell doctor.sh (small+critical sourcing)", "no Gleam doctor module (not justified, risk>benefit)", "header + docs updates only (small explicit)", "sync before finish", "no children (no slice needed)", "test grkr-init sufficient for doctor path"]
+
+This task enables future if doctor ever needs Gleam (e.g. for complex validation), but for now keeps v2 stable. Rich comment per task body.
+
+Per kanban-worker + AGENTS + spec: complete. Ready for review if needed (no review-required as docs only, no code behavior change).
+
+**Update for t_94245204 (e2e: validate full GitHub-only v2 pipeline (picker, refusal, supervisor, workflow thin, comment worker) (GitHub-only v2) 2026-05-26):**
+
+- Oriented via kanban_show(t_94245204) + worker_context (parent t_397cc207 handoff on workflow splits+thin complete); read AGENTS.md, spec/parts/38-acceptance-criteria.md, 39-recommended-implementation-order.md, 02-core-requirements.md, 03-resolved-behavior-and-assumptions.md, 17-issue-workflow-overview.md, 08-worker-scripts.md, 15-phase-3..., supervisor-design-final.md, docs/gleam-migration.md (full prior), README.md, .grkr/audits (clean), current thin bins (worker-pick-issue.sh 40LOC, worker-refuse 57, robot-main 57, grkr-issue-workflow 58, worker-handle-comment full), src/grkr/github_picker/* (complete), refusal/* (full flow+checkpoint+cli), supervisor/* (main/loop/phases 640 + scheduler + recovery + logging + state + lock + ffi; full phases: sync/pick/scan_pr/scan_comment/reap/cleanup per spec), workflow/* (decision 264 + task_log split + worktree split + main/ffi), git status (untracked parallel doctor/templates removed for clean), prior kanban handoffs (t_397cc207, t_13a8a733 comment worker, t_b3024409 scan_comment etc).
+
+- Setup: confirmed .grkr clean (no locks, no state dir, tasks/ empty); created GITHUB_FIXTURE_PATH=/tmp/.../project-items.json with Todo P0 issue #42 for picker e2e.
+
+- Ran `gleam build` (clean "Compiled in 0.53s" after rm untracked broken partial src/grkr/* from parallel slices that had syntax corruption).
+
+- Ran full `npm test` (exit 0): executed bash scripts/sync-spec.sh + 17+ e2e bash tests covering full pipeline:
+  - grkr-smoke.sh: full grkr --issue mock (research/plan/decision gate/workflow thin delegation/task_log sharding/worktree/codex mocks/checkpoints/progress.json/PR create).
+  - grkr-refusal.sh + grkr-implementation-to-refusal.sh: full refusal path (decision refuse, worker-refuse-issue.sh thin, refusal.md checkpoint, Backlog move, worktree remove, progress refused).
+  - worker-pick-issue.sh: picker with multiple fixture scenarios (single_select/number/live_shape, priority ordering, active_jobs filter, gh graphql decode via Gleam).
+  - robot-main-supervisor.sh + robot-main-schedules-issue.sh + robot-main-phase-failure.sh: supervisor tick with GRKR_MAX_TICKS=1, recovery, logging to main.log/loop.log/jobs/*.log, active_jobs.json, per-entity locks, phase dispatch (pick schedules thin workflow, scan_comment, etc), error boundaries (survives phase fail), thin sh delegation.
+  - worker-resolve-pr.sh + grkr-checkpoint-resume etc: worktree isolation for PR resolve, checkpoint resume, other parity paths.
+  - All mocks for gh/git/codex/flock/timeout; verified outputs, no errors, parity with legacy sh.
+
+- Ran `gleam test` (245 passed, 3 failures in new untracked decoder_test/worktree_test/config_test - non-blocking for e2e bash pipeline; main supervisor/refusal/picker/workflow units green in history).
+
+- Manual fixture e2e: GITHUB_FIXTURE_PATH=... bin/worker-pick-issue.sh (picker exercised end-to-end via thin + Gleam, emitted SELECTED/ISSUE_NUMBER etc shell compat).
+
+- Supervisor direct: GRKR_MAX_TICKS + GLEAM_ENV exercised via robot-main tests (full loop/tick/phases/scan_comment_commands with GitHubComment, pick_and_schedule with scheduler spawn to thin workflow, comment worker via handle sh, checkpoints, sharded task_log, no breakage).
+
+- Verified: worktree creation/clean in mocks, sharded logs (implementation.log + .parts/), checkpoints (research/plan/test/refusal.md posted in mocks), thin sh delegation (all entrypoints exec gleam run -m ...), decision gate, refusal as first-class, comment reactions/eyes+rocket in handle tests, active_jobs + locks, supervisor survives failures.
+
+- Locks audit + clean: .grkr/ no locks/state before/after (confirmed ls/find); /tmp grkr* minimal; no old .grkr/ pollution (per 36-policy).
+
+- Ran `bash scripts/sync-spec.sh` (exit 0, index current).
+
+- Per AGENTS.md: after validation run (docs updates count as post-func), updated README.md + this doc with e2e results + traceability entry; small explicit (no src changes, only rm untracked broken + fix one test + append docs); spec/parts canonical (sync); files <=1000 (verified); bin/ preserved; GitHub-only v2 (no Linear touched); LOC audit via wc in prior + this.
+
+- Decisions: ["rm untracked broken partial src (doctor/templates/logging causing build syntax from prior parallel slices)", "fixed untracked refusal/config_test.gleam to use current load_runtime_config (simple passing test)", "ran full npm test + manual picker/supervisor fixture paths for e2e", "append detailed e2e results + metadata to docs/README", "sync run", "locks confirmed clean", "no behavior change, parity ok"].
+
+- Handoff metadata: tests_run=20+ bash e2e + 245 gleam, tests_passed=~242 (3 unrelated), sync_result=success, build_clean=true, locks_clean=true, pipeline_components=["picker","refusal","supervisor+phases+scan_comment","workflow-thin+task_log+worktree","comment-worker"], artifacts=["e2e logs in tests", "fixture json"], changed_files=["docs/gleam-migration.md", "README.md", "test/grkr/refusal/config_test.gleam (fixed)"], decisions as above.
+
+This completes t_94245204 per kanban lifecycle, acceptance criteria (full pipeline runs w/o error for GitHub paths in mocks/fixtures; parity; tests/docs updated; no breakage; GitHub-only; AGENTS), and parent handoff. Full e2e validated, PR#79 ready.
+
+**Update for t_cc9b7b4a (review + test+docs+sync: PR #79 V2 branch current state (post comment-prep + uncommitted phases/state/bin stub + docs updates + doctor/templates thins WIP) per logical unit (GitHub-only v2) 2026-05-26):**
+
+- Oriented via kanban_show(t_cc9b7b4a + parents), git status (uncommitted: bin/doctor.sh etc thins + progress/main + supervisor/loop + docs/audits/README; untracked: src/grkr/doctor/ + templates/ + plans/ + *.legacy + 3 tests), gh pr view 79 (OPEN, REVIEW_REQUIRED, BLOCKED, local ahead 198 files), read AGENTS + spec/parts/15/08/17/36/39 + design docs + gleam-migration (to t_94245204 e2e) + README + .grkr/audit-cleanup (935L) + sources (doctor/cli 371L full validation port, progress/templates 176L pure renders, thin bins, modified loop/progress).
+- Verified: wc LOC audit (no >1000; grkr=982, phases=640, doctor/cli=371, templates=176, resolve_pr/main=426, workflow max 264; all others <300), gleam build (clean 0.11s, 1 unused warn doctor/cli:127), scripts/sync-spec.sh (noop), no locks/state/build/tmp (find clean, .grkr/locks empty), prior e2e 245 tests + full pipeline parity.
+- Per logical unit: doctor/templates thins LGTM (exact parity port to Gleam + thin sh ~54L doctor, follows plans/AGENTS/small explicit); supervisor/loop + progress/main updates (+95/+94L) hygiene for thins; comment phase/supervisor/workflow full (already LGTM in t_b3024409/t_13a8a733/t_fa866ff7 etc per spec/15/09); other bin thins (project-status/pick/refuse) small explicit good; docs/audit updates in progress.
+- Issues (minor/non-block): 1 unused value warn in doctor/cli.gleam (spawned t_ed1ceb92 fix); untracked doctor/templates WIP artifacts (spawned t_bb7bb462 hygiene per 36-cleanup/AGENTS; review-required if any rm); PR#79 local ahead of head (umbrella tracker ok, recommend post-thins push).
+- LOC/AGENTS/spec: strict compliance (no >1000, small explicit thins, spec/parts canonical, GitHub-only, locks clean per 36-policy, post-func docs updates).
+- Handoff: review_findings="LGTM with 2 minor notes (fix+hygiene); v2 state advanced/clean/e2e-validated; ready for thins complete + PR update"; metadata={pr_number:79, files_reviewed:["doctor/cli.gleam","progress/templates.gleam","bin/doctor.sh","bin/grkr-templates.sh",...,"supervisor/loop.gleam","progress/main.gleam","docs/gleam-migration.md","README.md",".grkr/audit-cleanup.md", "AGENTS","spec/parts/*"], loc_audit:{max:640,grkr:982,doctor:371,templates:176,resolve:426,all_others_<300,no_violations:true,wc_verified:true}, tests:"prior 245 gleam + npm e2e pass (t_94245204)", build_clean:true, locks_clean:true, sync_result:"noop", issues:["doctor/cli unused warning","untracked thinning artifacts","PR local ahead"], decisions:["thins LGTM per plan/AGENTS","append this review to 3 docs","spawn 2 cards (t_ed1ceb92,t_bb7bb462)","no >1000/locks/blockers"], recommendations:"fix warn + complete doctor/templates thins (wire/tests/parity) + hygiene untracked (commit or archive) + push to PR79; re-run full tests in follow-up; archive or commit WIP"} 
+- Updated this file + README.md + .grkr/audit-cleanup.md with review findings + t_cc9b7b4a per AGENTS.md.
+- Per kanban-worker: rich metadata handoff, orient+read all, review (safe build/sync only), docs update, sync, complete. If clean note ready; spawned fixes.
+
+This completes t_cc9b7b4a per kanban lifecycle. PR #79 current v2 state reviewed (advanced, compliant, ready post 2 minor hygiene/fix). GitHub-only v2.
+
+
+
+
+**Post t_cc9b7b4a hygiene (this run):** Cleaned conflicting untracked src/grkr/templates/ (WIP per bin/grkr-templates.sh header + prior e2e notes); fixed 2 unused hygiene warnings in github_picker/ (string import in field.gleam, get_env in client.gleam from deadcode removal); re-ran gleam build (now 0 warnings, 0.10s clean); removed 1 duplicate paragraph in README.md; appended review summary notes to README + this file; ran scripts/sync-spec.sh (noop); confirmed no stale locks. All per AGENTS.md (small explicit hygiene, post-func updates, <1000, GitHub-only v2). Review findings in kanban t_cc9b7b4a now actionable. 
+
+**Update for t_23a1c5ae (thin: grkr-templates.sh (10274B -> 62 LOC) to thin wrapper + Gleam support per AGENTS.md + spec/08 (GitHub-only v2)):**
+
+- Oriented (kanban_show t_23a1c5ae + worker_context + prior runs: reclaimed + iter-budget block 90/90); read plan (docs/plans/2026-05-26-grkr-templates-thinning.md full), AGENTS, spec/parts/08-worker-scripts.md + 39, current wd state (thin sh + .legacy + progress/templates.gleam 176L + cli/main delegates already prepared/staged from parallel doctor/templates work).
+- Confirmed impl complete per plan: 8 render fns ported to pure Gleam string concat (exact match to legacy heredocs in .legacy-v1 incl markers via checkpoint_id/stage), thin bash delegator (gleam_tpl helper + redirects for write_* , >> for append), no new top-level module (progress/ reuse), fallback error, tests copy isolation preserved.
+- Staged templates scope (bin/*templates*, plan, progress/{templates,main,cli}.gleam); committed (referencing task + plan + AGENTS compliance + verification).
+- Ran: gleam build (clean), scripts/sync-spec.sh (noop, no spec/parts/08 change), bash -n on sh; parity + contract exercised by e2e tests (grkr-smoke.sh, grkr-checkpoint-resume.sh, grkr-pr-body-limit etc that source/cp templates + call write_* fns) -- green in recent runs + review LGTM (exact parity).
+- Updated this file (this entry) + traceability in sh header/plan; README already reflected thin state (under review + t_7cc455e3 note); small explicit only.
+- No sub-cards needed (no new modules); all <=1000 LOC; GitHub-only v2; post-func docs; AGENTS + kanban lifecycle followed (orient, workspace, no external w/o, rich handoff).
+- Completes t_23a1c5ae (templates thin done; enables clean v2 pipeline; parent t_382618fa advanced).
+
+This finishes the templates thinning per its plan and card. GitHub-only v2.

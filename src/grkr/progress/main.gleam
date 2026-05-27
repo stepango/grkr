@@ -6,6 +6,7 @@ import grkr/progress/checkpoint_render
 import grkr/progress/checkpoint_id
 import grkr/progress/linear_state
 import grkr/progress/linear_mutation
+import grkr/progress/templates
 
 pub type ProgressUpdate {
   ProgressUpdate(
@@ -228,4 +229,97 @@ pub fn cli_format_mutation_debug(
   use validated_stage <- result.try(validate_checkpoint_stage(stage))
   let mutation = plan_linear_comment_mutation(linear_issue_id, body, validated_stage, task_slug)
   Ok(format_mutation_debug(mutation))
+}
+
+/// Thin CLI delegates for the 8 template renders (exact parity with old grkr-templates.sh).
+/// Called by bin/grkr-templates.sh thin wrapper (t_23a1c5ae).
+
+pub fn cli_render_research_checkpoint(
+  issue: String,
+  title: String,
+  body: String,
+  url: String,
+  task_slug: String,
+) -> String {
+  templates.render_research_checkpoint(issue, title, body, url, task_slug)
+}
+
+pub fn cli_render_plan_checkpoint(
+  issue: String,
+  title: String,
+  task_slug: String,
+) -> String {
+  templates.render_plan_checkpoint(issue, title, task_slug)
+}
+
+pub fn cli_render_decision_prompt(
+  issue: String,
+  title: String,
+  url: String,
+  body: String,
+  task_slug: String,
+  worktree_dir: String,
+  grkr_root: String,
+  max_file_lines: String,
+) -> String {
+  templates.render_decision_prompt(
+    issue,
+    title,
+    url,
+    body,
+    task_slug,
+    worktree_dir,
+    grkr_root,
+    max_file_lines,
+  )
+}
+
+pub fn cli_render_issue_prompt(
+  issue: String,
+  title: String,
+  url: String,
+  body: String,
+  task_slug: String,
+  worktree_dir: String,
+  grkr_root: String,
+  max_file_lines: String,
+) -> String {
+  templates.render_issue_prompt(
+    issue,
+    title,
+    url,
+    body,
+    task_slug,
+    worktree_dir,
+    grkr_root,
+    max_file_lines,
+  )
+}
+
+pub fn cli_render_line_limit_fix_prompt(
+  issue: String,
+  title: String,
+  task_slug: String,
+  violations: String,
+  max_file_lines: String,
+) -> String {
+  templates.render_line_limit_fix_prompt(
+    issue,
+    title,
+    task_slug,
+    violations,
+    max_file_lines,
+  )
+}
+
+pub fn cli_render_default_pr_body(body: String, title: String) -> String {
+  templates.render_default_pr_body(body, title)
+}
+
+pub fn cli_render_compact_pr_body(short_body: String, short_title: String) -> String {
+  templates.render_compact_pr_body(short_body, short_title)
+}
+
+pub fn cli_render_issue_footer(issue: String) -> String {
+  templates.render_issue_footer(issue)
 }

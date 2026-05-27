@@ -13,6 +13,22 @@ pub fn main() -> Nil {
       io.print(main.cli_render_refusal(task_slug, reason_class, reasoning))
     ["render-pr-summary", task_slug, pr_url, branch_url] ->
       io.print(main.cli_render_pr_summary(task_slug, pr_url, branch_url))
+    ["render-research-checkpoint", issue, title, body, url, slug] ->
+      io.print(main.cli_render_research_checkpoint(issue, title, body, url, slug))
+    ["render-plan-checkpoint", issue, title, slug] ->
+      io.print(main.cli_render_plan_checkpoint(issue, title, slug))
+    ["render-decision-prompt", issue, title, url, body, slug, worktree, root, max] ->
+      io.print(main.cli_render_decision_prompt(issue, title, url, body, slug, worktree, root, max))
+    ["render-issue-prompt", issue, title, url, body, slug, worktree, root, max] ->
+      io.print(main.cli_render_issue_prompt(issue, title, url, body, slug, worktree, root, max))
+    ["render-line-limit-fix-prompt", issue, title, slug, violations, max] ->
+      io.print(main.cli_render_line_limit_fix_prompt(issue, title, slug, violations, max))
+    ["render-default-pr-body", body, title] ->
+      io.print(main.cli_render_default_pr_body(body, title))
+    ["render-compact-pr-body", short_body, short_title] ->
+      io.print(main.cli_render_compact_pr_body(short_body, short_title))
+    ["render-issue-footer", issue] ->
+      io.print(main.cli_render_issue_footer(issue))
     ["linear-state", stage] -> emit_linear_state(stage)
     ["linear-comment-mutation", issue_id, body, stage, task_slug] ->
       emit_mutation(main.cli_plan_linear_comment_mutation(issue_id, body, stage, task_slug))

@@ -1,5 +1,6 @@
 # bin/lib/refusal_paths.sh
 # Common helpers for workflow/decision/refusal paths (extracted per t_4703a519 + t_58795e29 to satisfy AGENTS.md "every file <=1000 LOC").
+# Updated in t_b5bd0fa8 (task_progress shared extract); now sources alongside task_progress.sh for shared mark_* fns.
 # Small explicit extractions; no behavior change. Duplicated CLI invocation + output parsing consolidated here.
 # Includes handle_decision_refusal + handle_implementation_refusal (for impl-to-refusal conversion during codex run) + low-level fns (normalize, extract, invoke, parse_comment).
 # Used by bin/grkr (decision gate refusal + impl-to-refusal conversion paths; fixes missing fn post-thinning).

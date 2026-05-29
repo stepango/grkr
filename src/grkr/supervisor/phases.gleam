@@ -454,8 +454,8 @@ fn run_scan_comment_commands_phase(config: t.SupervisorConfig) -> t.PhaseResult 
       )
 
       // Schedule full worker-handle-comment.sh for each new (reactions + worktree + codex per spec/15; state already marked processed here for dedup).
-      // Use list.each (not fold+discard) to avoid any unused binding; side effects (spawn + per-comment logs) only.
-      list.each(new_comments, fn(c) {
+      // Use let _ = list.each (not fold+discard) to explicitly discard Nil return and avoid any unused binding warning; side effects (spawn + per-comment logs) only.
+      let _ = list.each(new_comments, fn(c) {
         let key = t.Comment(c.id)
         let task_slug = "comment-" <> c.id
         let worker_sh = config.grkr_root <> "/bin/worker-handle-comment.sh"

@@ -46,7 +46,8 @@ emit_task_log_stream() { gleam_wf task_log emit "$1" 2>/dev/null; }
 write_task_log_manifest() { gleam_wf task_log write-manifest "$1" "$2" >/dev/null 2>&1 || true; }
 persist_task_log_output() {
   gleam_wf task_log persist "$1" "$2" "$3" "${4:-replace}" >/dev/null 2>&1 || {
-    echo "⚠️ gleam task_log persist failed for $2" >&2; return 1; }
+    echo "⚠️ gleam task_log persist failed for $2" >&2; return 1;
+  }
 }
 
 # Decision thin delegates (to decision; exact per t_ee96a4a4 + t_cbc53ef5)
@@ -55,4 +56,20 @@ extract_decision_from_output() { gleam_wf decision decide "$1" 2>/dev/null || ec
 parse_refusal_decision_output() { gleam_wf decision parse-refusal "$1" 2>/dev/null || echo "other\n---\n"; }
 detect_implementation_refusal() { gleam_wf decision detect-refusal "$1" 2>/dev/null || echo ""; }
 
-# Note: refusal markdown/valid/normalize/requires/write/ensure/complete/run_gate removed (dupe in Gleam; callers in bin/grkr updated to direct CLI or refusal/cli per t_2ddd4dce)
+# Decision gate thin delegate (to decision_gate per spec/22 implement-or-refuse + t_4e22c63f).
+# Post-codex: runs extract/update progress; on refuse invokes refusal/flow (checkpoint + backlog + comment); prints "proceed" or "refuse" on stdout (stderr for logs).
+# Thin shell still orchestrates the codex run + prompt/output files; gate handles the decision logic + side effects.
+run_decision_gate() { gleam_wf decision_gate run "$1" "$2" "$3" "$4" "$5" "$6" 2>/dev/null || echo ""; }
+
+# Implement stage thin delegates (to implement_stage per spec/25 + t_39ab1e08 / #17 spec item 8).
+# Minimal hooks only (e.g. commit-message); codex run + prompt + publish logic stay in thin shell (bin/grkr) per slice pattern.
+# Mirrors research/plan checkpoint + decision/task_log thin integration.
+generate_implement_commit_message() { gleam_wf implement_stage commit-message "$1" "$2" 2>/dev/null || echo "feat: implement #$1 - $2"; }
+
+# Test stage thin delegates (to test_stage per spec/26 + t_d87d2215 / #18 spec item 9).
+# Minimal hooks only (e.g. run-tests); test command execution + test.md write + gh post + log cleanup stay in thin shell (bin/grkr) per slice pattern.
+# Mirrors implement_stage + decision_gate thin integration. Heavy runs (npm etc) delegated to shell.
+# Callsite wired in bin/grkr:ensure_test_checkpoint (after reuse checks).
+run_test_stage_hook() { gleam_wf test_stage run-tests 2>/dev/null || echo ""; }
+
+# Note: refusal markdown/valid/normalize/requires/write/ensure/complete/run_gate removed (dupe in Gleam; callers in bin/grkr updated to direct CLI or refusal/cli per t_2ddd4dce; decision gate now wired for initial gate)

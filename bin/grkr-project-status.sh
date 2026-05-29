@@ -1,190 +1,81 @@
 #!/bin/bash
+# Thin Gleam project_status host (GitHub-only v2; gh+messages in sh). <=100 LOC.
+# Per AGENTS.md: preserve bin/ conventions for sourced fn lib (no side effects on source, env-driven, gh adapter only).
+# Delegates planning/extraction/normalization/resolution to grkr/project_status_cli; keeps gh fetches + edits + UX messages in sh.
 
-# GitHub Project status management functions backed by Gleam
-# This script provides shell functions that route to the Gleam CLI
-
-# Determine the project root for running Gleam commands
-_grkr_project_root() {
-  echo "${GRKR_GLEAM_PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/..}"
-}
-
-# Run the Gleam project status CLI
 _grkr_run_cli() {
-  local project_root
-  project_root=$(_grkr_project_root)
-
-  if [ -f "$project_root/gleam.toml" ]; then
-    (cd "$project_root" && gleam run -m grkr/project_status_cli -- "$@")
-    return $?
-  fi
-
-  # Fallback if Gleam project is not available (for development)
-  case "${1:-}" in
-    check-enabled)
-      case "${ENABLE_PROJECT_STATUS_UPDATES:-true}" in
-        false|False|FALSE|0|no|No|NO) echo "disabled" ;;
-        *) echo "enabled" ;;
-      esac
-      ;;
-    normalize)
-      echo "${2:-}" | jq -Rr 'gsub("^\\s+|\\s+$"; "") | gsub("\\s+"; " ") | ascii_downcase'
-      ;;
-    *)
-      return 1
-      ;;
-  esac
+  local project_root=${GRKR_GLEAM_PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/..}
+  (cd "$project_root" && gleam run --no-print-progress -m grkr/project_status_cli -- "$@")
 }
 
 project_status_updates_enabled() {
-  local result
-  result=$(_grkr_run_cli check-enabled)
-  case "$result" in
-    enabled) return 0 ;;
-    *) return 1 ;;
-  esac
+  local r; r=$(_grkr_run_cli check-enabled 2>/dev/null || echo disabled)
+  [ "$r" = enabled ]
 }
 
-normalize_project_option_name() {
-  _grkr_run_cli normalize "${1:-}"
-}
+normalize_project_option_name() { _grkr_run_cli normalize "${1:-}"; }
 
-issue_project_status_name() {
-  local issue_json=$1
-  local project_number=${PROJECT_NUMBER:-}
-
-  _grkr_run_cli extract-status-name "$issue_json" "$project_number"
-}
+issue_project_status_name() { _grkr_run_cli extract-status-name "${1:-}" "${PROJECT_NUMBER:-}"; }
 
 issue_project_item_id() {
-  local issue=$1
-  local issue_json=$2
-  local item_id
-  local items_json
-
-  # First try to extract from issue JSON
-  item_id=$(_grkr_run_cli extract-item-id "$issue_json" "${PROJECT_NUMBER:-}")
-
-  if [ -n "$item_id" ]; then
-    printf '%s\n' "$item_id"
-    return 0
-  fi
-
-  # Fallback: query item list via gh and search
-  items_json=$(gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit 1000 --format json 2>/dev/null || true)
-  [ -n "$items_json" ] || return 0
-
-  _grkr_run_cli find-item-id "$items_json" "$issue"
+  local issue=$1 issue_json=$2 pnum=${PROJECT_NUMBER:-}
+  local id; id=$(_grkr_run_cli extract-item-id "$issue_json" "$pnum" 2>/dev/null || true)
+  [ -n "$id" ] && { echo "$id"; return 0; }
+  local items; items=$(gh project item-list "$pnum" --owner "${PROJECT_OWNER:-}" --limit 1000 --format json 2>/dev/null || true)
+  [ -n "$items" ] || { echo ""; return 0; }
+  _grkr_run_cli find-item-id "$items" "$issue"
 }
 
 move_issue_to_project_status() {
-  local issue=$1
-  local issue_json=$2
-  local target_status=$3
-  local missing_item_message=$4
-  local already_message=$5
-  local moved_message=$6
-
-  if ! project_status_updates_enabled; then
-    return 0
+  local issue=$1 issue_json=$2 target=$3 miss=$4 already=$5 moved=$6
+  project_status_updates_enabled || return 0
+  local item; item=$(issue_project_item_id "$issue" "$issue_json")
+  [ -z "$item" ] && { echo "$miss"; return 0; }
+  local cur; cur=$(issue_project_status_name "$issue_json")
+  if [ -n "$cur" ]; then
+    local nc nt; nc=$(normalize_project_option_name "$cur"); nt=$(normalize_project_option_name "$target")
+    [ "$nc" = "$nt" ] && { echo "$already"; return 0; }
   fi
-
-  # Fetch required JSONs via gh (thin host adapter only)
-  local project_json
-  project_json=$(gh project view "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --format json 2>&1) || {
-    echo "❌ Unable to load project #$PROJECT_NUMBER before starting issue #$issue: $project_json" >&2
-    return 1
-  }
-
-  local fields_json
-  fields_json=$(gh project field-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --format json 2>&1) || {
-    echo "❌ Unable to load project fields for project #$PROJECT_NUMBER: $fields_json" >&2
-    return 1
-  }
-
-  local items_json
-  items_json=$(gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit 1000 --format json 2>/dev/null || true)
-
-  # Delegate full planning, extraction, normalization, resolution, and decision to Gleam production logic
-  local plan_result
-  plan_result=$(_grkr_run_cli plan-move-with-lookup "$issue_json" "$project_json" "$fields_json" "$items_json" "$target_status")
-
-  local TAB=$'	'
-  case $plan_result in
-    move${TAB}*)
-      local item_id field_id option_id project_id option_name
-      IFS=$'	' read -r _ item_id field_id option_id project_id option_name <<<"$plan_result"
-      if [ -z "$item_id" ] || [ -z "$field_id" ] || [ -z "$option_id" ] || [ -z "$project_id" ]; then
-        echo "❌ Unable to resolve the \"$STATUS_FIELD_NAME\" option \"$target_status\" for project #$PROJECT_NUMBER." >&2
-        return 1
-      fi
-      local edit_output
-      edit_output=$(gh project item-edit --id "$item_id" --field-id "$field_id" --project-id "$project_id" --single-select-option-id "$option_id" 2>&1) || {
-        echo "❌ Unable to move issue #$issue to $target_status: $edit_output" >&2
-        return 1
-      }
-      echo "$moved_message"
-      return 0
+  local pjson fjson ijson
+  pjson=$(gh project view "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --format json 2>&1) || { echo "❌ Unable to load project #$PROJECT_NUMBER before starting issue #$issue: $pjson" >&2; return 1; }
+  fjson=$(gh project field-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --format json 2>&1) || { echo "❌ Unable to load project fields for project #$PROJECT_NUMBER: $fjson" >&2; return 1; }
+  ijson=$(gh project item-list "$PROJECT_NUMBER" --owner "$PROJECT_OWNER" --limit 1000 --format json 2>/dev/null || true)
+  local plan
+  if [ -n "$ijson" ]; then
+    plan=$(_grkr_run_cli plan-move-with-lookup "$issue_json" "$pjson" "$fjson" "$ijson" "$target" 2>/dev/null || echo "no_action\tresolution_failed")
+  else
+    plan=$(_grkr_run_cli plan-move "$issue_json" "$pjson" "$fjson" "$target" 2>/dev/null || echo "no_action\tresolution_failed")
+  fi
+  case "$plan" in
+    move\t*)
+      local _m iid fid oid pid _o; IFS=$'\t' read -r _m iid fid oid pid _o <<<"$plan"
+      local eout; eout=$(gh project item-edit --id "$iid" --field-id "$fid" --project-id "$pid" --single-select-option-id "$oid" 2>&1) || { echo "❌ Unable to move issue #$issue to $target: $eout" >&2; return 1; }
+      echo "$moved"
       ;;
-    no_action${TAB}disabled)
-      return 0
-      ;;
-    no_action${TAB}item_missing)
-      echo "$missing_item_message"
-      return 0
-      ;;
-    no_action${TAB}already)
-      echo "$already_message"
-      return 0
-      ;;
-    no_action${TAB}resolution_failed|no_action${TAB}*)
-      echo "❌ Unable to resolve the \"$STATUS_FIELD_NAME\" option \"$target_status\" for project #$PROJECT_NUMBER." >&2
-      return 1
-      ;;
-    *)
-      echo "❌ Unexpected plan result from Gleam: $plan_result" >&2
-      return 1
-      ;;
+    no_action\titem_missing) echo "$miss" ;;
+    no_action\talready) echo "$already" ;;
+    no_action\tdisabled) return 0 ;;
+    *) echo "❌ Unable to resolve the \"$STATUS_FIELD_NAME\" option \"$target\" for project #$PROJECT_NUMBER." >&2; return 1 ;;
   esac
 }
 
 move_issue_to_in_progress() {
-  local issue=$1
-  local issue_json=$2
-  local target_status=${IN_PROGRESS_VALUE:-In Progress}
-
-  move_issue_to_project_status \
-    "$issue" \
-    "$issue_json" \
-    "$target_status" \
-    "⚠️ Issue #$issue is not linked to project #$PROJECT_NUMBER. Continuing without moving it to $target_status." \
-    "🚧 Issue #$issue is already in $target_status." \
-    "🚧 Moved issue #$issue to $target_status."
+  local issue=$1 issue_json=$2 target=${IN_PROGRESS_VALUE:-In Progress}
+  move_issue_to_project_status "$issue" "$issue_json" "$target" \
+    "⚠️ Issue #$issue is not linked to project #$PROJECT_NUMBER. Continuing without moving it to $target." \
+    "🚧 Issue #$issue is already in $target." "🚧 Moved issue #$issue to $target."
 }
 
 move_issue_to_done() {
-  local issue=$1
-  local issue_json=$2
-  local target_status=${DONE_VALUE:-Done}
-
-  move_issue_to_project_status \
-    "$issue" \
-    "$issue_json" \
-    "$target_status" \
-    "⚠️ Issue #$issue is not linked to project #$PROJECT_NUMBER. Continuing without moving it to $target_status." \
-    "✅ Issue #$issue is already in $target_status." \
-    "✅ Moved issue #$issue to $target_status."
+  local issue=$1 issue_json=$2 target=${DONE_VALUE:-Done}
+  move_issue_to_project_status "$issue" "$issue_json" "$target" \
+    "⚠️ Issue #$issue is not linked to project #$PROJECT_NUMBER. Continuing without moving it to $target." \
+    "✅ Issue #$issue is already in $target." "✅ Moved issue #$issue to $target."
 }
 
 move_issue_to_backlog() {
-  local issue=$1
-  local issue_json=$2
-  local target_status=${BACKLOG_VALUE:-Backlog}
-
-  move_issue_to_project_status \
-    "$issue" \
-    "$issue_json" \
-    "$target_status" \
-    "⚠️ Issue #$issue is not linked to project #$PROJECT_NUMBER. Continuing without moving it to $target_status." \
-    "📥 Issue #$issue is already in $target_status." \
-    "📥 Moved issue #$issue to $target_status."
+  local issue=$1 issue_json=$2 target=${BACKLOG_VALUE:-Backlog}
+  move_issue_to_project_status "$issue" "$issue_json" "$target" \
+    "⚠️ Issue #$issue is not linked to project #$PROJECT_NUMBER. Continuing without moving it to $target." \
+    "📥 Issue #$issue is already in $target." "📥 Moved issue #$issue to $target."
 }

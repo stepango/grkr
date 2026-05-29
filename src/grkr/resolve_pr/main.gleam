@@ -20,9 +20,19 @@ pub fn main() {
 
 fn run_cli() {
   case javascript_argv() {
+    ["help"] | [] -> emit_usage()
     [pr_number] -> run_cli_pr(pr_number)
-    _ -> fail_cli("Usage: worker-resolve-pr.sh <pr_number>")
+    ["--", pr_number] -> run_cli_pr(pr_number)
+    _ -> emit_usage()
   }
+}
+
+fn emit_usage() {
+  io.println_error("Usage: worker-resolve-pr.sh <pr_number>")
+  io.println_error("       gleam run -m grkr/resolve_pr/main -- <pr_number>")
+  io.println_error("PR conflict resolution (full logic: worktree/git/codex/push per spec/parts/14, GitHub-only v2, t_49932a05).")
+  io.println_error("Supports CONFLICT_STRATEGY=merge|rebase, BUILD_COMMAND, TEST_COMMAND env.")
+  javascript_exit(2)
 }
 
 fn run_cli_pr(pr_number: String) {

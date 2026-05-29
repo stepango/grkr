@@ -579,6 +579,11 @@ ensure_test_checkpoint() {
     fi
   fi
 
+  # Wire test stage hook (Gleam) per spec/26 + t_d87d2215 / #18 spec item 9.
+  # Thin hook only (pure message); heavy verification + test.md + gh post stay in this shell per slice pattern.
+  # Mirrors generate_implement_commit_message wiring for implement stage.
+  run_test_stage_hook
+
   command_list_file=$(mktemp "${TMPDIR:-/tmp}/grkr-test-commands.XXXXXX")
   results_file=$(mktemp "${TMPDIR:-/tmp}/grkr-test-results.XXXXXX")
   build_command_list > "$command_list_file"
@@ -779,7 +784,10 @@ publish_issue_changes() {
     return 1
   fi
 
-  git_in_issue_context commit -m "feat: implement #$ISSUE - $TITLE"
+  # Use Gleam hook for conventional msg (per implement_stage + spec/25 + t_39ab1e08)
+  local commit_msg
+  commit_msg=$(generate_implement_commit_message "$ISSUE" "$TITLE")
+  git_in_issue_context commit -m "$commit_msg" 
   git_in_issue_context push -u origin "$BRANCH"
   BRANCH_URL="https://github.com/$REPO/tree/$BRANCH"
   PR_BODY_FILE=$(mktemp "${TMPDIR:-/tmp}/grkr-pr-body.XXXXXX")
@@ -875,12 +883,14 @@ process_issue() {
   decision_prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-decision-prompt.XXXXXX")
   decision_output_file=$(mktemp "${TMPDIR:-/tmp}/grkr-decision-output.XXXXXX")
   write_decision_prompt_file "$decision_prompt_file" "$ISSUE" "$TITLE" "$URL" "$BODY" "$TASK_SLUG" "$ISSUE_WORKTREE_DIR"
-  # Inlined from removed run_implementation_decision_gate (small explicit; uses thin sh delegates)
+  # Wired to Gleam decision_gate (spec/22 implement-or-refuse + t_4e22c63f): thin shell runs codex to output file (orchestration); gate does extract, progress update, refuse path (calls refusal/flow for checkpoint/backlog/comment), prints "proceed"/"refuse" on stdout.
+  # Replaces prior inlined run_implementation_decision_gate + extract/update/handle_decision_refusal (now dupe removed; gate reuses Gleam decision + refusal/flow).
   run_codex_prompt "$decision_prompt_file" "$decision_output_file" "decide whether to implement the issue" replace "$ISSUE_WORKTREE_DIR"
-  decision=$(extract_decision_from_output "$decision_output_file")
+  decision=$(run_decision_gate "$ISSUE" "$decision_output_file" "$PROGRESS_FILE" "$TASK_SLUG" "$ISSUE_WORKTREE_DIR" "$decision_prompt_file" || echo "")
+  decision=$(echo "$decision" | tr -d " 
+" | tail -1)
   case "$decision" in
     proceed|refuse)
-      update_task_progress_decision "$PROGRESS_FILE" "$decision"
       IMPLEMENTATION_DECISION=$decision
       ;;
     *)
@@ -889,11 +899,15 @@ process_issue() {
       return 1
       ;;
   esac
+  rm -f "$decision_prompt_file" "$decision_output_file"
   if [ "$decision" != "proceed" ]; then
-    handle_decision_refusal "$ISSUE" "$PROGRESS_FILE" "$decision_output_file" "$decision_prompt_file" "$ISSUE_WORKTREE_DIR" || return 1
+    # Refusal side effects (checkpoint, backlog move, progress, comment post) already performed inside decision_gate CLI via refusal/flow.
+    # Skip old handle_decision_refusal to avoid duplication.
+    CURRENT_ISSUE_WORKTREE=""
+    ATTACH_ISSUE_LOGS=0
+    attach_issue_logs
     return 0
   fi
-  rm -f "$decision_prompt_file" "$decision_output_file"
   move_issue_to_in_progress "$ISSUE" "$ISSUE_JSON" || return 1
   CURRENT_ISSUE_WORKTREE="$ISSUE_WORKTREE_DIR"
   prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-prompt.XXXXXX")
@@ -905,11 +919,8 @@ process_issue() {
   if [ -n "$implementation_refusal" ]; then
     echo "⚠️ Implementation discovered blockers that require refusal."
     echo "🔄 Converting implementation attempt to refusal for issue #$ISSUE."
-    implementation_refusal_class=$(printf '%s\n' "$implementation_refusal" | awk 'NR == 1 {print}')
-    implementation_refusal_reasoning=$(printf '%s\n' "$implementation_refusal" | awk 'found {print} /^---$/ {found=1}' | sed '/^$/d')
-    if [ -z "$implementation_refusal_reasoning" ]; then
-      implementation_refusal_reasoning="Implementation discovered that the issue is not ready for safe autonomous completion."
-    fi
+    implementation_refusal_class=$(normalize_refusal_class "$implementation_refusal")
+    implementation_refusal_reasoning=$(extract_refusal_reasoning "$implementation_refusal" "Implementation discovered that the issue is not ready for safe autonomous completion.")
     mkdir -p "$TASK_DIR/codex"
     cp "$codex_output_file" "$TASK_DIR/codex/implementation-before-refusal.log"
     refusal_result=$(handle_implementation_refusal "$ISSUE" "$PROGRESS_FILE" "$implementation_refusal_class" "$implementation_refusal_reasoning") || {

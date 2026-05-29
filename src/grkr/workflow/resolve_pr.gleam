@@ -73,7 +73,7 @@ pub fn main() {
 
 fn emit_usage() {
   ffi.console_error("Usage: worker-resolve-pr.sh <pr_number>")
-  ffi.console_error("       gleam run -m grkr/workflow/resolve_pr -- <pr_number>")
+  ffi.console_error("       gleam run -m grkr/resolve_pr/main -- <pr_number> (preferred; this skeleton is legacy ref)")
   ffi.console_error("Skeleton (types + CLI entry) for PR conflict resolution per spec/14 (GitHub-only v2, t_f4d7a801).")
   ffi.console_error("Full: fetch PR, worktree, rebase/merge, codex on conflicts, validate, commit/push, cleanup in follow-up.")
   ffi.exit(2)

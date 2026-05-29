@@ -19,6 +19,7 @@ import grkr/resolve_pr/types_test
 import grkr/sync_main/main_test
 import grkr/supervisor/config_test as supervisor_config_test
 import grkr/supervisor/types_test as supervisor_types_test
+import grkr/workflow/implement_stage_test
 
 pub fn main() {
   issue_provider_test.main()
@@ -42,4 +43,5 @@ pub fn main() {
   planning_test.main()
   supervisor_config_test.main()
   supervisor_types_test.main()
+  implement_stage_test.main()
 }

@@ -25,6 +25,17 @@ pub fn get_field(obj: JsonValue, field: String) -> JsonValue
 @external(javascript, "../refusal/json_ffi.mjs", "decodeArray")
 pub fn decode_array(val: JsonValue) -> Result(List(JsonValue), String)
 
+// --- ENV (env.mjs) ---
+
+@external(javascript, "../refusal/env.mjs", "get_env")
+pub fn get_env(name: String) -> String
+
+@external(javascript, "../refusal/env.mjs", "get_env_with_default")
+pub fn get_env_with_default(name: String, default: String) -> String
+
+@external(javascript, "../refusal/env.mjs", "has_env")
+pub fn has_env(name: String) -> Bool
+
 /// Exec result from child_process
 pub type ExecResult {
   ExecResult(

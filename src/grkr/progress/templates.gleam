@@ -3,7 +3,7 @@ import grkr/progress/checkpoint_stage
 
 /// Template renderers for the legacy grkr-templates.sh contract (GitHub-only v2).
 /// All outputs must match the original shell heredocs byte-for-byte (after var expansion + marker).
-/// See t_23a1c5ae, docs/plans/2026-05-26-grkr-templates-thinning.md, AGENTS.md
+/// See t_23a1c5ae, .grkr/archive/2026-05-26-grkr-templates-thinning.md, AGENTS.md
 
 pub fn render_research_checkpoint(
   issue: String,

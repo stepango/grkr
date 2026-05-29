@@ -2,42 +2,38 @@
 set -euo pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-PROJECT_ROOT=$(dirname "$SCRIPT_DIR")
+. "$SCRIPT_DIR/doctor.sh"
 
-if [ ! -f "$PROJECT_ROOT/gleam.toml" ]; then
-    echo "Error: gleam.toml not found at $PROJECT_ROOT" >&2
-    exit 1
+doctor_init
+
+if [ -f "$GRKR_CONFIG_FILE" ]; then
+  . "$GRKR_CONFIG_FILE"
 fi
 
-cd "$PROJECT_ROOT"
+# Thin delegation wrapper for Gleam resolve_pr/main (full PR conflict logic, GitHub-only v2) per t_49932a05 + spec/parts/14 + 39 item 11 (#20).
+# Replaces prior thin calling workflow/resolve_pr skeleton (t_f4d7a801) with direct call to full main (~426 LOC impl of run: fetch, worktree, rebase/merge, codex, validate, push, cleanup).
+# Shell does doctor + config + cd + gleam/node checks + exec (keeps ~39 LOC explicit per AGENTS.md + recent thins).
+# Supports GRKR_GLEAM_PROJECT_ROOT override for tests. Preserves exact <pr_number> contract, exit codes, env (CONFLICT_STRATEGY, TEST_COMMAND, BUILD_COMMAND).
+# Supervisor scan_pr_conflicts still uses resolve_pr/github for detection (unchanged).
+# workflow/resolve_pr.gleam skeleton left for reference (no longer entry point).
 
-if [ -f "$PROJECT_ROOT/.grkr/config.sh" ]; then
-    set -a
-    # shellcheck source=/dev/null
-    source "$PROJECT_ROOT/.grkr/config.sh"
-    set +a
+GRKR_DIR="${GRKR_ROOT:-$PWD}/.grkr"
+export GRKR_ROOT GRKR_CONFIG_FILE MAIN_BRANCH=${MAIN_BRANCH:-main} REPO=${REPO:-stepango/grkr}
+export CONFLICT_STRATEGY=${CONFLICT_STRATEGY:-merge}
+export BUILD_COMMAND=${BUILD_COMMAND:-} TEST_COMMAND=${TEST_COMMAND:-"npm test"}
+export GRKR_GLEAM_PROJECT_ROOT
+
+PROJECT_ROOT=${GRKR_GLEAM_PROJECT_ROOT:-$(dirname "$SCRIPT_DIR")}
+cd "$PROJECT_ROOT" || exit 1
+
+if ! command -v gleam >/dev/null 2>&1; then
+  echo "❌ gleam is required but not installed or not in PATH" >&2
+  exit 1
 fi
 
-PR_NUMBER="${1:-}"
-
-if [ -z "$PR_NUMBER" ]; then
-    echo "Usage: worker-resolve-pr.sh <pr_number>" >&2
-    exit 1
+if ! command -v node >/dev/null 2>&1; then
+  echo "❌ node is required but not installed or not in PATH" >&2
+  exit 1
 fi
 
-if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
-    echo "Error: PR number must be a positive integer" >&2
-    exit 1
-fi
-
-if ! command -v gleam &> /dev/null; then
-    echo "Error: gleam is not installed or not in PATH" >&2
-    exit 1
-fi
-
-if ! command -v node &> /dev/null; then
-    echo "Error: node is not installed or not in PATH" >&2
-    exit 1
-fi
-
-exec gleam run -m grkr/resolve_pr/main -- "$PR_NUMBER"
+exec gleam run -m grkr/resolve_pr/main -- "$@"

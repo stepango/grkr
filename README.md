@@ -2,7 +2,7 @@
 
 AI-powered CLI that reads a GitHub issue and uses Codex to implement the changes.
 
-Current implementation status: see [docs/gleam-migration.md](./docs/gleam-migration.md) for v2 Gleam migration progress and research notes (detailed snapshot + module lists + kanban refs updated in t_20695489 + t_65d650b7 review + t_55147911 docs follow-up).
+Current implementation status: see [docs/gleam-migration.md](./docs/gleam-migration.md) for v2 Gleam migration progress and research notes (detailed snapshot + module lists + kanban refs updated in t_20695489 + t_65d650b7 review + t_55147911 docs follow-up + t_e56d835b hygiene commit+push).
 
 ## Gleam v2 Migration Progress
 
@@ -11,18 +11,19 @@ Current implementation status: see [docs/gleam-migration.md](./docs/gleam-migrat
 See the expanded [docs/gleam-migration.md](./docs/gleam-migration.md) for:
 - Full file lists + LOC counts for github_picker/, refusal/, supervisor/, supporting modules
 - What compiles/runs today (`gleam build`, targeted tests, picker/refusal/supervisor partial paths)
-- Remaining work (supervisor scheduler wiring + prep in t_20695489 + docs refresh in t_55147911 post t_65d650b7 review; comment scanning full, Linear full, thinning thick shells, cleanup polish per 36, PR reviews of #79 slices)
-- Traceability to specific kanban tasks (e.g. t_58ea0e02 scheduler impl, t_20695489 test+docs+sync, t_78a7818e cleanup prune, t_767a0b08 prior test+docs, t_65d650b7 review (supervisor slice), t_55147911 docs follow-up, PR#79 reviews t_2abfcacc/t_e1b63fc6/t_1ef6c1a8 etc)
+- Remaining work (Linear full, cleanup polish per 36, PR reviews of #79 slices)
+- Traceability to specific kanban tasks (e.g. t_58ea0e02 scheduler impl, t_20695489 test+docs+sync, t_78a7818e cleanup prune, t_767a0b08 prior test+docs, t_65d650b7 review (supervisor slice), t_55147911 docs follow-up, t_e56d835b hygiene commit+push v2 uncommitted, PR#79 reviews t_2abfcacc/t_e1b63fc6/t_1ef6c1a8 etc)
 - Design refs (supervisor-design-final.md, supervisor-synthesis.md, gleam-migration-patterns.md)
 - Lock audit notes from this run
 
-**High-level snapshot:**
-- github_picker (client+main+picker + decoder_test 256/256 green post fixtures fix + hygiene M in client/decoder/field t_64f72de6), refusal (flow/assessment/checkpoint + cli), supervisor (main/loop/recovery/state/lock/config/phases 517LOC + scheduler 130 + FFI) implemented + reviewed in slices; phases.gleam fully expanded with sync/pick (real scheduler wired)/scan_pr/scan_comment (prep)/reap/cleanup
-- Fully migrated: sync_main, resolve_pr (PR conflicts), issue_provider (Linear), progress (checkpoints/Linear), task_slug, project_status, linear e2e
-- Bin updates: worker-pick-issue.sh (40 LOC thin), worker-sync-main.sh (18 LOC), worker-resolve-pr.sh (43 LOC), robot-main.sh (57 LOC thin), worker-refuse-issue.sh (57 LOC thin wrapper calling `gleam run -m grkr/refusal/cli`)
-- implement stage hook (Gleam src/grkr/workflow/implement_stage.gleam + test + thin delegate in grkr-issue-workflow.sh + wired in bin/grkr for commit msg per spec/25 + t_39ab1e08 / #17)
-- Still thick: grkr-issue-workflow.sh (649) (thinning in follow-ups)
-- Supervisor phases + scheduler (active_jobs record + detached spawn under flock for pick_and_schedule) landed (t_61c5af7b + t_58ea0e02) + wired in pick phase (t_20695489); pick now fully records+spawns real workflows; comment scan prep (state fns + GitHubComment type) landed; comment worker full pending; recent child cards (t_767a0b08, t_20695489 test+docs+sync, t_78a7818e cleanup, t_65d650b7 review + t_55147911 docs fix)
+**High-level snapshot (post t_e56d835b hygiene: commit+push v2 uncommitted bin thins/refusal+supervisor M/templates/audits + deletes of legacy docs/plans + new test hooks + push for PR#79; 256/256 green):**
+- github_picker (client+main+picker + decoder_test 256/256 green post fixtures fix + hygiene M in client/decoder/field t_64f72de6), refusal (flow/assessment/checkpoint + cli + config/ffi M in t_e56d835b), supervisor (main/loop/recovery/state/lock/config/phases 641LOC + scheduler 130 + FFI; loop M for sleep_remaining + error boundary + hygiene in t_e56d835b) implemented + reviewed in slices; phases.gleam fully expanded with sync/pick (real scheduler wired)/scan_pr/scan_comment/reap/cleanup
+- workflow/ (decision 264, decision_gate 155 (spec/22), implement_stage 36 + test, test_stage 36 thin hook (spec/26+39), handle_comment 61, resolve_pr/main 426 full + skeleton, task_log split, worktree split, main/ffi)
+- Fully migrated: sync_main, resolve_pr (PR conflicts), issue_provider (Linear), progress (checkpoints/Linear + templates 176), task_slug, project_status (full + 81 LOC thin bin/grkr-project-status.sh delegating to project_status_cli), linear e2e
+- Bin updates/hygiene (per AGENTS: preserve sh conv, small explicit changes, <1000 LOC): grkr-project-status.sh (81 LOC thin), grkr-issue-workflow.sh (73 LOC thin wrapper delegating workflow/* CLIs incl decision_gate), worker-handle-comment.sh (29 LOC thin), worker-pick-issue.sh (46 LOC), worker-sync-main.sh (18 LOC), worker-resolve-pr.sh (39 LOC), worker-refuse-issue.sh (40 LOC thin calling refusal/cli), robot-main.sh (57 LOC), grkr (988 LOC), grkr-templates.sh (62 LOC thin), + bin/lib/refusal_paths.sh M; new test_stage + implement_stage_test added
+- implement stage hook (Gleam src/grkr/workflow/implement_stage.gleam + test + thin delegate in grkr-issue-workflow.sh + wired in bin/grkr for commit msg per spec/25 + t_39ab1e08 / #17); test_stage hook added
+- Still thick: none in primary issue/PR paths (all core now thin Gleam delegates + full impls)
+- Supervisor phases + scheduler (active_jobs record + detached spawn under flock for pick_and_schedule) landed (t_61c5af7b + t_58ea0e02) + wired in pick phase (t_20695489); pick now fully records+spawns real workflows; comment scan + worker full (t_13a8a733 + later); recent child cards (t_767a0b08, t_20695489 test+docs+sync, t_78a7818e cleanup, t_65d650b7 review + t_55147911 docs fix + t_e56d835b hygiene commit+push)
 - All changes maintain 100% external contracts (logs, locks, JSON schemas, exit codes, env, gh/gh project behavior)
 
 No changes to user-facing commands, config, or entrypoints (still `robot-main.sh`, `grkr --issue`, etc.). Workflow accuracy preserved.

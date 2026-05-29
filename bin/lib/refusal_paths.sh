@@ -1,8 +1,8 @@
 # bin/lib/refusal_paths.sh
-# Common helpers for workflow/decision/refusal paths (extracted per t_4703a519 to satisfy AGENTS.md "every file <=1000 LOC").
+# Common helpers for workflow/decision/refusal paths (extracted per t_4703a519 + t_58795e29 to satisfy AGENTS.md "every file <=1000 LOC").
 # Small explicit extractions; no behavior change. Duplicated CLI invocation + output parsing consolidated here.
-# Includes handle_decision_refusal (restored from prior state for call site compatibility) + low-level fns.
-# Used by bin/grkr (decision gate refusal + impl-to-refusal conversion paths).
+# Includes handle_decision_refusal + handle_implementation_refusal (for impl-to-refusal conversion during codex run) + low-level fns (normalize, extract, invoke, parse_comment).
+# Used by bin/grkr (decision gate refusal + impl-to-refusal conversion paths; fixes missing fn post-thinning).
 # GitHub-only v2. Sourced after grkr-issue-workflow.sh (for parse_refusal_decision_output etc).
 # Preserves all shell conventions.
 
@@ -89,5 +89,35 @@ handle_decision_refusal() {
   echo "⏸️ Refused implementation for issue #$ISSUE."
   ATTACH_ISSUE_LOGS=0
   attach_issue_logs
+  return 0
+}
+
+# Handler for the impl-to-refusal conversion path (extracted to lib in t_58795e29 for LOC hygiene + shared helpers per AGENTS.md).
+# Mirrors structure of handle_decision_refusal but for post-implementation codex detection (via detect_implementation_refusal).
+# Takes pre-parsed class + reasoning (caller uses normalize/extract now; removed dupe awk from bin/grkr).
+# Does invoke + parse id; prints class\nid as final two lines (for caller's tail/head capture + mark).
+# Does NOT mark, set CURRENT, attach, or print message (caller does that for this path).
+# On error: rm emits only; caller does prompt cleanup in || block.
+handle_implementation_refusal() {
+  local ISSUE=$1
+  local PROGRESS_FILE=$2
+  local refusal_class=$3
+  local reasoning=$4
+
+  local refusal_emits
+  refusal_emits=$(mktemp "${TMPDIR:-/tmp}/grkr-refusal-emits.XXXXXX")
+
+  if ! invoke_refusal_cli "$ISSUE" "$refusal_class" "$reasoning" "$refusal_emits"; then
+    rm -f "$refusal_emits"
+    return 1
+  fi
+
+  local refusal_comment_id
+  refusal_comment_id=$(parse_refusal_comment_id "$refusal_emits")
+
+  rm -f "$refusal_emits"
+
+  # Final two lines for caller capture: refusal_class + refusal_comment_id (preserves legacy parsing in process_issue)
+  printf '%s\n%s\n' "$refusal_class" "$refusal_comment_id"
   return 0
 }

@@ -453,8 +453,9 @@ fn run_scan_comment_commands_phase(config: t.SupervisorConfig) -> t.PhaseResult 
           " scheduler_pending=true",
       )
 
-      // Schedule full worker-handle-comment.sh for each new (reactions + worktree + codex per spec/15; state already marked processed here for dedup)
-      let _scheduled = list.fold(new_comments, 0, fn(acc, c) {
+      // Schedule full worker-handle-comment.sh for each new (reactions + worktree + codex per spec/15; state already marked processed here for dedup).
+      // Use list.each (not fold+discard) to avoid any unused binding; side effects (spawn + per-comment logs) only.
+      list.each(new_comments, fn(c) {
         let key = t.Comment(c.id)
         let task_slug = "comment-" <> c.id
         let worker_sh = config.grkr_root <> "/bin/worker-handle-comment.sh"
@@ -469,11 +470,11 @@ fn run_scan_comment_commands_phase(config: t.SupervisorConfig) -> t.PhaseResult 
                 "comment/" <> c.id,
                 "scheduled=true pid=" <> int.to_string(pid) <> " body_preview=" <> escape_log_value(string.slice(c.body, 0, 60)),
               )
-            acc + 1
+            Nil
           }
           Error(e) -> {
             let _ = log_error(config, "scan_comment_commands", "comment:" <> c.id, "comment/" <> c.id, "spawn_failed=" <> t.supervisor_error_to_string(e))
-            acc
+            Nil
           }
         }
       })

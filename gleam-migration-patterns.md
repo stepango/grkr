@@ -215,7 +215,7 @@ exec gleam run -m grkr/foo/main -- "$@"
 - **Special cases**:
   - worker-sync-main.sh: sets GRKR_SYNC_MAIN_LOCK_HELD=1 bypass, uses flock in Gleam too.
   - worker-pick-issue.sh: long (425LOC) because still has full github selection + GraphQL in bash + jq; once github_picker wired, it will shrink to ~60LOC + call to gleam for decode+select or full.
-  - worker-resolve-pr.sh: ~43 LOC, passes PR_NUMBER.
+  - worker-resolve-pr.sh: 39 LOC thin (t_f4d7a801), passes PR_NUMBER to gleam run -m grkr/workflow/resolve_pr (skeleton).
 - **bin/grkr** (the main CLI entry, ~984? LOC): more complex, uses templates, calls into progress/cli via gleam, handles issue workflow, worktrees, etc. Delegates marker gen to Gleam now.
 - **doctor.sh**: prereq checks + validate (gh auth, git, codex, config keys, project fields, linear creds). Outputs lines; supervisor parses for VALIDATION_OK.
 

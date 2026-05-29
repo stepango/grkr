@@ -12,7 +12,9 @@ cp bin/grkr-task-slug.sh "$tmpdir/grkr-task-slug.sh"
 cp bin/grkr-templates.sh "$tmpdir/grkr-templates.sh"
 cp bin/worker-refuse-issue.sh "$tmpdir/worker-refuse-issue.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
-chmod +x "$tmpdir/grkr.sh" "$tmpdir/worker-refuse-issue.sh" "$tmpdir/doctor.sh"
+mkdir -p "$tmpdir/lib"
+cp bin/lib/*.sh "$tmpdir/lib/"
+chmod +x "$tmpdir/grkr.sh" "$tmpdir/worker-refuse-issue.sh" "$tmpdir/doctor.sh" "$tmpdir/lib/"*.sh
 
 real_git=$(command -v git)
 mkdir -p "$tmpdir/bin"

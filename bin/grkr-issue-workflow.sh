@@ -72,4 +72,9 @@ generate_implement_commit_message() { gleam_wf implement_stage commit-message "$
 # Callsite wired in bin/grkr:ensure_test_checkpoint (after reuse checks).
 run_test_stage_hook() { gleam_wf test_stage run-tests 2>/dev/null || echo ""; }
 
+# Test completion marker thin delegate (added for t_6d2b458b / spec/26 item 9).
+# Mirrors generate_implement_commit_message pattern; provides dedicated surface for test checkpoint marker.
+# (Canonical marker still via progress/cli "marker test <slug>", this for symmetry with test_stage module.)
+test_completion_marker() { gleam_wf test_stage completion-marker "$1" 2>/dev/null || echo ""; }
+
 # Note: refusal markdown/valid/normalize/requires/write/ensure/complete/run_gate removed (dupe in Gleam; callers in bin/grkr updated to direct CLI or refusal/cli per t_2ddd4dce; decision gate now wired for initial gate)

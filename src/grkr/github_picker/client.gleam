@@ -6,25 +6,8 @@ import grkr/github_picker/field
 import grkr/github_picker/query
 import grkr/github_picker/types
 
-@external(javascript, "../github_picker/env.mjs", "getEnv")
-fn get_env(name: String) -> String
-
 @external(javascript, "../github_picker/file.mjs", "readFileSync")
 fn read_file_sync(path: String) -> Result(String, String)
-
-/// Fetch the bot login (used by selector for assignee filter).
-/// Prefers BOT_LOGIN or GITHUB_ACTOR env (set by thin shell wrapper or env).
-/// gh fallback omitted for now to keep simple (shell sets it).
-pub fn fetch_bot_login() -> Result(String, types.ProviderError) {
-  case get_env("BOT_LOGIN") {
-    "" ->
-      case get_env("GITHUB_ACTOR") {
-        "" -> Error(types.Query("BOT_LOGIN not set and GITHUB_ACTOR empty (thin shell should export BOT_LOGIN via gh)"))
-        actor -> Ok(actor)
-      }
-    login -> Ok(login)
-  }
-}
 
 /// Main entry for live fetch: tries GraphQL user then org (with pagination), falls back to gh project item-list.
 /// Returns the items_json string in shape decoder expects ({items:..} or raw).

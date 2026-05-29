@@ -4,13 +4,8 @@ import grkr/github_picker/ffi
 import grkr/github_picker/field
 import grkr/github_picker/types
 
-/// Try to extract the items.nodes array from GraphQL response (user or org fallback)
-pub fn extract_items_nodes(json: ffi.JsonValue) -> List(ffi.JsonValue) {
-  field.extract_items_nodes(json)
-}
-
 /// Decode a single ProjectItem from a GraphQL item node + cfg for field names
-pub fn decode_project_item(
+fn decode_project_item(
   node: ffi.JsonValue,
   cfg: types.GitHubPickerConfig,
 ) -> Result(types.ProjectItem, String) {
@@ -123,14 +118,6 @@ fn decode_priority_value(
   }
 }
 
-/// General helper to treat a JsonValue as array (empty on null/missing per design)
-pub fn arrayify(v: ffi.JsonValue) -> List(ffi.JsonValue) {
-  case ffi.decode_array(v) {
-    Ok(a) -> a
-    Error(_) -> []
-  }
-}
-
 /// Decode all items from the GraphQL response JSON string.
 /// Stops on first decode error (early return style).
 pub fn decode_project_items(
@@ -139,7 +126,7 @@ pub fn decode_project_items(
 ) -> Result(List(types.ProjectItem), String) {
   case ffi.parse(json_string) {
     Ok(json) -> {
-      let nodes = extract_items_nodes(json)
+      let nodes = field.extract_items_nodes(json)
       try_map_decode(nodes, cfg)
     }
     Error(e) -> Error("JSON parse failed: " <> e)

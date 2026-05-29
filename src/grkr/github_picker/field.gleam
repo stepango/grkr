@@ -1,18 +1,7 @@
 import gleam/int
 import gleam/list
-import gleam/string
 
 import grkr/github_picker/ffi
-
-/// Normalize repo name for comparison (ported from bash jq normalize_repo_name + selector)
-/// Strips github urls and .git, trims. Used for exact repo match in is_candidate.
-pub fn normalize_repo(r: String) -> String {
-  r
-  |> string.replace("https://github.com/", "")
-  |> string.replace("http://github.com/", "")
-  |> string.replace(".git", "")
-  |> string.trim
-}
 
 /// Walk nested fields in JsonValue (for decoder extract)
 pub fn walk_path(obj: ffi.JsonValue, path: List(String)) -> ffi.JsonValue {

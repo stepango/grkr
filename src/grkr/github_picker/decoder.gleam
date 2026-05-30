@@ -49,7 +49,10 @@ fn decode_content(content: ffi.JsonValue) -> types.IssueContent {
     _, _ -> 0
   }
 
-  let title = field.field_text(ffi.get_field(content, "title"))
+  let title = case ffi.get_field(content, "title") |> ffi.decode_string {
+    Ok(t) -> t
+    _ -> ""
+  }
 
   let updated_at =
     case ffi.get_field(content, "updatedAt") |> ffi.decode_string {

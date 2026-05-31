@@ -386,3 +386,8 @@ This execution completes t_a116edf2 per kanban lifecycle (orient via kanban_show
 Handoff: impl-refusal path now functional via shared lib helper (symmetric to decision gate in Gleam). bin/grkr compliant. Ready.
 
 Per kanban + AGENTS. GitHub-only v2.
+
+## Note from t_b45212c0 e2e (github_picker thin validation, 2026-05-29)
+- Validated full thin bin/worker-pick-issue.sh + Gleam github_picker/main + modules (client/decoder/selector/priority/field/config etc) end-to-end via fixtures and test/worker-pick-issue.sh (all 3 scenarios green, correct emits for job_key/task_slug etc).
+- Fixed 2 small issues found: 1) export of config vars in thin wrapper (set -a re-source) so REPO etc reach process.env; 2) title decode in decoder.gleam (direct string instead of field_text on primitive).
+- 258 tests green; e2e now fully functional with correct ISSUE_TITLE and slugs; matches spec/16/08/39 and shell contract. Hygiene will commit.

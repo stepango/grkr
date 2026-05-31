@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo_root=$(pwd)
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-refusal.XXXXXX")
-trap 'rm -rf "$tmpdir"' EXIT
+# trap 'rm -rf "$tmpdir"' EXIT  # disabled for debug run of e2e task
 
 cp bin/grkr "$tmpdir/grkr.sh"
 cp bin/grkr-issue-workflow.sh "$tmpdir/grkr-issue-workflow.sh"

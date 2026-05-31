@@ -3,5 +3,9 @@ package-lock.json
 .DS_Store
 .grkr/tasks/
 .grkr/archive/
+.grkr/state/
+.grkr/locks/
+.grkr/worktrees/
+.grkr/logs/
 .automation-local/
 build/

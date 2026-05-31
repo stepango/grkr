@@ -11,6 +11,16 @@ if [ -f "$GRKR_CONFIG_FILE" ]; then
   . "$GRKR_CONFIG_FILE"
 fi
 
+# Export config vars (from .grkr/config.sh or preset env) so the thin Gleam
+# delegation (github_picker/main etc) receives them in process.env. The
+# original shell picker read them directly; thin wrapper must propagate.
+# set -a makes assignments during re-source export the vars.
+set -a
+if [ -f "$GRKR_CONFIG_FILE" ]; then
+  . "$GRKR_CONFIG_FILE"
+fi
+set +a
+
 # Thin wrapper per t_04af5d5f + AGENTS.md + spec/parts/08-worker-scripts.md + 16-phase-4...
 # doctor + config + mkdir + cd + exec gleam .../main "$@"
 GRKR_DIR="${GRKR_ROOT:-$PWD}/.grkr"

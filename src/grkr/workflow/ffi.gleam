@@ -1,5 +1,6 @@
 /// FFI for workflow/worktree (env, fs, git with context support, cli)
 /// GitHub-only v2 issue worktree mgmt.
+/// Extended for handle_comment: general exec + json decode (for gh api responses)
 
 import gleam/option.{type Option}
 
@@ -73,3 +74,41 @@ pub fn tl_temp_path(prefix: String) -> String
 /// Used by task_log CLI "emit" subcommand to preserve exact bytes (cat parity) for bin/grkr + sh tests.
 @external(javascript, "./task_log_ffi.mjs", "stdout_write")
 pub fn tl_stdout_write(s: String) -> Bool
+
+// --- JSON (from json_ffi.mjs, copied for workflow/handle_comment gh responses; no gleam/json dep) ---
+/// Opaque JSON value for manual decoding
+pub type JsonValue
+
+@external(javascript, "./json_ffi.mjs", "parse")
+pub fn parse(json_string: String) -> Result(JsonValue, String)
+
+@external(javascript, "./json_ffi.mjs", "getField")
+pub fn get_field(obj: JsonValue, field: String) -> JsonValue
+
+@external(javascript, "./json_ffi.mjs", "getKeys")
+pub fn get_keys(obj: JsonValue) -> Result(List(String), String)
+
+@external(javascript, "./json_ffi.mjs", "decodeString")
+pub fn decode_string(val: JsonValue) -> Result(String, String)
+
+@external(javascript, "./json_ffi.mjs", "decodeInt")
+pub fn decode_int(val: JsonValue) -> Result(Int, String)
+
+@external(javascript, "./json_ffi.mjs", "decodeBool")
+pub fn decode_bool(val: JsonValue) -> Result(Bool, String)
+
+@external(javascript, "./json_ffi.mjs", "decodeArray")
+pub fn decode_array(val: JsonValue) -> Result(List(JsonValue), String)
+
+@external(javascript, "./json_ffi.mjs", "decodeObject")
+pub fn decode_object(val: JsonValue) -> Result(JsonValue, String)
+
+@external(javascript, "./json_ffi.mjs", "isNull")
+pub fn is_null(val: JsonValue) -> Bool
+
+@external(javascript, "./json_ffi.mjs", "getFieldPath")
+pub fn get_field_path(obj: JsonValue, path: List(String)) -> JsonValue
+
+// --- General exec for gh api, codex, reactions, git etc (handle_comment + future) ---
+@external(javascript, "./worktree_ffi.mjs", "executable")
+pub fn executable(command: String, args: List(String), input: Option(String)) -> ExecResult

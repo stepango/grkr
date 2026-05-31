@@ -108,7 +108,8 @@ export function list_files(dir) {
     if (!existsSync(dir)) {
       return new Ok([]);
     }
-    const files = readdirSync(dir);
+    const rawFiles = readdirSync(dir);
+    const files = rawFiles.filter((f) => typeof f === "string");
     return new Ok(files);
   } catch (e) {
     return new Error(String(e.message || e));

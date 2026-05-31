@@ -12,13 +12,13 @@ See the expanded [docs/gleam-migration.md](./docs/gleam-migration.md) for:
 - Full file lists + LOC counts for github_picker/, refusal/, supervisor/, supporting modules
 - What compiles/runs today (`gleam build`, targeted tests, picker/refusal/supervisor partial paths)
 - Remaining work (Linear full, cleanup polish per 36, PR reviews of #79 slices)
-- Traceability to specific kanban tasks (e.g. t_58ea0e02 scheduler impl, t_20695489 test+docs+sync, t_78a7818e cleanup prune, t_767a0b08 prior test+docs, t_65d650b7 review (supervisor slice), t_55147911 docs follow-up, t_e56d835b hygiene commit+push v2 uncommitted, PR#79 reviews t_2abfcacc/t_e1b63fc6/t_1ef6c1a8 etc)
+- Traceability to specific kanban tasks (e.g. t_58ea0e02 scheduler impl, t_20695489 test+docs+sync, t_78a7818e cleanup prune, t_767a0b08 prior test+docs, t_65d650b7 review (supervisor slice), t_55147911 docs follow-up, t_e56d835b hygiene commit+push v2 uncommitted, t_2c94e927 (decision_gate + handle_comment wire/validate per spec/22+15 + t_1cca18ff), t_0843d707 (test_stage.gleam + wiring per spec/39 item 9 / #18 + spec/17), t_e2282d3f (gleam build 0 warnings fix in handle_comment WIP), PR#79 reviews t_2abfcacc/t_e1b63fc6/t_1ef6c1a8 etc)
 - Design refs (supervisor-design-final.md, supervisor-synthesis.md, gleam-migration-patterns.md)
 - Lock audit notes from this run
 
-**High-level snapshot (post t_6d2b458b + t_d87d2215 complete: test_stage.gleam thin hooks + completion-marker + test (spec/26+39 item 9 / #18); implement_stage_test wired; prior t_e56d835b hygiene; 258/258 green):**
+**High-level snapshot (post t_0843d707 (spec/39 item 9 test_stage impl + wiring verified per spec/17) + t_6d2b458b + t_d87d2215 complete: test_stage.gleam thin hooks + completion-marker + test; implement_stage_test wired; prior t_e56d835b hygiene; 258/258 green):**
 - github_picker (client+main+picker + decoder_test 256/256 green post fixtures fix + hygiene M in client/decoder/field t_64f72de6 + t_077f26d0 (0 warnings fix for field/client/decoder.gleam)), refusal (flow/assessment/checkpoint + cli + config/ffi M in t_e56d835b), supervisor (main/loop/recovery/state/lock/config/phases 641LOC + scheduler 130 + FFI; loop M for sleep_remaining + error boundary + hygiene in t_e56d835b) implemented + reviewed in slices; phases.gleam fully expanded with sync/pick (real scheduler wired)/scan_pr/scan_comment/reap/cleanup
-- workflow/ (decision 264, decision_gate 155 (spec/22), implement_stage 36 + test, test_stage 66 LOC (run-tests + completion-marker per spec/26+39), handle_comment 61, resolve_pr/main 426 full + skeleton, task_log split, worktree split, main/ffi)
+- workflow/ (decision 264, decision_gate 155 (spec/22), implement_stage 36 + test, test_stage 66 LOC (run-tests + completion-marker per spec/26+39), handle_comment 456 (full post t_2c94e927 wiring + t_e2282d3f hygiene), resolve_pr/main 426 full + skeleton, task_log split, worktree split, main/ffi)
 - Fully migrated: sync_main, resolve_pr (PR conflicts), issue_provider (Linear), progress (checkpoints/Linear + templates 176), task_slug, project_status (full + 81 LOC thin bin/grkr-project-status.sh delegating to project_status_cli), linear e2e
 - Bin updates/hygiene (per AGENTS: preserve sh conv, small explicit changes, <1000 LOC): grkr-project-status.sh (81 LOC thin), grkr-issue-workflow.sh (80 LOC thin wrapper delegating workflow/* CLIs incl decision_gate + test_completion_marker), worker-handle-comment.sh (29 LOC thin), worker-pick-issue.sh (46 LOC), worker-sync-main.sh (18 LOC), worker-resolve-pr.sh (39 LOC), worker-refuse-issue.sh (40 LOC thin calling refusal/cli), robot-main.sh (57 LOC), grkr (826 LOC post t_b5bd0fa8 task_progress extract), grkr-templates.sh (62 LOC thin), + bin/lib/{refusal_paths.sh,task_progress.sh} (176 LOC shared); new test_stage + implement_stage_test added
 - implement stage hook (Gleam src/grkr/workflow/implement_stage.gleam + test + thin delegate in grkr-issue-workflow.sh + wired in bin/grkr for commit msg per spec/25 + t_39ab1e08 / #17); test_stage hook + completion-marker (Gleam src/grkr/workflow/test_stage.gleam 66LOC + 24LOC test + delegate in grkr-issue-workflow.sh per spec/26 + t_6d2b458b / #18)
@@ -143,7 +143,7 @@ These values are only enough to identify the OAuth app. Linear GraphQL calls sti
 - `grkr --issue <id>` mirrors its launcher log to the GitHub issue as a collapsed details block so the thread stays readable by default.
 - Copy `.grkr/config.sh.example` to `.grkr/config.sh` and edit the values for your repo if you want to manage config manually.
 - `grkr init <id>` will create `.grkr/config.sh` for the current `origin` remote and project id you pass in.
-- `.grkr/tasks/` is local runtime state and ignored by git; `.grkr/config.sh` and `.grkr/config.sh.example` stay tracked.
+- `.grkr/tasks/`, `.grkr/state/`, `.grkr/locks/`, `.grkr/worktrees/`, `.grkr/logs/`, `.grkr/archive/` are local runtime state (populated by supervisor/workers per spec/parts/36-cleanup-policy.md) and ignored by git (see .gitignore); `.grkr/config.sh` and `.grkr/config.sh.example` stay tracked. Hygiene/audit in t_4f8b0fb5 + prior clean cards.
 
 ## Issue Providers
 
@@ -375,3 +375,33 @@ See kanban task t_9024ff95 comments for exact commands, output, and removed list
 - This keeps README accurate for user post-hygiene prep (no user-facing workflow change)
 
 See .grkr/audit-cleanup.md for exact verification output, purge command, and handoff.
+
+**Update for t_b45212c0 (e2e: validate github_picker thin wrapper + Gleam main; fixed wiring + title decode):**
+- Full e2e validation of bin/worker-pick-issue.sh (thin 46 LOC) + gleam run -m grkr/github_picker/main (all modules: config/types/query/decoder/selector/field/priority/client + ffis)
+- `gleam build` clean 0w (0.06s), `gleam test test/grkr/github_picker/` 258/258 pass
+- test/worker-pick-issue.sh (3 scenarios) + GITHUB_FIXTURE_PATH runs now emit correct SELECTED/ISSUE_*/JOB_KEY/TASK_SLUG/PROJECT_ITEM_ID + full ISSUE_TITLE (with title words in slug)
+- Fixed 2 small issues found in validation: 
+  1. bin/worker-pick-issue.sh now exports config vars (set -a re-source after .grkr/config.sh) so Gleam FFI process.env gets REPO etc (was "Missing required" error in thin mode)
+  2. decoder.gleam: title now direct decode_string (not field_text on primitive .title value) -- title was silently "", slugs fell back to "task"; now correct
+- No contract changes, no README behavior update needed beyond this note; AGENTS.md followed (small, docs updated, <1000, explicit)
+- See docs/gleam-migration.md for full e2e details + traceability to t_1c2663ae / t_f8eab5d9
+- This keeps user-facing docs accurate per AGENTS.md after the functional fixes in v2 picker slice.
+
+**Update for t_e2282d3f (fix: gleam build 0 warnings (workflow handle_comment WIP)):**
+
+- Fixed last 2 warnings blocking clean `gleam build` (unused Option type import + unused WIP case value in handle_comment.gleam)
+- `gleam build` now 0 warnings; 258 tests still pass
+- Updated this README (traceability + stale LOC) + docs/gleam-migration.md; ran sync-spec (noop)
+- No user-facing or functional changes (hygiene only, per AGENTS after edit)
+- See docs/gleam-migration.md for full details
+
+**Hygiene note for t_35a3cfc0 (2026-05-30 cleanup prep: auth.lock + 4 stale kanban ws + 18 .claude + git wt reg + new kanban.db.init.lock; review-required):**
+- Re-audited current state (fresh ls/lsof/ps/git/gleam/sqlite per task steps 1-2; state evolved from May25 task body with new ws from later blocked tasks + init.lock).
+- Appended full section to .grkr/audit-cleanup.md with 2026-05-30 outputs, prior blocked rm history (t_1c3c4a70 etc), updated proposed commands, verifs, handoff metadata.
+- Ran scripts/sync-spec.sh (noop).
+- Verified gleam build clean (0.06s), no LOC impact.
+- Per AGENTS + task: docs + README updated for traceability (hygiene only); no user-facing impact.
+- Prep complete; destructive exec blocked for human review (terminal safety precedent on rm in ~/.hermes/.claude paths).
+- See .grkr/audit-cleanup.md (new t_35a3cfc0 section) + kanban comment for commands + evidence. GitHub-only v2 board hygiene.
+
+This keeps README accurate per AGENTS for the cleanup lane hygiene card.

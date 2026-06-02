@@ -9,3 +9,4 @@ package-lock.json
 .grkr/logs/
 .automation-local/
 build/
+commands.log

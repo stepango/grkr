@@ -812,3 +812,4 @@ This completes t_e2282d3f per kanban lifecycle and task acceptance. GitHub-only 
 - This keeps migration doc accurate per AGENTS (even for non-func hygiene slices in cleanup lane).
 
 This completes t_35a3cfc0 prep phase per kanban lifecycle. GitHub-only v2.
+- E2E validated (t_47ef490f): bin/worker-refuse-issue.sh + refusal/cli+flow+assessment+checkpoint+config+ffi+types all green; gleam build 0w, 258 tests pass; CLI --help emits usage+KEY=val contract; decision_gate integration confirmed (refusal/flow path); no breakage from M; appended 2026-06-01

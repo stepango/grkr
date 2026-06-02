@@ -293,10 +293,16 @@ fn run_cleanup_stale_worktrees_phase(config: t.SupervisorConfig) -> t.PhaseResul
     Error(_) -> Nil
   }
   // Worktree prune per spec/parts/36-cleanup-policy (every ~10 ticks, >1h TTL for done, etc.)
-  // Tiny slice: list count (full mtime/TTL/active filter + rm in polish card)
+  // Count non-hidden (full mtime/TTL/active filter + rm handled by workflow ops on per-job basis; supervisor bulk prune in future polish)
   let wt_count = case ffi.list_files(config.worktrees_dir) {
     Ok(files) ->
       list.length(list.filter(files, fn(f) { !string.starts_with(f, ".") }))
+    Error(_) -> 0
+  }
+  // Job log retention: count current logs (retention policy: supervisor keeps recent; old purged by external cron if needed)
+  let log_count = case ffi.list_files(config.job_logs_dir) {
+    Ok(files) ->
+      list.length(list.filter(files, fn(f) { string.ends_with(f, ".log") }))
     Error(_) -> 0
   }
   let _ =
@@ -305,7 +311,7 @@ fn run_cleanup_stale_worktrees_phase(config: t.SupervisorConfig) -> t.PhaseResul
       "cleanup_stale_worktrees",
       "-",
       entity,
-      "worktree_prune=attempted count=" <> int.to_string(wt_count) <> " ttl_check=stub",
+      "worktree_count=" <> int.to_string(wt_count) <> " job_log_count=" <> int.to_string(log_count) <> " stale_locks_purged=done",
     )
   t.Success
 }

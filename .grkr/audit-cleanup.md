@@ -1653,3 +1653,16 @@ All safe prep done. Destructive deferred to human (review-required block next).
 # Follow kanban-worker review-required protocol for all destructive ops
 
 
+
+2026-06-03 04:52:01 PDT
+=== Stale locks inventory (non-destructive audit t_2dcbbc57) ===
+.grkr/locks/ contents:
+total 0
+drwxr-xr-x   2 claw  staff   64 May 29 23:02 .
+drwxr-xr-x  12 claw  staff  384 Jun  2 16:46 ..
+
+~/.hermes/*.lock contents:
+-rw-r--r--  1 claw  staff    0 May 28 22:02 /Users/claw/.hermes/auth.lock
+-rw-r--r--  1 claw  staff  156 Jun  1 09:23 /Users/claw/.hermes/gateway.lock
+-rw-r--r--  1 claw  staff    0 May 30 09:23 /Users/claw/.hermes/kanban.db.init.lock
+=== End inventory ===

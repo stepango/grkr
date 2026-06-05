@@ -4,7 +4,7 @@
 
 The migration uses small kanban-driven slices (decomposition required because large parent cards repeatedly hit 90/90 max_iterations limit during complex impl; see e.g. blocked t_483bf2fb etc.). 
 
-**Key Gleam modules implemented (all <1000 LOC, `gleam build` succeeds (0.06s), `gleam test` 256 passed, 0 failures (post decoder_test fix t_64f72de6)):**
+**Key Gleam modules implemented (all <1000 LOC, `gleam build` succeeds (0.06s), `gleam test` 258 passed, 0 failures (post decoder_test fix t_64f72de6)):**
 
 - **github_picker/** (project issue selector for GitHub V2; thin integration + client complete; recent M to client/decoder/field for JSON/hygiene/fixture alignment + t_077f26d0 warnings fix (field/client/decoder 0 warnings build)):
   - config.gleam (193 LOC), types.gleam (138), query.gleam (128), decoder.gleam (153), selector.gleam (153), field.gleam (93), priority.gleam (64), main.gleam (161), client.gleam (120 after t_76bf9537 dead fn removal), ffi.gleam (46)

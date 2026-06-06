@@ -1666,3 +1666,12 @@ drwxr-xr-x  12 claw  staff  384 Jun  2 16:46 ..
 -rw-r--r--  1 claw  staff  156 Jun  1 09:23 /Users/claw/.hermes/gateway.lock
 -rw-r--r--  1 claw  staff    0 May 30 09:23 /Users/claw/.hermes/kanban.db.init.lock
 === End inventory ===
+
+## 2026-06-05 Hygiene: Dedup blocked cleanup cards (task t_687d0adb)
+
+- Kept canonical execute card: t_93e360e9 (review-required path preserved)
+- Archived duplicates (documented, not executed here): t_980b7473, t_b7672222, t_1375d69a, t_32b4ad11, t_f5c6547b, t_7a3d116d, t_35a3cfc0, t_eea21836, t_4f8b0fb5, t_10481f75, t_8f58ac5a, t_73669aac
+- All cards reference same .grkr/audit-cleanup.md destructive ops; dedup prevents operator overload.
+- No rm -rf performed; kept card remains blocked for human review per kanban-worker rules.
+- Metadata for complete: {archived_ids: [...], kept_id: "t_93e360e9"}
+

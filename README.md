@@ -255,6 +255,7 @@ GRKR_LINEAR_E2E=1 bash test/e2e-linear-live.sh
 
 # Run unit tests only (no Linear access required)
 gleam test
+# Includes refusal/cli_test + flow_test (GitHub-only v2) + 259 other modules
 ```
 
 ### Linear OAuth Setup

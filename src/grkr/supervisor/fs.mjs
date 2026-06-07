@@ -109,7 +109,7 @@ export function list_files(dir) {
       return new Ok([]);
     }
     const rawFiles = readdirSync(dir);
-    const files = rawFiles.filter((f) => typeof f === "string");
+    const files = rawFiles.filter((f) => f != null && typeof f === "string");
     return new Ok(files);
   } catch (e) {
     return new Error(String(e.message || e));

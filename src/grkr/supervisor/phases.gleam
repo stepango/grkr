@@ -293,7 +293,7 @@ fn run_cleanup_stale_worktrees_phase(config: t.SupervisorConfig) -> t.PhaseResul
     Error(_) -> Nil
   }
   // Worktree prune per spec/parts/36-cleanup-policy (every ~10 ticks, >1h TTL for done, failed>configured TTL, prune stale, purge locks, compact processed comments)
-  // Per-job worktree rm on refusal/done is in workflow; supervisor bulk TTL prune + compact here (polish complete)
+  // Current: only purge_stale_lock_files + counts (lock parity complete). Full TTL worktree removal + comment compact are gaps vs spec/36 (deferred to follow-up slices; per-task worktree rm lives in comment_handler/workflow). Refusal policy (keep task folders/checkpoints) respected in handlers.
   let wt_count = case ffi.list_files(config.worktrees_dir) {
     Ok(files) ->
       list.length(list.filter(files, fn(f) { !string.starts_with(f, ".") }))

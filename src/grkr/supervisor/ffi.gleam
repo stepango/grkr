@@ -123,3 +123,9 @@ pub fn argv() -> List(String)
 
 @external(javascript, "process", "exit")
 pub fn exit(code: Int) -> Nil
+
+@external(javascript, "../supervisor/fs.mjs", "stat_mtime")
+pub fn stat_mtime(path: String) -> Result(Int, String)
+
+@external(javascript, "../supervisor/fs.mjs", "remove_dir_recursive")
+pub fn remove_dir_recursive(path: String) -> Bool

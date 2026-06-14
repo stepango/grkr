@@ -1,4 +1,4 @@
-import { closeSync, mkdirSync, openSync, writeFileSync, readFileSync, renameSync, appendFileSync, existsSync, readdirSync, unlinkSync } from "fs";
+import { closeSync, mkdirSync, openSync, writeFileSync, readFileSync, renameSync, appendFileSync, existsSync, readdirSync, unlinkSync, statSync, rmSync } from "fs";
 import { spawnSync } from "child_process";
 import { Ok, Error, toList } from "../../gleam.mjs";
 
@@ -143,6 +143,27 @@ export function try_lock_and_release(lockPath) {
     closeSync(fd);
     return true;
   } catch (_error) {
+    return false;
+  }
+}
+
+
+export function stat_mtime(path) {
+  try {
+    const stats = statSync(path);
+    return new Ok(Math.floor(stats.mtime.getTime() / 1000));
+  } catch (e) {
+    return new Error(String(e.message || e));
+  }
+}
+
+export function remove_dir_recursive(path) {
+  try {
+    if (existsSync(path)) {
+      rmSync(path, { recursive: true, force: true });
+    }
+    return true;
+  } catch (_) {
     return false;
   }
 }

@@ -819,3 +819,4 @@ This completes t_35a3cfc0 prep phase per kanban lifecycle. GitHub-only v2.
 - Wired into cleanup phase (logs compaction); preserves dedup/idempotency for robot comments (spec/15,36)
 - gleam build + 261 tests green; no regression on comment handling
 
+- Cleanup TTL completed-worktree removal wired (t_0da28dae, spec/36, FFI mtime/rmdir, active skip)

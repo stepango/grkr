@@ -111,6 +111,7 @@ fn load_with_overrides(overrides: Dict(String, String)) -> Result(types.Supervis
       logs_dir: logs_dir,
       job_logs_dir: job_logs_dir,
       worktrees_dir: worktrees_dir,
+      worktree_ttl_seconds: 3600,
       tasks_dir: tasks_dir,
       active_jobs_file: active_jobs_file,
       processed_comments_file: processed_comments_file,

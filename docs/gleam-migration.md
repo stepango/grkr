@@ -813,3 +813,9 @@ This completes t_e2282d3f per kanban lifecycle and task acceptance. GitHub-only 
 
 This completes t_35a3cfc0 prep phase per kanban lifecycle. GitHub-only v2.
 - E2E validated (t_47ef490f): bin/worker-refuse-issue.sh + refusal/cli+flow+assessment+checkpoint+config+ffi+types all green; gleam build 0w, 258 tests pass; CLI --help emits usage+KEY=val contract; decision_gate integration confirmed (refusal/flow path); no breakage from M; appended 2026-06-01
+
+## 2026-06-13 update (t_b175fe64)
+- Added compact_processed_comments(size/age cap via max_keep) to supervisor/state.gleam
+- Wired into cleanup phase (logs compaction); preserves dedup/idempotency for robot comments (spec/15,36)
+- gleam build + 261 tests green; no regression on comment handling
+

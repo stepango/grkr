@@ -261,3 +261,30 @@ pub fn write_last_comment_scan(path: String, ts: String) -> Result(Nil, t.Superv
     Error(e) -> Error(t.Io("write last_comment_scan: " <> e))
   }
 }
+
+/// Compact processed_comments.json by keeping only the most recent `max_keep` ids.
+/// No-op if list shorter than cap. Preserves order and idempotency (dedup already in mark).
+/// Used in cleanup phase per spec/parts/36 to bound growth.
+pub fn compact_processed_comments(
+  path: String,
+  max_keep: Int,
+) -> Result(Nil, t.SupervisorError) {
+  use current <- result.try(read_processed_comments(path))
+  case list.length(current) > max_keep {
+    True -> {
+      let compacted = list.drop(current, list.length(current) - max_keep)
+      let json_list =
+        "["
+        <> string.join(
+            list.map(compacted, fn(id) { "\"" <> string.replace(id, "\"", "\\\"") <> "\"" }),
+            ",",
+          )
+        <> "]"
+      case ffi.atomic_write_json(path, json_list) {
+        Ok(_) -> Ok(Nil)
+        Error(e) -> Error(t.Io("compact processed_comments: " <> e))
+      }
+    }
+    False -> Ok(Nil)
+  }
+}

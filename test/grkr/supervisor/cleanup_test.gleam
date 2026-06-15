@@ -1,9 +1,6 @@
-import gleam/list
-import gleam/result
 import gleeunit
 import gleeunit/should
 import grkr/supervisor/state
-import grkr/supervisor/types as t
 import grkr/supervisor/worktree_cleanup
 
 pub fn main() {

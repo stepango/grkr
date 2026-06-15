@@ -1677,3 +1677,4 @@ drwxr-xr-x  12 claw  staff  384 Jun  2 16:46 ..
 
 2026-06-14 t_02b2b1d2: lsof unheld on auth.lock; git worktree prune executed; rm-f pending safety gate (no other locks touched)
 2026-06-15 t_281ad66e: auth.lock stale unheld (lsof clean), git prune no-op (no prunables), rm blocked safety, gateway/.tick kept; review-required.
+2026-06-15 t_675e41f4: removed unheld auth.lock + kanban.db.init.lock (lsof clean); git worktree prune executed; gateway.lock kept; no workspaces touched

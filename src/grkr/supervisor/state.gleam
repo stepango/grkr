@@ -269,7 +269,10 @@ pub fn compact_processed_comments(
   path: String,
   max_keep: Int,
 ) -> Result(Nil, t.SupervisorError) {
-  use current <- result.try(read_processed_comments(path))
+  let current = case read_processed_comments(path) {
+    Error(_) -> []
+    Ok(ids) -> ids
+  }
   case list.length(current) > max_keep {
     True -> {
       let compacted = list.drop(current, list.length(current) - max_keep)

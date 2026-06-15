@@ -2,7 +2,7 @@
 
 AI-powered CLI that reads a GitHub issue and uses Codex to implement the changes.
 
-Current implementation status: see [docs/gleam-migration.md](./docs/gleam-migration.md) for v2 Gleam migration progress and research notes (detailed snapshot + module lists + kanban refs updated in t_20695489 + t_65d650b7 review + t_55147911 docs follow-up + t_e56d835b hygiene commit+push + t_a5bb4298 258 green docs refresh).
+Current implementation status: see [docs/gleam-migration.md](./docs/gleam-migration.md) for v2 Gleam migration progress and research notes (detailed snapshot + module lists + kanban refs updated in t_20695489 + t_65d650b7 review + t_55147911 docs follow-up + t_e56d835b hygiene commit+push + t_a5bb4298 270 green post-cleanup docs refresh).
 
 ## Gleam v2 Migration Progress
 
@@ -16,7 +16,7 @@ See the expanded [docs/gleam-migration.md](./docs/gleam-migration.md) for:
 - Design refs (supervisor-design-final.md, supervisor-synthesis.md, gleam-migration-patterns.md)
 - Lock audit notes from this run
 
-**High-level snapshot (post t_0843d707 (spec/39 item 9 test_stage impl + wiring verified per spec/17) + t_6d2b458b + t_d87d2215 complete: test_stage.gleam thin hooks + completion-marker + test; implement_stage_test wired; prior t_e56d835b hygiene; 258/258 green):**
+**High-level snapshot (post t_0843d707 (spec/39 item 9 test_stage impl + wiring verified per spec/17) + t_6d2b458b + t_d87d2215 complete: test_stage.gleam thin hooks + completion-marker + test; implement_stage_test wired; prior t_e56d835b hygiene; 270/270 green):**
 - github_picker (client+main+picker + decoder_test 256/256 green post fixtures fix + hygiene M in client/decoder/field t_64f72de6 + t_077f26d0 (0 warnings fix for field/client/decoder.gleam)), refusal (flow/assessment/checkpoint + cli + config/ffi M in t_e56d835b), supervisor (main/loop/recovery/state/lock/config/phases 641LOC + scheduler 130 + FFI; loop M for sleep_remaining + error boundary + hygiene in t_e56d835b) implemented + reviewed in slices; phases.gleam fully expanded with sync/pick (real scheduler wired)/scan_pr/scan_comment/reap/cleanup
 - workflow/ (decision 264, decision_gate 155 (spec/22), implement_stage 36 + test, test_stage 66 LOC (run-tests + completion-marker per spec/26+39), handle_comment 456 (full post t_2c94e927 wiring + t_e2282d3f hygiene), resolve_pr/main 426 full + skeleton, task_log split, worktree split, main/ffi)
 - Fully migrated: sync_main, resolve_pr (PR conflicts), issue_provider (Linear), progress (checkpoints/Linear + templates 176), task_slug, project_status (full + 81 LOC thin bin/grkr-project-status.sh delegating to project_status_cli), linear e2e

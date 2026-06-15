@@ -294,8 +294,13 @@ fn run_cleanup_stale_worktrees_phase(config: t.SupervisorConfig) -> t.PhaseResul
   }
   // compact processed_comments per spec/parts/36 (size cap)
   let _ = state.compact_processed_comments(config.processed_comments_file, 500)
-  // actual TTL prune (new in t_16bb4bcf)
-  let _ = case worktree_cleanup.prune_stale_worktrees(config, [], []) {
+  // actual TTL prune wired to live active_jobs (refusal dirs stub per prior task comment)
+  let active_job_keys = case state.read_active_jobs(config.active_jobs_file) {
+    Ok(jobs) -> dict.keys(jobs)
+    Error(_) -> []
+  }
+  let refusal_dirs: List(String) = []  // refusal-protected checkpoint dirs from progress state (stub)
+  let _ = case worktree_cleanup.prune_stale_worktrees(config, active_job_keys, refusal_dirs) {
     Ok(n) -> log_info(config, "cleanup_stale_worktrees", "-", entity, "pruned_worktrees=" <> int.to_string(n))
     Error(e) -> log_error(config, "cleanup_stale_worktrees", "-", entity, "prune_failed=" <> e)
   }  // Worktree prune per spec/parts/36-cleanup-policy (every ~10 ticks, >1h TTL for done, failed>configured TTL, prune stale, purge locks, compact processed comments)

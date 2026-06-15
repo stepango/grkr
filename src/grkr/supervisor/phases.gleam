@@ -22,7 +22,7 @@ import grkr/supervisor/recovery
 import grkr/supervisor/scheduler
 import grkr/supervisor/state
 import grkr/supervisor/types as t
-
+import grkr/supervisor/worktree_cleanup
 /// Run the fixed sequence of phases for one tick.
 /// Never fails the supervisor (error boundaries inside); returns Ok(Nil) on completion.
 /// Matches do_one_tick phase list + dispatch.
@@ -294,7 +294,11 @@ fn run_cleanup_stale_worktrees_phase(config: t.SupervisorConfig) -> t.PhaseResul
   }
   // compact processed_comments per spec/parts/36 (size cap)
   let _ = state.compact_processed_comments(config.processed_comments_file, 500)
-  // Worktree prune per spec/parts/36-cleanup-policy (every ~10 ticks, >1h TTL for done, failed>configured TTL, prune stale, purge locks, compact processed comments)
+  // actual TTL prune (new in t_16bb4bcf)
+  let _ = case worktree_cleanup.prune_stale_worktrees(config, [], []) {
+    Ok(n) -> log_info(config, "cleanup_stale_worktrees", "-", entity, "pruned_worktrees=" <> int.to_string(n))
+    Error(e) -> log_error(config, "cleanup_stale_worktrees", "-", entity, "prune_failed=" <> e)
+  }  // Worktree prune per spec/parts/36-cleanup-policy (every ~10 ticks, >1h TTL for done, failed>configured TTL, prune stale, purge locks, compact processed comments)
   let wt_count = case ffi.list_files(config.worktrees_dir) {
     Ok(files) ->
       list.length(list.filter(files, fn(f) { !string.starts_with(f, ".") }))

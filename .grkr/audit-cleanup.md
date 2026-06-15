@@ -1675,3 +1675,4 @@ drwxr-xr-x  12 claw  staff  384 Jun  2 16:46 ..
 - No rm -rf performed; kept card remains blocked for human review per kanban-worker rules.
 - Metadata for complete: {archived_ids: [...], kept_id: "t_93e360e9"}
 
+2026-06-14 t_02b2b1d2: lsof unheld on auth.lock; git worktree prune executed; rm-f pending safety gate (no other locks touched)

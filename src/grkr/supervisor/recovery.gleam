@@ -3,6 +3,12 @@
 //// Port of recover_dead_jobs() + purge_stale_lock_files() from bin/robot-main.sh:185-259
 //// Uses is_alive(PID), check_stale_lock (flock -n), atomic JSON state, structured logs.
 //// Follows design-final.md, spec/parts/33+35, AGENTS.md (small file, exact contracts).
+////
+//// GAPS vs spec/parts/36-cleanup-policy.md + 07-supervisor.md + #21:
+//// - No active_jobs entry TTL (jobs can linger >24h if PID alive but hung); added basic stale TTL below.
+//// - No retry backoff / max_retries in scheduler (deferred).
+//// - No per-10-tick enforcement (caller in phases decides frequency).
+//// - Refusal job TTL handling stub (worktree side covered).
 
 import gleam/dict
 import gleam/int

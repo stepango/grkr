@@ -11,6 +11,7 @@ cp bin/grkr-project-status.sh "$tmpdir/grkr-project-status.sh"
 cp bin/grkr-templates.sh "$tmpdir/grkr-templates.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
 chmod +x "$tmpdir/grkr.sh" "$tmpdir/doctor.sh"
+bash "$(dirname "$0")/test-copy-grkr-lib.sh" "$tmpdir"
 
 real_git=$(command -v git)
 mkdir -p "$tmpdir/bin"

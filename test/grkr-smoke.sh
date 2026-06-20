@@ -13,6 +13,7 @@ cp bin/grkr-templates.sh "$tmpdir/grkr-templates.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
 chmod +x "$tmpdir/grkr.sh"
 chmod +x "$tmpdir/doctor.sh"
+bash "$(dirname "$0")/test-copy-grkr-lib.sh" "$tmpdir"
 
 real_git=$(command -v git)
 mkdir -p "$tmpdir/bin"
@@ -107,7 +108,7 @@ case "\${1-} \${2-}" in
     echo 'https://example.com/pr/1'
     ;;
   'project view') printf '{"id":"PROJECT_1"}\n' ;;
-  'project field-list') printf '[{"id":"FIELD_STATUS","name":"Status","options":[{"id":"OPTION_TODO","name":"Todo"},{"id":"OPTION_IN_PROGRESS","name":"In progress"},{"id":"OPTION_DONE","name":"Done"}]}]\n' ;;
+  'project field-list') printf '[{"id":"FIELD_STATUS","name":"Status","options":[{"id":"OPTION_TODO","name":"Todo"},{"id":"OPTION_IN_PROGRESS","name":"In Progress"},{"id":"OPTION_DONE","name":"Done"}]}]\n' ;;
   'project item-edit') exit 0 ;;
   'issue edit') exit 0 ;;
   *) exit 0 ;;

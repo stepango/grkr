@@ -37,24 +37,39 @@ pub fn classify_worktree_fresh_test() {
   |> should.equal(#(False, "fresh"))
 }
 
+pub fn progress_uncommitted_refuse_decision_test() {
+  let json =
+    "{\"status\":\"implementing\",\"decision\":\"refuse\",\"stages\":{\"implement_or_refuse\":{\"status\":\"done\"}}}"
+  worktree_cleanup.progress_shows_uncommitted_refusal(json)
+  |> should.be_true()
+}
+
+pub fn progress_committed_refusal_test() {
+  let json =
+    "{\"status\":\"refused\",\"decision\":\"refuse\",\"stages\":{\"implement_or_refuse\":{\"status\":\"done\",\"comment_id\":2002,\"reason_class\":\"underspecified\"},\"test\":{\"status\":\"skipped\"}}}"
+  worktree_cleanup.progress_shows_uncommitted_refusal(json)
+  |> should.be_false()
+}
+
+pub fn progress_proceed_not_refusal_test() {
+  let json =
+    "{\"status\":\"complete\",\"decision\":\"proceed\",\"stages\":{\"implement_or_refuse\":{\"status\":\"done\"}}}"
+  worktree_cleanup.progress_shows_uncommitted_refusal(json)
+  |> should.be_false()
+}
+
 pub fn compact_processed_comments_noop_test() {
-  // Use a temp path that likely doesn't exist or is short; noop path
   let path = "/tmp/grkr-test-compact-noop.json"
   state.compact_processed_comments(path, 10)
   |> should.be_ok()
 }
 
 pub fn compact_processed_comments_path_test() {
-  // This exercises the read+write path if file exists with > max; otherwise noop
-  // Real integration uses temp fixture in e2e; unit keeps simple per scope
   let path = "/tmp/grkr-test-compact.json"
-  // Pre-populate not needed for coverage of branch; full e2e in robot
   state.compact_processed_comments(path, 500)
   |> should.be_ok()
 }
 
 pub fn prune_stale_worktrees_temp_dir_note_test() {
-  // prune_stale_worktrees uses temp dirs only in real runs (per AGENTS + scope);
-  // classify cases above cover the decision logic; integration green via 261 tests.
   True |> should.be_true()
 }

@@ -5,8 +5,82 @@
 
 import gleam/list
 import gleam/string
+import grkr/refusal/checkpoint
 import grkr/supervisor/ffi
 import grkr/supervisor/types as t
+
+/// True when progress.json shows refusal/decision=refuse without implement_or_refuse.comment_id
+/// (refusal not yet committed to state + comments). Pure helper for tests + cleanup scan.
+pub fn progress_shows_uncommitted_refusal(json: String) -> Bool {
+  case ffi.parse(json) {
+    Error(_) -> False
+    Ok(root) -> {
+      let status = progress_field_string(ffi.get_field(root, "status"))
+      let decision = progress_field_string(ffi.get_field(root, "decision"))
+      let comment_v =
+        ffi.get_field_path(root, ["stages", "implement_or_refuse", "comment_id"])
+      case progress_comment_id_present(comment_v) {
+        True -> False
+        False -> status == "refused" || decision == "refuse"
+      }
+    }
+  }
+}
+
+fn progress_field_string(val: ffi.JsonValue) -> String {
+  case ffi.decode_string(val) {
+    Ok(s) -> s
+    Error(_) -> ""
+  }
+}
+
+fn progress_comment_id_present(val: ffi.JsonValue) -> Bool {
+  case ffi.is_null(val) {
+    True -> False
+    False ->
+      case ffi.decode_string(val) {
+        Ok(s) -> s != ""
+        Error(_) ->
+          case ffi.decode_int(val) {
+            Ok(_) -> True
+            Error(_) -> False
+          }
+      }
+  }
+}
+
+/// Task slugs whose worktrees must not be pruned (refusal.md and/or uncommitted refusal progress).
+/// Committed refusals (progress has comment_id) are omitted so worktrees may be removed per spec/36.
+pub fn collect_refusal_protected_tokens(tasks_dir: String) -> List(String) {
+  case ffi.list_files(tasks_dir) {
+    Error(_) -> []
+    Ok(entries) ->
+      list.filter_map(entries, fn(slug) {
+        case string.starts_with(slug, ".") {
+          True -> Error(Nil)
+          False ->
+            case task_needs_refusal_worktree_protection(tasks_dir, slug) {
+              True -> Ok(slug)
+              False -> Error(Nil)
+            }
+        }
+      })
+  }
+}
+
+fn task_needs_refusal_worktree_protection(tasks_dir: String, slug: String) -> Bool {
+  let refusal_path = checkpoint.refusal_checkpoint_file(tasks_dir, slug)
+  let progress_path = checkpoint.progress_file_for_task(tasks_dir, slug)
+  let has_refusal_md = ffi.exists(refusal_path)
+  case ffi.read_text(progress_path) {
+    Error(_) -> has_refusal_md
+    Ok(json) ->
+      case progress_shows_uncommitted_refusal(json) {
+        True -> True
+        False -> False
+      }
+  }
+}
 
 /// Classify a single worktree dir name (basename) against policy.
 /// Returns tuple (should_remove, reason) for logging.

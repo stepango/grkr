@@ -17,6 +17,16 @@ pub type RefusalCheckpoint {
   )
 }
 
+/// On-disk refusal checkpoint for a task (GitHub-only v2).
+pub fn refusal_checkpoint_file(tasks_dir: String, task_slug: String) -> String {
+  tasks_dir <> "/" <> task_slug <> "/refusal.md"
+}
+
+/// progress.json path for a task under tasks_dir.
+pub fn progress_file_for_task(tasks_dir: String, task_slug: String) -> String {
+  tasks_dir <> "/" <> task_slug <> "/progress.json"
+}
+
 /// Returns the full issue JSON via gh (used by flow and ensure for comment scan)
 pub fn fetch_issue_json(repo: String, issue_number: Int) -> Result(String, String) {
   let args = [
@@ -146,7 +156,7 @@ pub fn ensure_refusal_checkpoint(
     checkpoint_id.marker(checkpoint_stage.Refusal, task_slug)
     |> checkpoint_id.to_html_comment()
 
-  let checkpoint_file = cfg.tasks_dir <> "/" <> task_slug <> "/refusal.md"
+  let checkpoint_file = refusal_checkpoint_file(cfg.tasks_dir, task_slug)
 
   let comment_id = find_comment_id_with_marker(issue_json, marker)
   let file_exists = ffi.exists_file(checkpoint_file)

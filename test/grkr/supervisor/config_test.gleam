@@ -33,6 +33,7 @@ pub fn load_for_test_returns_config_test() {
       cfg.active_jobs_file |> should.equal("/tmp/grkr-test/.grkr/state/active_jobs.json")
       cfg.project_owner |> should.equal("stepango")
       cfg.project_number |> should.equal(1)
+      cfg.active_job_ttl_seconds |> should.equal(86_400)
     }
     Error(_) -> should.fail()
   }

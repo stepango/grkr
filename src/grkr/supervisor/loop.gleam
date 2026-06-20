@@ -59,6 +59,25 @@ pub fn run_loop(config: t.SupervisorConfig) -> Result(Nil, t.SupervisorError) {
       )
   }
 
+  let _ = case recovery.recover_stale_active_jobs(config, "startup") {
+    Ok(count) ->
+      log_info(
+        config,
+        "startup",
+        "-",
+        entity,
+        "recovered_stale_ttl_jobs=" <> int.to_string(count),
+      )
+    Error(e) ->
+      log_error(
+        config,
+        "startup",
+        "-",
+        entity,
+        "recover_stale_ttl_failed=" <> t.supervisor_error_to_string(e),
+      )
+  }
+
   let _ = case recovery.purge_stale_lock_files(config) {
     Ok(count) ->
       log_info(

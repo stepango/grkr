@@ -33,7 +33,25 @@ git_in_issue_context() {
 }
 
 # Worktree thin delegates (to workflow/main; parity with old bash + worktree.gleam)
-prepare_issue_worktree() { gleam_wf main prepare "$1" "$2" 2>/dev/null || echo ""; }
+prepare_issue_worktree() {
+  local dir stderr_tmp
+  stderr_tmp=$(mktemp "${TMPDIR:-/tmp}/grkr-wt-stderr.XXXXXX")
+  # gleam run prints compile noise on stdout; workflow/main emits bare path as the last line.
+  # Human worktree msgs (♻️/⚠️/🌿) go to stderr — forward so issue logs capture them.
+  dir=$(gleam_wf main prepare "$1" "$2" 2>"$stderr_tmp" | tail -n1) || {
+    cat "$stderr_tmp" >&2
+    rm -f "$stderr_tmp"
+    echo "❌ prepare_issue_worktree gleam failed for branch=$1 slug=$2" >&2
+    return 1
+  }
+  cat "$stderr_tmp" >&2
+  rm -f "$stderr_tmp"
+  [ -n "$dir" ] || {
+    echo "❌ prepare_issue_worktree empty dir for branch=$1 slug=$2" >&2
+    return 1
+  }
+  printf '%s\n' "$dir"
+}
 collect_relevant_issue_paths() { gleam_wf main collect-relevant 2>/dev/null; }
 stage_relevant_issue_files() { gleam_wf main stage-relevant; }
 cleanup_issue_worktree() { gleam_wf main cleanup "$1" 2>/dev/null || true; }

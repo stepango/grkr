@@ -38,7 +38,7 @@ pub fn run_refusal(
   let title = extract_title_from_issue_json(issue_json)
   let task_slug = task_slug.task_slug_for_issue(issue_number, title)
 
-  let progress_file = cfg.tasks_dir <> "/" <> task_slug <> "/progress.json"
+  let progress_file = checkpoint.progress_file_for_task(cfg.tasks_dir, task_slug)
 
   // normalize class/reasoning (empty -> sensible defaults)
   let class = case class_raw {

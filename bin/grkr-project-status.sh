@@ -47,14 +47,14 @@ move_issue_to_project_status() {
     plan=$(_grkr_run_cli plan-move "$issue_json" "$pjson" "$fjson" "$target" 2>/dev/null || echo "no_action\tresolution_failed")
   fi
   case "$plan" in
-    move\t*)
+    move$'\t'*)
       local _m iid fid oid pid _o; IFS=$'\t' read -r _m iid fid oid pid _o <<<"$plan"
       local eout; eout=$(gh project item-edit --id "$iid" --field-id "$fid" --project-id "$pid" --single-select-option-id "$oid" 2>&1) || { echo "❌ Unable to move issue #$issue to $target: $eout" >&2; return 1; }
       echo "$moved"
       ;;
-    no_action\titem_missing) echo "$miss" ;;
-    no_action\talready) echo "$already" ;;
-    no_action\tdisabled) return 0 ;;
+    no_action$'\t'item_missing) echo "$miss" ;;
+    no_action$'\t'already) echo "$already" ;;
+    no_action$'\t'disabled) return 0 ;;
     *) echo "❌ Unable to resolve the \"$STATUS_FIELD_NAME\" option \"$target\" for project #$PROJECT_NUMBER." >&2; return 1 ;;
   esac
 }

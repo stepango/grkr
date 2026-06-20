@@ -122,6 +122,7 @@ pub type SupervisorConfig {
     job_logs_dir: String,
     worktrees_dir: String,
     worktree_ttl_seconds: Int,
+    active_job_ttl_seconds: Int,
     tasks_dir: String,
     active_jobs_file: String,
     processed_comments_file: String,

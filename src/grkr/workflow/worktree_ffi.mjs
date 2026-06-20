@@ -3,6 +3,17 @@ import { mkdirSync, existsSync, readFileSync, writeFileSync } from "fs";
 import { dirname } from "path";
 import { toList, Ok, Error } from "../../gleam.mjs";
 
+/** Gleam Option(String) arrives as None (object) or Some with [0] string. */
+function optionString(input) {
+  if (typeof input === "string") {
+    return input;
+  }
+  if (input !== undefined && input !== null && typeof input === "object" && 0 in input) {
+    return String(input[0]);
+  }
+  return "";
+}
+
 export function get_env(name) {
   return process.env[name] || "";
 }
@@ -26,12 +37,16 @@ export function path_exists(path) {
 
 function run_git(args, input, cwd) {
   try {
-    const stdout = execFileSync("git", args.toArray(), {
+    const stdin = optionString(input);
+    const options = {
       cwd: cwd,
-      input: input || "",
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
-    });
+    };
+    if (stdin !== "") {
+      options.input = stdin;
+    }
+    const stdout = execFileSync("git", args.toArray(), options);
     return { exit_code: 0, stdout: stdout, stderr: "" };
   } catch (error) {
     return {
@@ -43,8 +58,8 @@ function run_git(args, input, cwd) {
 }
 
 export function git_exec(args, input) {
-  // For prepare, base_ref, cleanup etc - host repo context (cwd or GRKR_ROOT)
-  const cwd = process.cwd();
+  // Host repo context: GRKR_ROOT (exported by doctor_init) or cwd
+  const cwd = get_env("GRKR_ROOT") || process.cwd();
   return run_git(args, input, cwd);
 }
 
@@ -110,11 +125,14 @@ export function update_progress_for_decision(progress_file, decision) {
 // mirrors supervisor/exec.mjs + resolve_pr pattern; supports Gleam List via toArray
 export function executable(command, args, input) {
   try {
+    const stdin = optionString(input);
     const options = {
-      input: input || undefined,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
     };
+    if (stdin !== "") {
+      options.input = stdin;
+    }
     if (process.env.GRKR_ROOT) {
       options.cwd = process.env.GRKR_ROOT;
     }

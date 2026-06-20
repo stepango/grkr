@@ -14,6 +14,7 @@ cp bin/grkr-task-slug.sh "$pkg_bindir/grkr-task-slug.sh"
 cp bin/grkr-templates.sh "$pkg_bindir/grkr-templates.sh"
 cp bin/doctor.sh "$pkg_bindir/doctor.sh"
 chmod +x "$pkg_bindir/grkr" "$pkg_bindir/doctor.sh"
+bash "$(dirname "$0")/test-copy-grkr-lib.sh" "$pkg_bindir"
 
 ln -s "$pkg_bindir/grkr" "$tmpdir/bin/grkr"
 ln -s "$pkg_bindir/doctor.sh" "$tmpdir/bin/doctor.sh"

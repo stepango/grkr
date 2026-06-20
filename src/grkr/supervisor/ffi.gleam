@@ -114,6 +114,9 @@ pub fn utc_timestamp() -> String
 @external(javascript, "../supervisor/process.mjs", "unix_seconds")
 pub fn unix_seconds() -> Int
 
+@external(javascript, "../supervisor/process.mjs", "parse_utc_iso_to_unix")
+pub fn parse_utc_iso_to_unix(iso: String) -> Int
+
 // --- CLI / ARGV (cli_ffi.mjs) ---
 
 @external(javascript, "../supervisor/cli_ffi.mjs", "argv")

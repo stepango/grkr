@@ -93,6 +93,11 @@ fn load_with_overrides(overrides: Dict(String, String)) -> Result(types.Supervis
     |> list.map(string.trim)
     |> list.filter(fn(s) { s != "" })
 
+  let active_job_ttl_seconds =
+    get("ACTIVE_JOB_TTL_SECONDS", "86400")
+    |> int.parse
+    |> result.unwrap(86_400)
+
   // Project config (for picker integration, matches github_picker/config and doctor.sh)
   let project_owner = get("PROJECT_OWNER", "")
   let project_number =
@@ -112,6 +117,7 @@ fn load_with_overrides(overrides: Dict(String, String)) -> Result(types.Supervis
       job_logs_dir: job_logs_dir,
       worktrees_dir: worktrees_dir,
       worktree_ttl_seconds: 3600,
+      active_job_ttl_seconds: active_job_ttl_seconds,
       tasks_dir: tasks_dir,
       active_jobs_file: active_jobs_file,
       processed_comments_file: processed_comments_file,

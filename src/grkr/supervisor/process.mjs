@@ -62,3 +62,11 @@ export function utc_timestamp() {
 export function unix_seconds() {
   return Math.floor(Date.now() / 1000);
 }
+
+/** Parse UTC ISO-8601 (e.g. 2026-05-17T12:00:00.000Z) to Unix seconds; -1 if invalid. */
+export function parse_utc_iso_to_unix(iso) {
+  if (typeof iso !== 'string' || iso.trim() === '') return -1;
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return -1;
+  return Math.floor(ms / 1000);
+}

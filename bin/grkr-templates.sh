@@ -37,15 +37,18 @@ write_plan_checkpoint_file() {
 }
 write_decision_prompt_file() {
   local file=$1; shift
-  gleam_tpl render-decision-prompt "$@" > "$file"
+  local max_lines=${MAX_FILE_LINES:-1000}
+  gleam_tpl render-decision-prompt "$@" "$GRKR_ROOT" "$max_lines" > "$file"
 }
 write_issue_prompt_file() {
   local file=$1; shift
-  gleam_tpl render-issue-prompt "$@" > "$file"
+  local max_lines=${MAX_FILE_LINES:-1000}
+  gleam_tpl render-issue-prompt "$@" "$GRKR_ROOT" "$max_lines" > "$file"
 }
 write_line_limit_fix_prompt() {
   local file=$1; shift
-  gleam_tpl render-line-limit-fix-prompt "$@" > "$file"
+  local max_lines=${MAX_FILE_LINES:-1000}
+  gleam_tpl render-line-limit-fix-prompt "$@" "$max_lines" > "$file"
 }
 write_default_pr_body() {
   local file=$1; shift

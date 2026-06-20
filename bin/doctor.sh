@@ -1,7 +1,7 @@
 #!/bin/bash
 
 doctor_init() {
-  GRKR_ROOT=${GRKR_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}
+  export GRKR_ROOT=${GRKR_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}
   GRKR_CONFIG_FILE="$GRKR_ROOT/.grkr/config.sh"
 }
 

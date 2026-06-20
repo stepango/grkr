@@ -252,19 +252,25 @@ fn run_pick_and_schedule_issue_execution_phase(
 
 fn run_reap_finished_jobs_phase(config: t.SupervisorConfig) -> t.PhaseResult {
   let entity = "repo/" <> config.repo
-  case recovery.recover_dead_jobs(config, "reap_finished_jobs") {
-    Ok(count) -> {
+  let dead_result = recovery.recover_dead_jobs(config, "reap_finished_jobs")
+  let stale_result = recovery.recover_stale_active_jobs(config, "reap_finished_jobs")
+
+  case dead_result, stale_result {
+    Ok(dead), Ok(stale) -> {
       let _ =
         log_info(
           config,
           "reap_finished_jobs",
           "-",
           entity,
-          "dead_jobs_recovered=" <> int.to_string(count),
+          "dead_jobs_recovered="
+            <> int.to_string(dead)
+            <> " stale_ttl_jobs_recovered="
+            <> int.to_string(stale),
         )
       t.Success
     }
-    Error(e) -> {
+    Error(e), _ | _, Error(e) -> {
       let _ =
         log_error(
           config,
@@ -294,12 +300,13 @@ fn run_cleanup_stale_worktrees_phase(config: t.SupervisorConfig) -> t.PhaseResul
   }
   // compact processed_comments per spec/parts/36 (size cap)
   let _ = state.compact_processed_comments(config.processed_comments_file, 500)
-  // actual TTL prune wired to live active_jobs (refusal dirs stub per prior task comment)
+  // actual TTL prune wired to live active_jobs + refusal-protected task slugs from progress/refusal.md
   let active_job_keys = case state.read_active_jobs(config.active_jobs_file) {
     Ok(jobs) -> dict.keys(jobs)
     Error(_) -> []
   }
-  let refusal_dirs: List(String) = []  // refusal-protected checkpoint dirs from progress state (stub)
+  let refusal_dirs =
+    worktree_cleanup.collect_refusal_protected_tokens(config.tasks_dir)
   let _ = case worktree_cleanup.prune_stale_worktrees(config, active_job_keys, refusal_dirs) {
     Ok(n) -> log_info(config, "cleanup_stale_worktrees", "-", entity, "pruned_worktrees=" <> int.to_string(n))
     Error(e) -> log_error(config, "cleanup_stale_worktrees", "-", entity, "prune_failed=" <> e)

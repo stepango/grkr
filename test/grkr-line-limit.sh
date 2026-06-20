@@ -13,6 +13,7 @@ cp bin/grkr-templates.sh "$tmpdir/grkr-templates.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
 chmod +x "$tmpdir/grkr.sh"
 chmod +x "$tmpdir/doctor.sh"
+bash "$(dirname "$0")/test-copy-grkr-lib.sh" "$tmpdir"
 
 big_file="$tmpdir/big-file.md"
 seq 1 1001 | sed 's/^/line /' > "$big_file"

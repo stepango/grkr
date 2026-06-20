@@ -1,6 +1,6 @@
 # Gleam v2 Migration Status
 
-**Current implementation status (2026-06-19, post hygiene t_e30ccd8f: refusal-protected worktree cleanup + active_jobs TTL/hung-lock recovery per `.grkr/supervisor-cleanup-policy.md` §6; 280 passed, 0 failures (`gleam test`); `npm test` 16/16 green; gleam build clean; GitHub-only v2 PR #79):** Module inventory (live wc/find): github_picker/ (10 modules +5 mjs ~1239 LOC), refusal/ (7+4mjs ~1084 LOC), supervisor/ (11+7mjs ~2152 LOC: phases 647, loop 255, state 263, recovery 214, types 181, config 163, scheduler 130, ffi 125, lock 88, main 56, comment_handler 37), workflow/ (14+3mjs ~1465 LOC: decision 264, decision_gate 155 (spec/22 implement-or-refuse gate + CLI + refusal integration), implement_stage 36, handle_comment 61, resolve_pr/main 426 (full), task_log split (core 187 + persist 113 + cli 83 + task_log 41 + types 7), worktree split (ops 146 + stage 59 + worktree 45 + types 10), main 77, ffi 75), progress/ (8+1mjs ~1152 LOC: main 325, templates 176, linear_mutation 174, cli 124, checkpoint_render 103, linear_state 112, checkpoint_id 74, checkpoint_stage 64), issue_provider/ (10 ~1663 LOC: main 236, config 269, decoder 225, types 222, query 200, selector 150, credential 182, validation 88, client 65, ffi 26), resolve_pr/ (5 ~968 LOC: main 426 full, git 240, codex 134, github 121, types 47; workflow/resolve_pr.gleam skeleton ref), linear/ (7 ~1182 LOC: oauth 353, e2e 272, client 209, config 147, graphql 106, types 75, e2e_main 20), project_status/ (7+cli ~1241 LOC: planning 341, extraction 217, resolution 141, types 112, config 101, normalization 46, main 5 + project_status_cli 278), sync_main/main 205, task_slug 90+cli 44+ffi; thin bin wrappers (per AGENTS preserve sh conv): worker-pick-issue.sh 46, worker-refuse-issue.sh 40 (refusal/cli), worker-resolve-pr.sh 39 (resolve_pr/ma... [truncated]
+**Current implementation status (2026-06-20, post t_77e5fe0b docs sync + hygiene t_e30ccd8f: refusal-protected worktree cleanup + active_jobs TTL/hung-lock recovery per `.grkr/supervisor-cleanup-policy.md` §6; 280 passed, 0 failures (`gleam test`); `npm test` 16/16 green; gleam build clean; GitHub-only v2 PR #79):** Module inventory (live wc/find): github_picker/ (10 modules +5 mjs ~1239 LOC), refusal/ (7+4mjs ~1084 LOC), supervisor/ (11+7mjs ~2152 LOC: phases 647, loop 255, state 263, recovery 214, types 181, config 163, scheduler 130, ffi 125, lock 88, main 56, comment_handler 37), workflow/ (14+3mjs ~1465 LOC: decision 264, decision_gate 155 (spec/22 implement-or-refuse gate + CLI + refusal integration), implement_stage 36, handle_comment 61, resolve_pr/main 426 (full), task_log split (core 187 + persist 113 + cli 83 + task_log 41 + types 7), worktree split (ops 146 + stage 59 + worktree 45 + types 10), main 77, ffi 75), progress/ (8+1mjs ~1152 LOC: main 325, templates 176, linear_mutation 174, cli 124, checkpoint_render 103, linear_state 112, checkpoint_id 74, checkpoint_stage 64), issue_provider/ (10 ~1663 LOC: main 236, config 269, decoder 225, types 222, query 200, selector 150, credential 182, validation 88, client 65, ffi 26), resolve_pr/ (5 ~968 LOC: main 426 full, git 240, codex 134, github 121, types 47; workflow/resolve_pr.gleam skeleton ref), linear/ (7 ~1182 LOC: oauth 353, e2e 272, client 209, config 147, graphql 106, types 75, e2e_main 20), project_status/ (7+cli ~1241 LOC: planning 341, extraction 217, resolution 141, types 112, config 101, normalization 46, main 5 + project_status_cli 278), sync_main/main 205, task_slug 90+cli 44+ffi; thin bin wrappers (per AGENTS preserve sh conv): worker-pick-issue.sh 46, worker-refuse-issue.sh 40 (refusal/cli), worker-resolve-pr.sh 39 (resolve_pr/ma... [truncated]
 
 The migration uses small kanban-driven slices (decomposition required because large parent cards repeatedly hit 90/90 max_iterations limit during complex impl; see e.g. blocked t_483bf2fb etc.). 
 
@@ -52,7 +52,7 @@ The migration uses small kanban-driven slices (decomposition required because la
 - Templates thinning (t_7cc455e3 + t_23a1c5ae): 62 LOC thin + 176 LOC Gleam (progress/templates) exact parity.
 
 **Design & Spec artifacts (canonical):**
-- spec/parts/ (41 files): 00-overview.md, 01-goal.md, ..., 07-supervisor.md, 09-main-loop-contract.md, 15-phase-3-detect-and-process-robot-comments.md, 17-issue-workflow-overview.md, 23-refusal-flow.md, 36-cleanup-policy.md, 39-recommended-implementation-order.md (1-5 covered, 6-12 backlog: implement-or-refuse, refusal worker, implement, test, comment scan, PR resolve, cleanup), + many more. `spec/spec.md` is generated index. (sync run in t_767a0b08 + this task)
+- spec/parts/ (41 files): 00-overview.md, 01-goal.md, ..., 07-supervisor.md, 09-main-loop-contract.md, 15-phase-3-detect-and-process-robot-comments.md, 17-issue-workflow-overview.md, 23-refusal-flow.md, 36-cleanup-policy.md, 39-recommended-implementation-order.md (items 1–5 historical baseline; items 6–12 implemented in Gleam v2 — see **Remaining** status table below; spec slice text may still describe 6–12 as forward backlog until a dedicated spec refresh), + many more. `spec/spec.md` is generated index. (sync run in t_767a0b08 + this task)
 - Root: supervisor-design-final.md (421 LOC, detailed final design: 10-module structure, exact types for JobKey/ActiveJob/Phase/SupervisorConfig/SupervisorError, FFI specs for process/fs/exec etc., logging format, active_jobs.json schema; GitHub-only), supervisor-synthesis.md, gleam-migration-patterns.md (extracted module splits, CLI dispatch, FFI patterns from existing v2 code for reuse in supervisor)
 - Historical research archived under .grkr/archive/
 
@@ -67,17 +67,27 @@ The migration uses small kanban-driven slices (decomposition required because la
 - Templates: 8 render fns (research/plan/decision/issue prompts, pr bodies, footers, line-limit-fix) now in Gleam progress/templates (176 LOC) + thin sh delegator (62 LOC)
 - All per specs, with thin shell adapters for doctor/config sourcing, env, output emission (key=value shell safe)
 
-**Remaining (from 39-order.md + kanban + design):**
-- (done in t_13a8a733 + t_b3024409) comment scanning + @:robot: command handling + worker-handle (phase 3 per spec/15; GitHubComment type + state fns + full scan phase in Gleam + full bash worker-handle per spec/15)
-- (done in 12cdfd1 + t_c4ea323f + t_302b15f5) grkr-issue-workflow.sh thinning complete (58 LOC thin + full Gleam + last callsite/deadcode); all stages wired; docs hygiene in t_398ecd7d
-- (done t_7cc455e3 + t_23a1c5ae) grkr-templates.sh thinning (62 LOC + progress/templates 176 LOC parity)
-- (done recent) workflow/decision_gate.gleam (164 LOC, full gate + CLI + wiring)
-- Full PR review of open slices, e2e validation (note: 3 decoder_test failures in JSON fixtures post picker M - follow-up fix needed), test+docs+sync (this task t_dd613684)
-- Cleanup per spec/36 done (stubs removed, 270 tests green); audit-cleanup.md hygiene note
-- Old lock/build hygiene as needed (none found in .grkr/ this run; runtime clean)
-- Then backlog items 6+: implement-or-refuse gate full (now in decision_gate), etc.
-- Linear provider full execution path
-- Fix 3 decoder JSON test failures + 3 build warnings (unused import/fn/pattern) + push to PR#79
+**Remaining (from spec/parts/39-recommended-implementation-order.md + kanban + design):**
+
+Verified **2026-06-20** (`gleam test`: **280 passed, 0 failures**; `gleam build` clean). Obsolete notes removed (decoder fixture failures, unused-import warnings — fixed in prior slices; github_picker decoder tests green).
+
+| # | spec/39 item | Status | Primary code / wiring |
+|---|--------------|--------|---------------------|
+| 6 | implement-or-refuse decision gate | **done** | `workflow/decision_gate.gleam` + `bin/grkr` post-codex path (spec/22) |
+| 7 | refusal worker + Backlog transition | **done** | `refusal/*`, `bin/worker-refuse-issue.sh` (spec/23) |
+| 8 | implementation stage | **done** | `workflow/implement_stage.gleam` + thin `grkr-issue-workflow.sh` / `bin/grkr` (spec/25, #17) |
+| 9 | test stage + completion flow | **done** | `workflow/test_stage.gleam` + completion-marker delegate (spec/26, #18, spec/17) |
+| 10 | comment scan + @:robot: commands | **done** | supervisor `scan_comment_commands` + `workflow/handle_comment` + thin `worker-handle-comment.sh` (spec/15) |
+| 11 | PR conflict resolution | **done** | `resolve_pr/main` + `bin/worker-resolve-pr.sh`; detection in supervisor phases |
+| 12 | cleanup, retry, stale-job recovery | **done** | supervisor cleanup/reap phases, `worktree_cleanup`, `recovery` + active_jobs TTL per `.grkr/supervisor-cleanup-policy.md` §6 (spec/36) |
+
+**Still forward-looking (not blocking GitHub refusal-aware pipeline):**
+- Linear issue provider **full execution path** (experimental; discovery CLIs + opt-in e2e exist; GitHub remains default)
+- Ongoing **PR #79** slice review, e2e cron regression, and kanban hygiene (process — not missing spec/39 core modules)
+
+**Completed cross-cutting slices (retained for traceability):** workflow/templates thinning (12cdfd1, t_c4ea323f, t_7cc455e3), comment worker landings (t_13a8a733, t_b3024409), cleanup audit (270→280 tests, audit-cleanup.md).
+
+**Update t_77e5fe0b (2026-06-20):** Refreshed this section vs live `gleam test` @ 280 and spec/39 items 6–12; no spec file edits (docs-only).
 
 **Traceability & process:**
 - Kanban: this task t_c4ea323f (test+docs+sync: full gleam build/test (post fixes), update docs/gleam-migration.md + README.md with post-workflow-thinning state + LOCs + capabilities, run scripts/sync-spec.sh, LOC/AGENTS audit, hygiene append to .grkr/audits (GitHub-only v2)): 

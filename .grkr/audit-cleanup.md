@@ -1684,3 +1684,5 @@ drwxr-xr-x  12 claw  staff  384 Jun  2 16:46 ..
 - Removed: auth.lock, kanban.db.init.lock (kept gateway.lock)
 - git worktree prune in /Users/claw/work/grkr-v2-cron: no-op (3 remain: main + 2 t_*)
 - Non-destructive, matches prior t_675e41f4 pattern. AGENTS.md followed.
+2026-06-20 t_feea773a: removed stale unheld 0B auth.lock (lsof/fuser clean); git worktree prune in repo root; kept gateway.lock (held PID) + kanban.db.init.lock.
+2026-06-20 t_c4ecf5d6: removed stale unheld 0B auth.lock (lsof clean); git worktree prune no-op; kept gateway.lock + kanban.db.init.lock.

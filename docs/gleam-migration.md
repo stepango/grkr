@@ -830,3 +830,10 @@ This completes t_35a3cfc0 prep phase per kanban lifecycle. GitHub-only v2.
 - gleam build + 261 tests green; no regression on comment handling
 
 - Cleanup TTL completed-worktree removal wired (t_0da28dae, spec/36, FFI mtime/rmdir, active skip)
+
+## 2026-06-20 update (t_630cd219 doctor Gleam thin)
+
+- Ported `bin/doctor.sh` validation + `grkr init` config creation to `src/grkr/doctor/` (`config_parse.gleam`, `validate.gleam`, `cli.gleam` + exec/env/fs FFI).
+- `bin/doctor.sh` thinned to 51 LOC: `doctor_init` + `doctor_gleam` delegates (`validate`, `create-config`); sourced callers unchanged (`doctor_validate`, `doctor_create_config`).
+- `test/grkr/doctor/config_parse_test.gleam` added; `gleam test` 284 pass; `npm test` green (grkr-init, grkr-smoke, robot-main paths).
+- spec/parts/08 + 10 parity: tools, gh auth, codex, config keys, origin remote, `.grkr` writable probe.

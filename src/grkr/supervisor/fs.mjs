@@ -106,11 +106,11 @@ export function exists(path) {
 export function list_files(dir) {
   try {
     if (!existsSync(dir)) {
-      return new Ok([]);
+      return new Ok(toList([]));
     }
     const rawFiles = readdirSync(dir);
     const files = rawFiles.filter((f) => f != null && typeof f === "string");
-    return new Ok(files);
+    return new Ok(toList(files));
   } catch (e) {
     return new Error(String(e.message || e));
   }

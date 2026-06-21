@@ -8,6 +8,7 @@ package-lock.json
 .grkr/worktrees/
 .grkr/logs/
 .grkr/kanban-cron-body*.txt
+.grkr/kanban-cron-*.body*.md
 .automation-local/
 build/
 commands.log

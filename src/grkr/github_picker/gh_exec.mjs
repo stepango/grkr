@@ -26,6 +26,37 @@ export function runGhApiGraphql(query) {
   }
 }
 
+export function runGhApiUser() {
+  try {
+    const output = execFileSync("gh", ["api", "user"], {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+      maxBuffer: 1024 * 1024,
+      timeout: 15_000,
+    });
+    const trimmed = output.trim();
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed && typeof parsed.login === "string" && parsed.login !== "") {
+        return new Ok(parsed.login);
+      }
+    } catch {
+      // test mocks and legacy shells may return plain login text
+    }
+    if (trimmed !== "") {
+      return new Ok(trimmed);
+    }
+    return new Error("gh api user returned empty output");
+  } catch (err) {
+    const stderr = err?.stderr ? String(err.stderr) : "";
+    const message = (stderr.trim() || err.message || "gh api user failed").replaceAll(
+      '"',
+      "'",
+    );
+    return new Error(message);
+  }
+}
+
 export function runGhProjectItemList(projectNumber, owner) {
   try {
     const args = [

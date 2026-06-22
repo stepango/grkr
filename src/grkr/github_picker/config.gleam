@@ -64,7 +64,7 @@ pub fn load() -> Result(GitHubPickerConfig, ConfigError) {
                     )
                   let active_jobs = load_active_jobs(active_jobs_path)
 
-                  let bot_login = get_env_with_default("BOT_LOGIN", get_env("GITHUB_ACTOR"))
+                  let bot_login = resolve_bot_login()
 
                   Ok(
                     GitHubPickerConfig(
@@ -94,6 +94,19 @@ fn get_required(name: String) -> Result(String, ConfigError) {
   case value {
     v if v != "" -> Ok(v)
     _ -> Error(MissingRequired(name))
+  }
+}
+
+/// BOT_LOGIN / GITHUB_ACTOR first; else `gh api user` (matches legacy shell picker + test mocks).
+fn resolve_bot_login() -> String {
+  let from_env = get_env_with_default("BOT_LOGIN", get_env("GITHUB_ACTOR"))
+  case from_env {
+    v if v != "" -> v
+    _ ->
+      case ffi.run_gh_api_user() {
+        Ok(login) -> string.trim(login)
+        Error(_) -> ""
+      }
   }
 }
 

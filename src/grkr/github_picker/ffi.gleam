@@ -44,3 +44,6 @@ pub fn run_gh_api_graphql(query: String) -> Result(String, String)
 
 @external(javascript, "../github_picker/gh_exec.mjs", "runGhProjectItemList")
 pub fn run_gh_project_item_list(project_number: String, owner: String) -> Result(String, String)
+
+@external(javascript, "../github_picker/gh_exec.mjs", "runGhApiUser")
+pub fn run_gh_api_user() -> Result(String, String)

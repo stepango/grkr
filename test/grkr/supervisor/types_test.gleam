@@ -49,10 +49,9 @@ pub fn supervisor_error_to_string_test() {
 }
 
 pub fn pick_phase_integration_note_test() {
-  // Pick phase now calls github_picker.pick_next() directly (see loop.gleam).
-  // Testable end-to-end: GRKR_MAX_TICKS=1 GITHUB_FIXTURE_PATH=/path/to/fixture.json gleam run -m grkr/supervisor/main
-  // (fixture must match decoder shape; see picker tests for examples).
-  // No new unit test code here to keep slice small; wiring verified by build + design update.
+  // Pick phase calls grkr/supervisor/pick.pick_next (GRKR_ISSUE_PROVIDER dispatch).
+  // Fixture tests: test/grkr/supervisor/pick_test.gleam (GITHUB_FIXTURE_PATH + LINEAR_FIXTURE_PATH).
+  // E2E: GRKR_MAX_TICKS=1 GITHUB_FIXTURE_PATH=... gleam run -m grkr/supervisor/main
   True |> should.be_true()
 }
 

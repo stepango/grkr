@@ -95,7 +95,10 @@ fn emit_assigned_issues_query() -> Nil {
       io.println(graphql_query)
     }
     Error(error) -> {
-      io.println("Error loading Linear config: " <> config_error_to_string(error))
+      io.println(
+        "Error loading Linear config: "
+          <> types.provider_error_to_string(types.ConfigError(error)),
+      )
       exit(1)
     }
   }
@@ -163,36 +166,16 @@ fn emit_success(issue: types.SelectedIssue) -> Nil {
   )
   io.println("ISSUE_UPDATED_AT=" <> shell_quote(issue.updated_at))
   io.println(
-    "JOB_KEY=" <> shell_quote("linear:" <> issue.identifier <> ":execution"),
+    "JOB_KEY=" <> shell_quote(types.job_key_for_identifier(issue.identifier)),
   )
   io.println(
-    "TASK_SLUG=" <> shell_quote(slug_from_identifier(issue.identifier)),
+    "TASK_SLUG=" <> shell_quote(types.task_slug_for_identifier(issue.identifier)),
   )
 }
 
 fn emit_error(error: types.ProviderError) -> Nil {
   io.println("SELECTED=0")
-  io.println("ERROR=" <> shell_quote(provider_error_to_string(error)))
-}
-
-fn provider_error_to_string(error: types.ProviderError) -> String {
-  case error {
-    types.ConfigError(config_error) -> config_error_to_string(config_error)
-    types.QueryError(message) -> "Query error: " <> message
-    types.ParseError(message) -> "Parse error: " <> message
-    types.NoMatchingIssue -> "No matching issue found"
-  }
-}
-
-fn config_error_to_string(error: types.ConfigError) -> String {
-  case error {
-    types.MissingCredentialPath ->
-      "Missing required Linear config: LINEAR_ASSIGNEE_ID"
-    types.InvalidCredentialFormat -> "Invalid Linear config format"
-    types.MissingProjectId -> "Missing Linear project id"
-    types.MissingTeamId -> "Missing Linear team id"
-    types.InvalidProvider(name) -> "Invalid issue provider: " <> name
-  }
+  io.println("ERROR=" <> shell_quote(types.provider_error_to_string(error)))
 }
 
 fn priority_to_string(priority: types.LinearPriority) -> String {
@@ -203,12 +186,6 @@ fn priority_to_string(priority: types.LinearPriority) -> String {
     types.Low -> "low"
     types.NoPriority -> "none"
   }
-}
-
-fn slug_from_identifier(identifier: String) -> String {
-  identifier
-  |> string.lowercase
-  |> string.replace("/", "-")
 }
 
 fn shell_quote(value: String) -> String {

@@ -1,0 +1,40 @@
+{
+  "data": {
+    "viewer": {
+      "assignedIssues": {
+        "nodes": [
+          {
+            "id": "LIN-001",
+            "identifier": "ENG-123",
+            "title": "Implement Linear integration",
+            "description": "Add Linear issue provider support",
+            "url": "https://linear.app/issue/ENG-123",
+            "state": {
+              "id": "s1",
+              "name": "Todo",
+              "type": "backlog"
+            },
+            "priority": 2,
+            "assignee": {
+              "id": "u1",
+              "name": "bot",
+              "displayName": "Robot Bot"
+            },
+            "project": {
+              "id": "p1",
+              "name": "Integration",
+              "url": "https://linear.app/project/p1"
+            },
+            "team": {
+              "id": "t1",
+              "key": "ENG",
+              "name": "Engineering"
+            },
+            "createdAt": "2026-04-28T00:00:00Z",
+            "updatedAt": "2026-04-28T12:00:00Z"
+          }
+        ]
+      }
+    }
+  }
+}

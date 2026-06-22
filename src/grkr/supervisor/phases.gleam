@@ -3,7 +3,7 @@
 //// Per supervisor-design-final.md, spec/parts/09-main-loop-contract.md, 07-supervisor.md, 39-recommended-implementation-order.md (items 10-12), 14,15,36.
 //// GitHub-only v2. Logging + escape duplicated (until logging.gleam).
 //// Follows types, exact phase order/names from types + design, error boundaries.
-//// run_pick uses direct github_picker/main.pick_next (no shell emit parse).
+//// run_pick uses grkr/supervisor/pick.pick_next (GRKR_ISSUE_PROVIDER dispatch).
 //// Implemented remaining: reap (recovery), cleanup (purge + wt count), scan_pr_conflicts (resolve_pr list + conflicted + !active), scan_comment_commands (lock + last_scan + schedule to full worker-handle-comment.sh per spec/15).
 //// Scheduler now wired (t_58ea0e02); pick phase records+spawns; comment worker full (reactions, worktree, codex prompt+dispatch, reactions update, cleanup) landed in t_13a8a733; full Linear still later.
 //// Lock acquire pattern fixed (t_17c4b022): Ok(Acquired) vs Ok(Busy)|Ok(LockError)|Error(_) in pick/scan_pr/scan_comment.
@@ -13,8 +13,7 @@ import gleam/int
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string
-import grkr/github_picker/main as github_picker
-import grkr/github_picker/types as picker_types
+import grkr/supervisor/pick
 import grkr/resolve_pr/github as resolve_pr_github
 import grkr/supervisor/ffi
 import grkr/supervisor/lock
@@ -173,69 +172,94 @@ fn run_pick_and_schedule_issue_execution_phase(
     Ok(t.Acquired) -> {
       let _ = log_info(config, "pick", "-", entity, "lock_acquired=issues")
 
-      // Direct Gleam call to github_picker (same process, no exec/emit parse).
-      // pick_next() is pure, respects GITHUB_FIXTURE_PATH + active_jobs filter from env.
-      // Minimal change; no dupe query (uses picker/client which wires query.gleam).
-      let res = case github_picker.pick_next() {
-        Ok(sel) -> {
+      // Unified pick: github_picker or issue_provider per GRKR_ISSUE_PROVIDER (default github).
+      let res = case pick.pick_next() {
+        Ok(work) -> {
           let _ =
             log_info(
               config,
               "pick",
               "-",
               entity,
-              "selected=true issue_number="
-                <> int.to_string(sel.issue_number)
-                <> " job_key="
-                <> sel.job_key
+              "selected=true "
+                <> pick.selected_log_fields(work)
                 <> " title="
-                <> escape_log_value(sel.issue_title),
+                <> escape_log_value(work.issue_title),
             )
-          let proj_id = case sel.project_item_id {
-            "" -> None
-            p -> Some(p)
-          }
-          let _ = case scheduler.spawn_issue_execution(config, sel.issue_number, sel.task_slug, proj_id) {
-            Ok(_pid) -> {
-              log_info(
-                config,
-                "pick_and_schedule_issue_execution",
-                sel.job_key,
-                "issue/" <> int.to_string(sel.issue_number),
-                "scheduled_jobs=1 selected_issue=" <> int.to_string(sel.issue_number) <> " task_slug=" <> sel.task_slug,
-              )
-              Nil
+          let scheduled = case pick.schedule_selected(config, work) {
+            Ok(True) -> {
+              let entity_id = case work.issue_number {
+                Some(n) -> "issue/" <> int.to_string(n)
+                None -> "linear/" <> {
+                  case work.identifier {
+                    Some(i) -> i
+                    None -> "unknown"
+                  }
+                }
+              }
+              let _ =
+                log_info(
+                  config,
+                  "pick_and_schedule_issue_execution",
+                  work.job_key,
+                  entity_id,
+                  "scheduled_jobs=1 "
+                    <> pick.selected_log_fields(work),
+                )
+              True
+            }
+            Ok(False) -> {
+              let _ =
+                log_info(
+                  config,
+                  "pick_and_schedule_issue_execution",
+                  work.job_key,
+                  "linear/" <> {
+                    case work.identifier {
+                      Some(i) -> i
+                      None -> "unknown"
+                    }
+                  },
+                  "scheduled_jobs=0 linear_execution_scheduler_pending=true "
+                    <> pick.selected_log_fields(work),
+                )
+              False
             }
             Error(e) -> {
-              log_error(
-                config,
-                "pick_and_schedule_issue_execution",
-                sel.job_key,
-                "issue/" <> int.to_string(sel.issue_number),
-                "spawn_failed=" <> t.supervisor_error_to_string(e),
-              )
-              Nil
+              let entity_id = case work.issue_number {
+                Some(n) -> "issue/" <> int.to_string(n)
+                None -> "linear/unknown"
+              }
+              let _ =
+                log_error(
+                  config,
+                  "pick_and_schedule_issue_execution",
+                  work.job_key,
+                  entity_id,
+                  "spawn_failed=" <> t.supervisor_error_to_string(e),
+                )
+              False
             }
           }
+          let _ = scheduled
           t.Success
         }
         Error(e) -> {
           case e {
-            picker_types.Selection(picker_types.NoMatchingIssue) -> {
+            pick.NoMatchingIssue -> {
               let _ = log_info(config, "pick", "-", entity, "no_candidate=true")
               t.Skipped("no_matching_issue")
             }
-            _ -> {
-              let err_str = picker_types.provider_error_to_string(e)
+            pick.Failed(reason) -> {
               let _ =
                 log_error(
                   config,
                   "pick",
                   "-",
                   entity,
-                  "picker_error=" <> escape_log_value(err_str),
+                  "picker_error=" <> escape_log_value(reason),
                 )
-              t.Failed(t.Other("github_picker:" <> err_str))
+              t.Failed(t.Other("issue_picker:" <> reason))
             }
           }
         }

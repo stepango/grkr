@@ -1,5 +1,6 @@
 import gleam/dict.{type Dict}
 import gleam/option.{type Option}
+import gleam/string
 
 /// Issue provider type (GitHub, Linear, etc.)
 pub type Provider {
@@ -219,4 +220,36 @@ pub fn issue_to_selected(issue: LinearIssue) -> SelectedIssue {
     priority: issue.priority,
     updated_at: issue.updated_at,
   )
+}
+
+/// Shell/job key for a Linear issue identifier (matches worker-pick-issue emit).
+pub fn job_key_for_identifier(identifier: String) -> String {
+  "linear:" <> identifier <> ":execution"
+}
+
+/// Task slug for a Linear issue identifier (matches worker-pick-issue emit).
+pub fn task_slug_for_identifier(identifier: String) -> String {
+  identifier
+  |> string.lowercase
+  |> string.replace("/", "-")
+}
+
+/// Human-readable provider error (shell ERROR= emit and supervisor pick phase).
+pub fn provider_error_to_string(error: ProviderError) -> String {
+  case error {
+    ConfigError(config_error) -> config_error_to_string(config_error)
+    QueryError(message) -> "Query error: " <> message
+    ParseError(message) -> "Parse error: " <> message
+    NoMatchingIssue -> "No matching issue found"
+  }
+}
+
+fn config_error_to_string(error: ConfigError) -> String {
+  case error {
+    MissingCredentialPath -> "Missing required Linear config: LINEAR_ASSIGNEE_ID"
+    InvalidCredentialFormat -> "Invalid Linear config format"
+    MissingProjectId -> "Missing Linear project id"
+    MissingTeamId -> "Missing Linear team id"
+    InvalidProvider(name) -> "Invalid issue provider: " <> name
+  }
 }

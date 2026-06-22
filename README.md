@@ -2,7 +2,7 @@
 
 AI-powered CLI that reads a GitHub issue and uses Codex to implement the changes.
 
-Current implementation status: see [docs/gleam-migration.md](./docs/gleam-migration.md) for v2 Gleam migration progress and research notes (detailed snapshot + module lists + kanban refs; spec/39 items 6–12 status table refreshed in t_77e5fe0b; hygiene t_3ed4cab7 @ 284 gleam tests).
+Current implementation status: see [docs/gleam-migration.md](./docs/gleam-migration.md) for v2 Gleam migration progress and research notes (detailed snapshot + module lists + kanban refs; spec/39 items 6–12 status table refreshed in t_77e5fe0b; supervisor pick dispatch in `src/grkr/supervisor/pick.gleam` per t_73c1fbdf; hygiene t_56c8c193 @ 289 gleam tests).
 
 ## Gleam v2 Migration Progress
 
@@ -16,8 +16,8 @@ See the expanded [docs/gleam-migration.md](./docs/gleam-migration.md) for:
 - Design refs (supervisor-design-final.md, supervisor-synthesis.md, gleam-migration-patterns.md)
 - Lock audit notes from this run
 
-**High-level snapshot (post doctor Gleam thin t_630cd219: `bin/doctor.sh` 51 LOC → `grkr/doctor` validate+cli; 284/284 `gleam test` + npm test green on v2 / PR #79):**
-- github_picker (client+main+picker + decoder_test 256/256 green post fixtures fix + hygiene M in client/decoder/field t_64f72de6 + t_077f26d0 (0 warnings fix for field/client/decoder.gleam)), refusal (flow/assessment/checkpoint + cli + config/ffi M in t_e56d835b), supervisor (main/loop/recovery/state/lock/config/phases 641LOC + scheduler 130 + FFI; loop M for sleep_remaining + error boundary + hygiene in t_e56d835b) implemented + reviewed in slices; phases.gleam fully expanded with sync/pick (real scheduler wired)/scan_pr/scan_comment/reap/cleanup
+**High-level snapshot (post doctor Gleam thin t_630cd219: `bin/doctor.sh` 51 LOC → `grkr/doctor` validate+cli; 289/289 `gleam test` + npm test green on v2 / PR #79):**
+- github_picker (client+main+picker + decoder_test 256/256 green post fixtures fix + hygiene M in client/decoder/field t_64f72de6 + t_077f26d0 (0 warnings fix for field/client/decoder.gleam)), refusal (flow/assessment/checkpoint + cli + config/ffi M in t_e56d835b), supervisor (main/loop/recovery/state/lock/config/phases + pick.gleam 152LOC dispatching `GRKR_ISSUE_PROVIDER` github|linear + scheduler 130 + FFI; loop M for sleep_remaining + error boundary + hygiene in t_e56d835b) implemented + reviewed in slices; phases.gleam pick phase calls `supervisor/pick` (fixture tests: `GITHUB_FIXTURE_PATH`, `LINEAR_FIXTURE_PATH`, `GRKR_ACTIVE_JOBS_PATH` under `test/fixtures/`); sync/pick (real scheduler wired)/scan_pr/scan_comment/reap/cleanup
 - workflow/ (decision 264, decision_gate 155 (spec/22), implement_stage 36 + test, test_stage 66 LOC (run-tests + completion-marker per spec/26+39), handle_comment 456 (full post t_2c94e927 wiring + t_e2282d3f hygiene), resolve_pr/main 426 full + skeleton, task_log split, worktree split, main/ffi)
 - Bin updates/hygiene (per AGENTS: preserve sh conv, small explicit changes, <1000 LOC): **doctor.sh (51 LOC thin: doctor_init + delegate to `grkr/doctor/cli`)**, grkr-project-status.sh (81 LOC thin), grkr-issue-workflow.sh (80 LOC thin wrapper delegating workflow/* CLIs incl decision_gate + test_completion_marker), worker-handle-comment.sh (29 LOC thin), worker-pick-issue.sh (46 LOC), worker-sync-main.sh (18 LOC), worker-resolve-pr.sh (39 LOC), worker-refuse-issue.sh (40 LOC thin calling refusal/cli), robot-main.sh (57 LOC), grkr (826 LOC post t_b5bd0fa8 task_progress extract), grkr-templates.sh (62 LOC thin), + bin/lib/{refusal_paths.sh,task_progress.sh} (176 LOC shared); new test_stage + implement_stage_test added
 - Fully migrated: **doctor** (config_parse + validate + cli), sync_main, resolve_pr (PR conflicts), issue_provider (Linear), progress (checkpoints/Linear + templates 176), task_slug, project_status (full + 81 LOC thin bin/grkr-project-status.sh delegating to project_status_cli), linear e2e

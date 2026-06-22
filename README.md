@@ -2,7 +2,7 @@
 
 AI-powered CLI that reads a GitHub issue and uses Codex to implement the changes.
 
-Current implementation status: see [docs/gleam-migration.md](./docs/gleam-migration.md) for v2 Gleam migration progress and research notes (detailed snapshot + module lists + kanban refs; spec/39 items 6–12 status table refreshed in t_77e5fe0b; supervisor pick dispatch in `src/grkr/supervisor/pick.gleam` per t_73c1fbdf; hygiene t_56c8c193 @ 289 gleam tests).
+Current implementation status: see [docs/gleam-migration.md](./docs/gleam-migration.md) for v2 Gleam migration progress and research notes (detailed snapshot + module lists + kanban refs; spec/39 items 6–12 status table refreshed in t_77e5fe0b; supervisor pick dispatch in `src/grkr/supervisor/pick.gleam` per t_73c1fbdf; docs sync t_2b790e60 @ 289 gleam tests / d993152).
 
 ## Gleam v2 Migration Progress
 

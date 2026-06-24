@@ -1,4 +1,5 @@
 import gleam/option.{None, Some}
+import gleam/string
 import gleeunit
 import gleeunit/should
 import grkr/github_picker/types as github_types
@@ -92,6 +93,38 @@ pub fn pick_next_linear_fixture_test() {
     }
     Error(_) -> should.fail()
   }
+}
+
+pub fn schedule_success_log_fields_github_test() {
+  let work =
+    pick.SelectedWork(
+      issue_number: Some(42),
+      identifier: None,
+      issue_title: "t",
+      job_key: "issue:42:execution",
+      task_slug: "issue-42-fixture-pick-issue",
+      project_item_id: Some("PVTI_pick1"),
+      provider: "github",
+    )
+  let msg = pick.schedule_success_log_fields(work)
+  string.contains(msg, "selected_issue=42") |> should.be_true()
+  string.contains(msg, "task_slug=issue-42-fixture-pick-issue") |> should.be_true()
+}
+
+pub fn schedule_pending_log_fields_linear_test() {
+  let work =
+    pick.SelectedWork(
+      issue_number: None,
+      identifier: Some("ENG-123"),
+      issue_title: "t",
+      job_key: "linear:ENG-123:execution",
+      task_slug: "eng-123",
+      project_item_id: None,
+      provider: "linear",
+    )
+  let msg = pick.schedule_pending_log_fields(work)
+  string.contains(msg, "selected_issue_missing_number=true") |> should.be_true()
+  string.contains(msg, "identifier=ENG-123") |> should.be_true()
 }
 
 fn fixture_root() -> String {

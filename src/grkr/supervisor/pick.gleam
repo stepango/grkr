@@ -151,3 +151,19 @@ pub fn selected_log_fields(work: SelectedWork) -> String {
     <> " task_slug="
     <> work.task_slug
 }
+
+/// Shell-parity fields for pick_and_schedule success logs (robot-main-schedules-issue.sh).
+pub fn schedule_success_log_fields(work: SelectedWork) -> String {
+  let base = selected_log_fields(work)
+  case work.issue_number {
+    Some(n) ->
+      base <> " selected_issue=" <> int.to_string(n)
+    None -> base
+  }
+}
+
+/// Shell-parity fields when pick succeeded but execution spawn is deferred (Linear).
+pub fn schedule_pending_log_fields(work: SelectedWork) -> String {
+  "selected_issue_missing_number=true "
+    <> selected_log_fields(work)
+}

@@ -26,6 +26,9 @@ export PRIORITY_FIELD_NAME=${PRIORITY_FIELD_NAME:-Priority}
 
 # Test / control hooks (passed via env to this script or config)
 export GRKR_MAX_TICKS GRKR_FAIL_PHASES GRKR_GLEAM_PROJECT_ROOT
+export GRKR_ISSUE_PROVIDER=${GRKR_ISSUE_PROVIDER:-github}
+: "${GRKR_ACTIVE_JOBS_PATH:=$GRKR_ROOT/.grkr/state/active_jobs.json}"
+export GRKR_ACTIVE_JOBS_PATH
 
 # Run validation (populates VALIDATION_OK; prints ✅/❌ like before; ensures .grkr dir)
 # doctor_validate also re-inits and checks tools/gh/codex/config/remote

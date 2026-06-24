@@ -204,7 +204,7 @@ fn run_pick_and_schedule_issue_execution_phase(
                   work.job_key,
                   entity_id,
                   "scheduled_jobs=1 "
-                    <> pick.selected_log_fields(work),
+                    <> pick.schedule_success_log_fields(work),
                 )
               True
             }
@@ -221,7 +221,7 @@ fn run_pick_and_schedule_issue_execution_phase(
                     }
                   },
                   "scheduled_jobs=0 linear_execution_scheduler_pending=true "
-                    <> pick.selected_log_fields(work),
+                    <> pick.schedule_pending_log_fields(work),
                 )
               False
             }

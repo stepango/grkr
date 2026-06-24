@@ -1861,3 +1861,5 @@ Directory present at `/Users/claw/work/grkr-v2-cron/.grkr/locks/` but **empty** 
 
 **t_6ba80b70 (2026-06-23):** `lsof` empty on 0B `~/.hermes/auth.lock` (mtime Jun 23 07:00); `rm -f` only auth.lock; kept `gateway.lock` (PID 1424) + `kanban.db.init.lock`; before: auth 0B present, after: auth absent.
 2026-06-23T21:38Z cron orchestrator: removed stale empty auth.lock (lsof unheld); kept gateway.lock + kanban.db.init.lock
+
+**t_610052f8 (2026-06-24 cron):** `auth.lock` 0B mtime Jun 24 02:42, lsof unheld → `rm -f`; **held** `gateway.lock` (PID 1424); **keep** `kanban.db.init.lock` + `cron/.tick.lock` (0B, unheld); `.grkr/locks/` empty — no files to purge.

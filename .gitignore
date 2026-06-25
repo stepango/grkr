@@ -13,3 +13,8 @@ package-lock.json
 .automation-local/
 build/
 commands.log
+# Ephemeral kanban/Hermes scratch at repo root (audit-only; do not delete without review)
+.worktrees/
+undefined/
+.tmp_*.py
+.hermes-kanban-*.sh

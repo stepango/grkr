@@ -144,7 +144,7 @@ These values are only enough to identify the OAuth app. Linear GraphQL calls sti
 - `grkr --issue <id>` mirrors its launcher log to the GitHub issue as a collapsed details block so the thread stays readable by default.
 - Copy `.grkr/config.sh.example` to `.grkr/config.sh` and edit the values for your repo if you want to manage config manually.
 - `grkr init <id>` will create `.grkr/config.sh` for the current `origin` remote and project id you pass in.
-- `.grkr/tasks/`, `.grkr/state/`, `.grkr/locks/`, `.grkr/worktrees/`, `.grkr/logs/`, `.grkr/archive/` are local runtime state (populated by supervisor/workers per spec/parts/36-cleanup-policy.md) and ignored by git (see .gitignore); `.grkr/config.sh` and `.grkr/config.sh.example` stay tracked. Hygiene/audit in t_4f8b0fb5 + prior clean cards.
+- `.grkr/tasks/`, `.grkr/state/`, `.grkr/locks/`, `.grkr/worktrees/`, `.grkr/logs/`, `.grkr/archive/` are local runtime state (populated by supervisor/workers per spec/parts/36-cleanup-policy.md) and ignored by git (see .gitignore); `.grkr/config.sh` and `.grkr/config.sh.example` stay tracked. Root-level kanban/Hermes scratch (`.worktrees/`, `undefined/`, `.tmp_*.py`, `.hermes-kanban-*.sh`) is also gitignored and left on disk until an audit-approved cleanup. Hygiene/audit in t_4f8b0fb5 + prior clean cards.
 
 ## Issue Providers
 

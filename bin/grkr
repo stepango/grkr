@@ -721,8 +721,7 @@ process_issue() {
   # Replaces prior inlined run_implementation_decision_gate + extract/update/handle_decision_refusal (now dupe removed; gate reuses Gleam decision + refusal/flow).
   run_codex_prompt "$decision_prompt_file" "$decision_output_file" "decide whether to implement the issue" replace "$ISSUE_WORKTREE_DIR"
   decision=$(run_decision_gate "$ISSUE" "$decision_output_file" "$PROGRESS_FILE" "$TASK_SLUG" "$ISSUE_WORKTREE_DIR" "$decision_prompt_file" || echo "")
-  decision=$(echo "$decision" | tr -d " 
-" | tail -1)
+  decision=$(printf '%s' "$decision" | tr -d '\r\n' | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
   case "$decision" in
     proceed|refuse)
       IMPLEMENTATION_DECISION=$decision

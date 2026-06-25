@@ -17,7 +17,7 @@ gleam_wf() {
   local mod="$1"; shift
   local prj="${GRKR_GLEAM_PROJECT_ROOT:-$(dirname "$SCRIPT_DIR")}"
   if [ -f "$prj/gleam.toml" ]; then
-    (cd "$prj" && gleam run -m "grkr/workflow/$mod" -- "$@")
+    (cd "$prj" && gleam run --no-print-progress -m "grkr/workflow/$mod" -- "$@")
   else
     echo "❌ Missing gleam.toml at $prj (for v2 $mod CLI)" >&2
     return 1
@@ -77,7 +77,21 @@ detect_implementation_refusal() { gleam_wf decision detect-refusal "$1" 2>/dev/n
 # Decision gate thin delegate (to decision_gate per spec/22 implement-or-refuse + t_4e22c63f).
 # Post-codex: runs extract/update progress; on refuse invokes refusal/flow (checkpoint + backlog + comment); prints "proceed" or "refuse" on stdout (stderr for logs).
 # Thin shell still orchestrates the codex run + prompt/output files; gate handles the decision logic + side effects.
-run_decision_gate() { gleam_wf decision_gate run "$1" "$2" "$3" "$4" "$5" "$6" 2>/dev/null || echo ""; }
+run_decision_gate() {
+  local stderr_tmp decision_line
+  stderr_tmp=$(mktemp "${TMPDIR:-/tmp}/grkr-dg-stderr.XXXXXX")
+  decision_line=$(
+    gleam_wf decision_gate run "$1" "$2" "$3" "$4" "$5" "$6" 2>"$stderr_tmp" | tail -n1
+  ) || {
+    cat "$stderr_tmp" >&2
+    rm -f "$stderr_tmp"
+    echo ""
+    return 0
+  }
+  cat "$stderr_tmp" >&2
+  rm -f "$stderr_tmp"
+  printf '%s\n' "$decision_line"
+}
 
 # Implement stage thin delegates (to implement_stage per spec/25 + t_39ab1e08 / #17 spec item 8).
 # Minimal hooks only (e.g. commit-message); codex run + prompt + publish logic stay in thin shell (bin/grkr) per slice pattern.

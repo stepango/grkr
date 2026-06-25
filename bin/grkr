@@ -735,7 +735,10 @@ process_issue() {
   rm -f "$decision_prompt_file" "$decision_output_file"
   if [ "$decision" != "proceed" ]; then
     # Refusal side effects (checkpoint, backlog move, progress, comment post) already performed inside decision_gate CLI via refusal/flow.
-    # Skip old handle_decision_refusal to avoid duplication.
+    if [ -n "${ISSUE_WORKTREE_DIR:-}" ]; then
+      cleanup_issue_worktree "$ISSUE_WORKTREE_DIR"
+      echo "🧹 Removed issue worktree: $ISSUE_WORKTREE_DIR"
+    fi
     CURRENT_ISSUE_WORKTREE=""
     ATTACH_ISSUE_LOGS=0
     attach_issue_logs

@@ -2,9 +2,10 @@
 //// Load RefusalConfig from env (set by doctor.sh + .grkr/config.sh)
 //// or test overrides. Mirrors supervisor/config.gleam pattern exactly for testability.
 
-import gleam/dict.{type Dict}
 import gleam/int
 import gleam/result
+import gleam/string
+import gleam/dict.{type Dict}
 import grkr/refusal/ffi
 import grkr/refusal/types as types
 
@@ -25,8 +26,12 @@ fn load_with_overrides(overrides: Dict(String, String)) -> Result(types.RefusalC
     }
   }
 
-  let repo = get("GITHUB_REPOSITORY", "stepango/grkr")
-  let tasks_dir = get("TASKS_DIR", ".grkr/tasks")
+  let repo = case get("GITHUB_REPOSITORY", "") {
+    "" -> get("REPO", "stepango/grkr")
+    r -> r
+  }
+  let tasks_dir_raw = get("TASKS_DIR", ".grkr/tasks")
+  let tasks_dir = resolve_tasks_dir(tasks_dir_raw, get("GRKR_ROOT", ""))
   let updates_enabled = case get("ENABLE_PROJECT_STATUS_UPDATES", "") {
     "false" | "0" | "no" -> False
     _ -> True
@@ -53,6 +58,33 @@ fn load_with_overrides(overrides: Dict(String, String)) -> Result(types.RefusalC
     project_owner: project_owner,
     status_field_name: status_field_name,
   ))
+}
+
+/// Absolute task dir under $GRKR_ROOT/.grkr/tasks when GRKR_ROOT is set (gleam runs from project root).
+fn resolve_tasks_dir(raw: String, grkr_root: String) -> String {
+  case string.starts_with(raw, "/") {
+    True -> raw
+    False -> {
+      case string.trim(grkr_root) {
+        "" -> raw
+        root -> {
+          let grkr_base = case string.ends_with(root, ".grkr") || string.ends_with(root, "/.grkr") {
+            True -> root
+            False -> root <> "/.grkr"
+          }
+          case raw {
+            ".grkr/tasks" -> grkr_base <> "/tasks"
+            _ -> {
+              case string.starts_with(raw, ".grkr/") {
+                True -> grkr_base <> "/" <> string.drop_start(raw, 6)
+                False -> grkr_base <> "/" <> raw
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 /// Keep for backward compat with existing callers (flow, tests); delegates to the new load()

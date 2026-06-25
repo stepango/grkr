@@ -17,7 +17,17 @@ gleam_wf() {
   local mod="$1"; shift
   local prj="${GRKR_GLEAM_PROJECT_ROOT:-$(dirname "$SCRIPT_DIR")}"
   if [ -f "$prj/gleam.toml" ]; then
-    (cd "$prj" && gleam run --no-print-progress -m "grkr/workflow/$mod" -- "$@")
+    (
+      cd "$prj" || exit 1
+      export GRKR_ROOT GRKR_CONFIG_FILE
+      if [ -f "${GRKR_CONFIG_FILE:-}" ]; then
+        set -a
+        # shellcheck disable=SC1090
+        . "$GRKR_CONFIG_FILE"
+        set +a
+      fi
+      gleam run --no-print-progress -m "grkr/workflow/$mod" -- "$@"
+    )
   else
     echo "❌ Missing gleam.toml at $prj (for v2 $mod CLI)" >&2
     return 1

@@ -2,7 +2,7 @@ import gleam/int
 import gleam/string
 
 import grkr/refusal/flow
-import grkr/refusal/types.{ type RefusalError, OtherError, CheckpointFailed, FetchFailed, ProjectMoveFailed }
+import grkr/refusal/types.{ type RefusalError, type RefusalResult, OtherError, CheckpointFailed, FetchFailed, ProjectMoveFailed }
 import grkr/workflow/decision as dec
 import grkr/workflow/ffi as wf
 
@@ -61,9 +61,28 @@ fn do_run_gate(issue_str: String, output_file: String, progress_file: String) {
                   case parse_refusal_details(output_file) {
                     Ok(#(class, reason)) -> {
                       case invoke_refusal_flow(issue_str, class, reason) {
-                        Ok(_) -> {
+                        Ok(res) -> {
+                          wf.console_error(
+                            "📝 Posting refusal checkpoint for issue #" <> issue_str <> "...",
+                          )
+                          case res.moved_to_backlog {
+                            True ->
+                              wf.console_error(
+                                "📥 Moved issue #" <> issue_str <> " to Backlog.",
+                              )
+                            False -> Nil
+                          }
+                          wf.console_error(
+                            "⏸️ Refused implementation for issue #" <> issue_str <> ".",
+                          )
                           wf.console_log("refuse")
-                          wf.console_error("⏸️ Decision gate: refused issue #" <> issue_str <> " (class: " <> class <> ")")
+                          wf.console_error(
+                            "⏸️ Decision gate: refused issue #"
+                            <> issue_str
+                            <> " (class: "
+                            <> class
+                            <> ")",
+                          )
                           wf.exit(0)
                         }
                         Error(e) -> {
@@ -133,12 +152,16 @@ fn parse_refusal_details(output_file: String) -> Result(#(String, String), Strin
   }
 }
 
-fn invoke_refusal_flow(issue_str: String, class: String, reasoning: String) -> Result(Nil, String) {
+fn invoke_refusal_flow(
+  issue_str: String,
+  class: String,
+  reasoning: String,
+) -> Result(RefusalResult, String) {
   case int.parse(issue_str) {
     Error(_) -> Error("invalid issue: " <> issue_str)
     Ok(issue) -> {
       case flow.run_refusal(issue, class, reasoning) {
-        Ok(_) -> Ok(Nil)
+        Ok(res) -> Ok(res)
         Error(e) -> Error(refusal_error_to_string(e))
       }
     }

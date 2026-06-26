@@ -57,14 +57,14 @@ fn run_phase(
   // Test hook: GRKR_FAIL_PHASES="pick_and_schedule_issue_execution,..."
   case list.contains(config.fail_phases, phase_str) {
     True -> {
-      let err = t.PhaseFailed(phase_str, 99)
+      let err = t.PhaseFailed(phase_str, 64)
       let _ =
         log_error(
           config,
           phase_str,
           "-",
           entity,
-          "test_fail_injected=true tick=" <> int.to_string(tick),
+          "phase_failed=" <> t.supervisor_error_to_string(err),
         )
       t.Failed(err)
     }

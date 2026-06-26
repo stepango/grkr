@@ -3,6 +3,7 @@ import gleam/option.{type Option, None, Some}
 
 import grkr/progress/checkpoint_id
 import grkr/progress/checkpoint_stage
+import grkr/refusal/ffi
 import grkr/refusal/types.{
   type RefusalClass,
   MissingDependency, NeedsDesignDecision, Other, RepoNotReady,
@@ -83,13 +84,15 @@ pub fn format_full_refusal_md(
   let nexts = next_steps_markdown(class)
   let split = split_recommendation(class)
   let followup = follow_up_recommendation(class)
+  let summary_line = refusal_summary_line()
 
   marker
   <> "\n\n## Implementation refused\n\n"
   <> issue_line
   <> "\n\n"
   <> "### Refusal summary\n\n"
-  <> "The issue was not implemented because the decision gate returned `refuse`.\n\n"
+  <> summary_line
+  <> "\n\n"
   <> "### Reason class\n\n"
   <> class_s
   <> "\n\n"
@@ -108,4 +111,13 @@ pub fn format_full_refusal_md(
   <> "### Are follow-up issues recommended?\n\n"
   <> followup
   <> "\n"
+}
+
+fn refusal_summary_line() -> String {
+  case ffi.get_env_with_default("GRKR_REFUSAL_SUMMARY", "") {
+    "implementation_after_proceed" ->
+      "The issue was not implemented because implementation discovered a blocker after the decision gate returned `proceed`."
+    _ ->
+      "The issue was not implemented because the decision gate returned `refuse`."
+  }
 }

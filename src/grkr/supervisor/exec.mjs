@@ -2,11 +2,15 @@ import { execFileSync } from "child_process";
 
 export function executable(command, args, input) {
   try {
+    const inputStr =
+      input == null || typeof input !== "string" ? undefined : input;
     const options = {
-      input: input || undefined,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
     };
+    if (inputStr !== undefined) {
+      options.input = inputStr;
+    }
     if (process.env.GRKR_ROOT) {
       options.cwd = process.env.GRKR_ROOT;
     }

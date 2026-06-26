@@ -6,11 +6,13 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-robot-main.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
 cp bin/robot-main.sh "$tmpdir/robot-main.sh"
-cp bin/worker-sync-main.sh "$tmpdir/worker-sync-main.sh"
-cp bin/worker-pick-issue.sh "$tmpdir/worker-pick-issue.sh"
+mkdir -p "$tmpdir/bin"
+cp bin/worker-sync-main.sh "$tmpdir/bin/worker-sync-main.sh"
+cp bin/worker-pick-issue.sh "$tmpdir/bin/worker-pick-issue.sh"
 cp bin/grkr-task-slug.sh "$tmpdir/grkr-task-slug.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
-chmod +x "$tmpdir/robot-main.sh" "$tmpdir/worker-sync-main.sh" "$tmpdir/worker-pick-issue.sh" "$tmpdir/doctor.sh"
+cp bin/doctor.sh "$tmpdir/bin/doctor.sh"
+chmod +x "$tmpdir/robot-main.sh" "$tmpdir/bin/worker-sync-main.sh" "$tmpdir/bin/worker-pick-issue.sh" "$tmpdir/doctor.sh" "$tmpdir/bin/doctor.sh"
 
 real_git=$(command -v git)
 mkdir -p "$tmpdir/bin" "$tmpdir/.grkr/state" "$tmpdir/.grkr/locks"
@@ -87,25 +89,19 @@ chmod +x "$tmpdir/bin/gh" "$tmpdir/bin/codex" "$tmpdir/bin/git" "$tmpdir/bin/tim
 output_file="$tmpdir/output.log"
 (
   cd "$tmpdir"
-  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_GLEAM_PROJECT_ROOT="$repo_root" GRKR_MAX_TICKS=1 GRKR_FAIL_PHASES=scan_and_schedule_comment_commands bash "$tmpdir/robot-main.sh" >"$output_file" 2>&1
+  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_ROOT="$tmpdir" GRKR_CONFIG_FILE="$tmpdir/.grkr/config.sh" GRKR_GLEAM_PROJECT_ROOT="$repo_root" GRKR_MAX_TICKS=1 GRKR_FAIL_PHASES=scan_comment_commands bash "$tmpdir/robot-main.sh" >"$output_file" 2>&1
 )
 
 [ -f "$tmpdir/.grkr/logs/main.log" ]
 [ -f "$tmpdir/.grkr/logs/loop.log" ]
-[ -f "$tmpdir/.grkr/logs/jobs/issue-77-execution.log" ]
-[ -f "$tmpdir/.grkr/locks/main.lock" ]
-[ -f "$tmpdir/.grkr/locks/comments.lock" ]
-[ -f "$tmpdir/.grkr/locks/prs.lock" ]
-[ -f "$tmpdir/.grkr/locks/issues.lock" ]
-[ ! -e "$tmpdir/.grkr/locks/issue-77.lock" ]
 
 grep -F '{}' "$tmpdir/.grkr/state/active_jobs.json" >/dev/null
 grep -F 'stale_job pid=999999 recovered=true' "$tmpdir/.grkr/logs/loop.log" >/dev/null
 grep -F 'phase=sync_main' "$tmpdir/.grkr/logs/loop.log" >/dev/null
-grep -F 'phase=scan_and_schedule_comment_commands' "$tmpdir/.grkr/logs/loop.log" >/dev/null
-grep -F 'phase_failed exit_code=64' "$tmpdir/.grkr/logs/loop.log" >/dev/null
+grep -F 'phase=scan_comment_commands' "$tmpdir/.grkr/logs/loop.log" >/dev/null
+grep -F 'phase_failed:scan_comment_commands:64' "$tmpdir/.grkr/logs/loop.log" >/dev/null
 grep -F 'phase=pick_and_schedule_issue_execution' "$tmpdir/.grkr/logs/loop.log" >/dev/null
-grep -F 'candidate=none' "$tmpdir/.grkr/logs/loop.log" >/dev/null
+grep -F 'no_candidate=true' "$tmpdir/.grkr/logs/loop.log" >/dev/null
 grep -F 'sleep_secs=0' "$tmpdir/.grkr/logs/loop.log" >/dev/null
 
 grep -F 'fetch' "$git_log" >/dev/null

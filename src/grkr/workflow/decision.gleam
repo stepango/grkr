@@ -116,12 +116,18 @@ pub fn detect_implementation_refusal(output: String) -> String {
 }
 
 fn find_marker_index(lines: List(String)) -> Result(Int, Nil) {
+  // Codex prompts embed the marker as documentation; the real signal is the
+  // last occurrence in the combined prompt+response log (bash parity: awk on stream).
   lines
-  |> list.index_map(fn(l, i) { #(i, string.lowercase(l)) })
-  |> list.find(fn(pair) {
+  |> list.index_map(fn(l, i) {
+    let lower = string.trim(l) |> string.lowercase
+    #(i, lower)
+  })
+  |> list.filter(fn(pair) {
     let #(_, lower) = pair
     lower == "grkr-refuse-implementation"
   })
+  |> list.last
   |> result.map(fn(p) {
     let #(i, _) = p
     i

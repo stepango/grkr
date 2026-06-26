@@ -768,6 +768,10 @@ process_issue() {
     refusal_class=$(printf '%s\n' "$refusal_result" | tail -n2 | head -n1)
     refusal_comment_id=$(printf '%s\n' "$refusal_result" | tail -n1)
     mark_task_progress_refused "$PROGRESS_FILE" "$refusal_class" "$refusal_comment_id"
+    if [ -n "${ISSUE_WORKTREE_DIR:-}" ]; then
+      cleanup_issue_worktree "$ISSUE_WORKTREE_DIR"
+      echo "🧹 Removed issue worktree: $ISSUE_WORKTREE_DIR"
+    fi
     CURRENT_ISSUE_WORKTREE=""
     rm -f "$prompt_file"
     CURRENT_PROMPT_FILE=""

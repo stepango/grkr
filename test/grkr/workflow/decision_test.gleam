@@ -52,6 +52,12 @@ The required upstream API does not exist in the codebase yet.
   let prose = "## Implementation plan details\nRefuse broad rewrites."
   detect_implementation_refusal(prose)
   |> should.equal("")
+
+  // Prompt documents the marker before codex emits the real refusal block.
+  let prompt_then_refusal =
+    "If blocked, end with:\ngrkr-refuse-implementation\n<class>\n<reason>\n\n## Analysis\n\ngrkr-refuse-implementation\nmissing_dependency\nBlocked on API.\n"
+  let detected2 = detect_implementation_refusal(prompt_then_refusal)
+  string.contains(detected2, "missing_dependency") |> should.be_true()
 }
 
 pub fn update_task_progress_decision_test() {

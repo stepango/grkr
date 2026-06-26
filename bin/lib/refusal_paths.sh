@@ -38,7 +38,7 @@ invoke_refusal_cli() {
   local gleam_status=0
   if [ -f "$project_root/gleam.toml" ]; then
     set +e
-    (cd "$project_root" && gleam run -m grkr/refusal/cli -- "$issue" "$class" "$reasoning") 2>&1 | tee "$emits_file"
+    (cd "$project_root" && gleam run -m grkr/refusal/cli -- "$issue" "$class" "$reasoning") 2>&1 | tee "$emits_file" >&2
     gleam_status=$?
     set -e
   else
@@ -108,7 +108,8 @@ handle_implementation_refusal() {
   local refusal_emits
   refusal_emits=$(mktemp "${TMPDIR:-/tmp}/grkr-refusal-emits.XXXXXX")
 
-  if ! invoke_refusal_cli "$ISSUE" "$refusal_class" "$reasoning" "$refusal_emits"; then
+  echo "📝 Posting refusal checkpoint for issue #$ISSUE..."
+  if ! GRKR_REFUSAL_SUMMARY=implementation_after_proceed invoke_refusal_cli "$ISSUE" "$refusal_class" "$reasoning" "$refusal_emits"; then
     rm -f "$refusal_emits"
     return 1
   fi

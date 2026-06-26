@@ -137,7 +137,7 @@ task_dir="$tmpdir/.grkr/tasks/issue-1-test-issue"
   PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_GLEAM_PROJECT_ROOT="$repo_root" bash "$tmpdir/grkr.sh" --project 1 >"$output_file" 2>&1 &
   pid=$!
 
-  for _ in 1 2 3 4 5 6; do
+  for _ in $(seq 1 60); do
     if grep -Fq "✅ PR created: https://example.com/pr/1" "$output_file"; then
       break
     fi

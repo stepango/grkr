@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-installed-layout.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
@@ -35,7 +37,7 @@ chmod +x "$tmpdir/bin/git"
 output_file="$tmpdir/output.log"
 (
   cd "$tmpdir"
-  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" "$tmpdir/bin/grkr" init 42 >"$output_file" 2>&1
+  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_GLEAM_PROJECT_ROOT="$repo_root" "$tmpdir/bin/grkr" init 42 >"$output_file" 2>&1
 )
 
 grep -F "✅ Created config: $tmpdir/.grkr/config.sh" "$output_file" >/dev/null

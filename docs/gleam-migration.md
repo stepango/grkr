@@ -52,7 +52,7 @@ The migration uses small kanban-driven slices (decomposition required because la
 - Templates thinning (t_7cc455e3 + t_23a1c5ae): 62 LOC thin + 176 LOC Gleam (progress/templates) exact parity.
 
 **Design & Spec artifacts (canonical):**
-- spec/parts/ (41 files): 00-overview.md, 01-goal.md, ..., 07-supervisor.md, 09-main-loop-contract.md, 15-phase-3-detect-and-process-robot-comments.md, 17-issue-workflow-overview.md, 23-refusal-flow.md, 36-cleanup-policy.md, 39-recommended-implementation-order.md (items 1–5 historical baseline; items 6–12 implemented in Gleam v2 — see **Remaining** status table below; spec slice text may still describe 6–12 as forward backlog until a dedicated spec refresh), + many more. `spec/spec.md` is generated index. (sync run in t_767a0b08 + this task)
+- spec/parts/ (41 files): 00-overview.md, 01-goal.md, ..., 07-supervisor.md, 09-main-loop-contract.md, 15-phase-3-detect-and-process-robot-comments.md, 17-issue-workflow-overview.md, 23-refusal-flow.md, 36-cleanup-policy.md, 39-recommended-implementation-order.md (items 1–5 historical baseline; items 6–12 **done** in Gleam v2 — canonical status table in spec/39 + **Remaining** table below), + many more. `spec/spec.md` is generated index. (spec/39 refresh t_21c1cbb1)
 - Root: supervisor-design-final.md (421 LOC, detailed final design: 10-module structure, exact types for JobKey/ActiveJob/Phase/SupervisorConfig/SupervisorError, FFI specs for process/fs/exec etc., logging format, active_jobs.json schema; GitHub-only), supervisor-synthesis.md, gleam-migration-patterns.md (extracted module splits, CLI dispatch, FFI patterns from existing v2 code for reuse in supervisor)
 - Historical research archived under .grkr/archive/
 

@@ -1,6 +1,6 @@
 ## 31. Recommended implementation order
 
-Status snapshot (Gleam v2 @ `18665c3`, **295** `gleam test`; GitHub-default refusal-aware pipeline):
+Status snapshot (Gleam v2 @ `6a34d26`, **295** `gleam test`; GitHub-default refusal-aware pipeline):
 
 - Items **1 through 5** were the historical baseline (doctor, supervisor shell loop, sync-main, picker, research/plan checkpoints).
 - Items **6 through 12** are **implemented** in Gleam v2 with thin `bin/` delegates; see primary wiring below.

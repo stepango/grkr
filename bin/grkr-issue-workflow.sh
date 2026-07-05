@@ -26,7 +26,7 @@ gleam_wf() {
         . "$GRKR_CONFIG_FILE"
         set +a
       fi
-      gleam run --no-print-progress -m "grkr/workflow/$mod" -- "$@"
+      gleam run -m "grkr/workflow/$mod" -- "$@"
     )
   else
     echo "❌ Missing gleam.toml at $prj (for v2 $mod CLI)" >&2
@@ -106,7 +106,7 @@ run_decision_gate() {
 # Implement stage thin delegates (to implement_stage per spec/25 + t_39ab1e08 / #17 spec item 8).
 # Minimal hooks only (e.g. commit-message); codex run + prompt + publish logic stay in thin shell (bin/grkr) per slice pattern.
 # Mirrors research/plan checkpoint + decision/task_log thin integration.
-generate_implement_commit_message() { gleam_wf implement_stage commit-message "$1" "$2" 2>/dev/null || echo "feat: implement #$1 - $2"; }
+generate_implement_commit_message() { gleam_wf implement_stage commit-message "$1" "$2" 2>/dev/null | tail -n1 || echo "feat: implement #$1 - $2"; }
 
 # Test stage thin delegates (to test_stage per spec/26 + t_d87d2215 / #18 spec item 9).
 # Minimal hooks only (e.g. run-tests); test command execution + test.md write + gh post + log cleanup stay in thin shell (bin/grkr) per slice pattern.

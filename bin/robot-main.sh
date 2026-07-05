@@ -31,10 +31,10 @@ export GRKR_ISSUE_PROVIDER=${GRKR_ISSUE_PROVIDER:-github}
 export GRKR_ACTIVE_JOBS_PATH
 
 # Run validation (populates VALIDATION_OK; prints ✅/❌ like before; ensures .grkr dir)
-# doctor_validate also re-inits and checks tools/gh/codex/config/remote
-doctor_validate
-validate_status=$?
-if [ "$validate_status" -eq 0 ]; then
+# doctor_validate also re-inits and checks tools/gh/codex/config/remote.
+# Keep the supervisor alive on validation failure per spec/parts/10; set -e would
+# otherwise exit before Gleam can create logs and apply its validation gate.
+if doctor_validate; then
   VALIDATION_OK=1
 else
   VALIDATION_OK=0

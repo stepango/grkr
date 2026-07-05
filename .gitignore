@@ -11,6 +11,7 @@ package-lock.json
 .grkr/kanban-cron-body*.md
 .grkr/kanban-cron-*.body*.md
 .grkr/kanban-cron-orchestrator-body*.md
+.grkr/kanban-cron-created-ids-*.txt
 .grkr/*.log
 .grkr/tmp-*.sh
 .automation-local/

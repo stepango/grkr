@@ -22,6 +22,7 @@ bash test/grkr-pr-body-limit.sh
 bash test/grkr-dirty-worktree-warning.sh
 bash test/worker-sync-main.sh
 bash test/worker-pick-issue.sh
+bash test/worker-help.sh
 bash test/robot-main-supervisor.sh
 bash test/robot-main-schedules-issue.sh
 bash test/robot-main-phase-failure.sh

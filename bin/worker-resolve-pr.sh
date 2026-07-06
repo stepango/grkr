@@ -4,6 +4,21 @@ set -euo pipefail
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 . "$SCRIPT_DIR/doctor.sh"
 
+usage() {
+  printf '%s\n' \
+    "Usage: worker-resolve-pr.sh <pr_number>" \
+    "" \
+    "Resolve PR conflicts using the Gleam workflow (GitHub-only v2)." \
+    "Use --help, -h, or help to show this message."
+}
+
+case "${1:-}" in
+  --help|-h|help)
+    usage
+    exit 0
+    ;;
+esac
+
 doctor_init
 
 if [ -f "$GRKR_CONFIG_FILE" ]; then

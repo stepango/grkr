@@ -51,6 +51,10 @@ npm test
 
 # Resolve PR conflicts (Gleam-based)
 worker-resolve-pr.sh 123
+
+# Print worker usage
+worker-refuse-issue.sh --help
+worker-resolve-pr.sh --help
 ```
 
 ## PR Conflict Resolution

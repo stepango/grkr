@@ -18,6 +18,7 @@ package-lock.json
 build/
 commands.log
 # Ephemeral kanban/Hermes scratch at repo root (audit-only; do not delete without review)
+.kanban-logs/
 .worktrees/
 undefined/
 .tmp_*.py

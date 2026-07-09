@@ -1,9 +1,13 @@
 #!/bin/bash
-# Full npm test chain. Unset GRKR_* inherited from kanban/cron workers so isolated
-# tmpdir fixtures (grkr init) use mocked git roots instead of the live repo.
+# Full npm test chain. Unset GRKR_* / GLEAM_ENV inherited from kanban/cron workers
+# so isolated tmpdir fixtures use mocked git roots instead of the live repo, and
+# suite order cannot leak provider/fail-phase hooks into later scripts.
 set -euo pipefail
 
-unset GRKR_ROOT GRKR_CONFIG_FILE
+unset GLEAM_ENV 2>/dev/null || true
+unset GRKR_ROOT GRKR_CONFIG_FILE GRKR_ACTIVE_JOBS_PATH GRKR_MAX_TICKS \
+  GRKR_FAIL_PHASES GRKR_GLEAM_PROJECT_ROOT GRKR_ISSUE_PROVIDER \
+  GITHUB_FIXTURE_PATH BOT_LOGIN 2>/dev/null || true
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"

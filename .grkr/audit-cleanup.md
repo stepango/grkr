@@ -2328,3 +2328,11 @@ No broad `rm -rf`; no gateway/dispatcher/cron lock removal; no Linear; no force-
 - HEAD `0ebee391693e3f1aa74934f3b9fc6a60633e7012` on `v2`; `git worktree list --porcelain` showed only the main checkout, `.worktrees/` was empty, and `git worktree prune --verbose` had nothing to prune.
 - `.grkr/locks/{comments,issues,main,prs}.lock` were 0-byte unheld placeholders. Removed empty, unheld Hermes lock placeholders after `lsof` showed no holders: /Users/claw/.hermes/auth.lock, /Users/claw/.hermes/kanban.db.dispatch.lock, /Users/claw/.hermes/kanban.db.init.lock.
 - Kept live gateway/dispatcher locks (`~/.hermes/gateway.lock`, `~/.hermes/kanban/.dispatcher.lock`) held by gateway PID 61453. Synced README.md and docs/gleam-migration.md tip headers from `1332a8c` to `0ebee39`; left existing cron JSON/TXT scratch files untracked.
+
+## t_df49c38c hygiene re-audit (2026-07-08 evening)
+- HEAD `5e57f1abec27c19b49fe45e0ce8d7684b4bd137d` on `v2`; `git worktree list` showed only the main checkout, `.worktrees/` was empty, and `git worktree prune -v` had nothing to prune.
+- `.grkr/locks/{comments,issues,main,prs}.lock` were 0-byte unheld placeholders (left as flock placeholders).
+- Removed empty, unheld Hermes lock placeholders after `lsof` showed no holders: `/Users/claw/.hermes/auth.lock`, `/Users/claw/.hermes/kanban.db.dispatch.lock`, `/Users/claw/.hermes/kanban.db.init.lock`.
+- Kept live gateway/dispatcher locks (`~/.hermes/gateway.lock`, `~/.hermes/kanban/.dispatcher.lock`) held by gateway PID 61453.
+- Synced README.md and docs/gleam-migration.md tip headers from `0ebee39` to `5e57f1a`; left existing untracked `.grkr/kanban-cron-*` scratch JSON/TXT alone (not functional WIP).
+- No Linear spawn, no PR merge, no destructive workspace rm.

@@ -2,3 +2,24 @@ node_modules/
 package-lock.json
 .DS_Store
 .grkr/tasks/
+.grkr/archive/
+.grkr/state/
+.grkr/locks/
+.grkr/worktrees/
+.grkr/logs/
+.grkr/kanban-cron-body*.txt
+.grkr/kanban-cron-body*.md
+.grkr/kanban-cron-*.body*.md
+.grkr/kanban-cron-orchestrator-body*.md
+.grkr/kanban-cron-created-ids-*.txt
+.grkr/*.log
+.grkr/tmp-*.sh
+.automation-local/
+build/
+commands.log
+# Ephemeral kanban/Hermes scratch at repo root (audit-only; do not delete without review)
+.kanban-logs/
+.worktrees/
+undefined/
+.tmp_*.py
+.hermes-kanban-*.sh

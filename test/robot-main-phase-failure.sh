@@ -1,14 +1,18 @@
 #!/bin/bash
 set -euo pipefail
 
+repo_root=$(pwd)
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-robot-main-failure.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
 cp bin/robot-main.sh "$tmpdir/robot-main.sh"
-cp bin/worker-sync-main.sh "$tmpdir/worker-sync-main.sh"
-cp bin/worker-pick-issue.sh "$tmpdir/worker-pick-issue.sh"
+mkdir -p "$tmpdir/bin"
+cp bin/worker-sync-main.sh "$tmpdir/bin/worker-sync-main.sh"
+cp bin/worker-pick-issue.sh "$tmpdir/bin/worker-pick-issue.sh"
+cp bin/grkr-task-slug.sh "$tmpdir/grkr-task-slug.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
-chmod +x "$tmpdir/robot-main.sh" "$tmpdir/worker-sync-main.sh" "$tmpdir/worker-pick-issue.sh" "$tmpdir/doctor.sh"
+cp bin/doctor.sh "$tmpdir/bin/doctor.sh"
+chmod +x "$tmpdir/robot-main.sh" "$tmpdir/bin/worker-sync-main.sh" "$tmpdir/bin/worker-pick-issue.sh" "$tmpdir/doctor.sh" "$tmpdir/bin/doctor.sh"
 
 real_git=$(command -v git)
 mkdir -p "$tmpdir/bin" "$tmpdir/.grkr"
@@ -69,12 +73,12 @@ chmod +x "$tmpdir/bin/gh" "$tmpdir/bin/codex" "$tmpdir/bin/git" "$tmpdir/bin/tim
 output_file="$tmpdir/output.log"
 (
   cd "$tmpdir"
-  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_MAX_TICKS=1 bash "$tmpdir/robot-main.sh" >"$output_file" 2>&1
+  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_ROOT="$tmpdir" GRKR_CONFIG_FILE="$tmpdir/.grkr/config.sh" GRKR_GLEAM_PROJECT_ROOT="$repo_root" GRKR_MAX_TICKS=1 bash "$tmpdir/robot-main.sh" >"$output_file" 2>&1
 )
 
 grep -F 'phase=sync_main' "$tmpdir/.grkr/logs/loop.log" >/dev/null
-grep -F 'phase_failed exit_code=12' "$tmpdir/.grkr/logs/loop.log" >/dev/null
-grep -F 'phase=scan_and_schedule_pr_conflicts' "$tmpdir/.grkr/logs/loop.log" >/dev/null
+grep -F 'phase_failed:sync_main:12' "$tmpdir/.grkr/logs/loop.log" >/dev/null
+grep -F 'phase=scan_pr_conflicts' "$tmpdir/.grkr/logs/loop.log" >/dev/null
 grep -F 'phase=pick_and_schedule_issue_execution' "$tmpdir/.grkr/logs/loop.log" >/dev/null
 grep -F 'phase=cleanup_stale_worktrees' "$tmpdir/.grkr/logs/loop.log" >/dev/null
 ! grep -F 'synced_branch=main' "$tmpdir/.grkr/logs/loop.log" >/dev/null

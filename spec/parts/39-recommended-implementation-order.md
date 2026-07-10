@@ -1,9 +1,22 @@
 ## 31. Recommended implementation order
 
-Status snapshot:
+Status snapshot (Gleam v2 @ `6a34d26`, **295** `gleam test`; GitHub-default refusal-aware pipeline):
 
-- The current codebase largely covers items 1 through 5.
-- Items 6 through 12 remain the forward-looking backlog described by this spec.
+- Items **1 through 5** were the historical baseline (doctor, supervisor shell loop, sync-main, picker, research/plan checkpoints).
+- Items **6 through 12** are **implemented** in Gleam v2 with thin `bin/` delegates; see primary wiring below.
+- **Still forward-looking (not blocking GitHub core):** Linear issue provider full execution spawn (`GRKR_ISSUE_PROVIDER=linear` pick exists; spawn deferred); ongoing PR / e2e process polish.
+
+| # | Item | Status | Primary code / wiring |
+|---|------|--------|------------------------|
+| 6 | implement-or-refuse decision gate | **done** | `workflow/decision_gate.gleam` + `bin/grkr` post-codex path (spec/22) |
+| 7 | refusal worker + Backlog transition | **done** | `refusal/*`, `bin/worker-refuse-issue.sh` (spec/23) |
+| 8 | implementation stage | **done** | `workflow/implement_stage.gleam` + thin `grkr-issue-workflow.sh` / `bin/grkr` (spec/25, #17) |
+| 9 | test stage + completion flow | **done** | `workflow/test_stage.gleam` + completion-marker delegate (spec/26, #18, spec/17) |
+| 10 | comment scan + @:robot: commands | **done** | supervisor `scan_comment_commands` + `workflow/handle_comment` + thin `worker-handle-comment.sh` (spec/15) |
+| 11 | PR conflict resolution | **done** | `resolve_pr/main` + `bin/worker-resolve-pr.sh`; detection in supervisor phases |
+| 12 | cleanup, retry, stale-job recovery | **done** | supervisor cleanup/reap phases, `worktree_cleanup`, `recovery` + active_jobs TTL per `.grkr/supervisor-cleanup-policy.md` §6 (spec/36) |
+
+Ordered build sequence (reference; items 1–12 covered in v2):
 
 1. `doctor.sh`
 2. supervisor loop + logging + locks
@@ -34,5 +47,7 @@ Tracked issues for this implementation order:
 12. [#21 - Add cleanup, retry, and stale-job recovery polish](https://github.com/stepango/grkr/issues/21)
 
 This order gets the refusal-aware issue pipeline working early, which is important for safe autonomous operation.
+
+Spec refresh: kanban **t_21c1cbb1** aligned this snapshot with [docs/gleam-migration.md](../../docs/gleam-migration.md) (items 6–12 **done** table).
 
 ---

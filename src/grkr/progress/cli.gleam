@@ -1,0 +1,124 @@
+import gleam/io
+import grkr/progress/main
+import grkr/progress/linear_mutation
+
+pub fn main() -> Nil {
+  case argv() {
+    ["marker", stage, task_slug] -> emit_marker(stage, task_slug)
+    ["render-checkpoint", stage, task_slug, body] ->
+      emit_result(main.cli_render_checkpoint(stage, task_slug, body))
+    ["render-checkpoint-with-pr", stage, task_slug, body, pr_url] ->
+      emit_result(main.cli_render_checkpoint_with_pr(stage, task_slug, body, pr_url))
+    ["render-refusal", task_slug, reason_class, reasoning] ->
+      io.print(main.cli_render_refusal(task_slug, reason_class, reasoning))
+    ["render-pr-summary", task_slug, pr_url, branch_url] ->
+      io.print(main.cli_render_pr_summary(task_slug, pr_url, branch_url))
+    ["render-research-checkpoint", issue, title, body, url, slug] ->
+      io.print(main.cli_render_research_checkpoint(issue, title, body, url, slug))
+    ["render-plan-checkpoint", issue, title, slug] ->
+      io.print(main.cli_render_plan_checkpoint(issue, title, slug))
+    ["render-decision-prompt", issue, title, url, body, slug, worktree, root, max] ->
+      io.print(main.cli_render_decision_prompt(issue, title, url, body, slug, worktree, root, max))
+    ["render-issue-prompt", issue, title, url, body, slug, worktree, root, max] ->
+      io.print(main.cli_render_issue_prompt(issue, title, url, body, slug, worktree, root, max))
+    ["render-line-limit-fix-prompt", issue, title, slug, violations, max] ->
+      io.print(main.cli_render_line_limit_fix_prompt(issue, title, slug, violations, max))
+    ["render-default-pr-body", body, title] ->
+      io.print(main.cli_render_default_pr_body(body, title))
+    ["render-compact-pr-body", short_body, short_title] ->
+      io.print(main.cli_render_compact_pr_body(short_body, short_title))
+    ["render-issue-footer", issue] ->
+      io.print(main.cli_render_issue_footer(issue))
+    ["linear-state", stage] -> emit_linear_state(stage)
+    ["linear-comment-mutation", issue_id, body, stage, task_slug] ->
+      emit_mutation(main.cli_plan_linear_comment_mutation(issue_id, body, stage, task_slug))
+    ["linear-state-mutation", issue_id, state_id] ->
+      emit_mutation(main.cli_plan_linear_state_mutation(issue_id, state_id))
+    ["check-token"] -> emit_token_status()
+    ["mutation-debug", issue_id, body, stage, task_slug] ->
+      emit_debug(main.cli_format_mutation_debug(issue_id, body, stage, task_slug))
+    _ -> {
+      io.println("Usage: gleam run -m grkr/progress/cli -- <command> [args...]")
+      io.println("")
+      io.println("Checkpoint commands:")
+      io.println("  marker <stage> <task-slug>                                    Generate checkpoint marker")
+      io.println("  render-checkpoint <stage> <task-slug> <body>                  Render checkpoint")
+      io.println("  render-checkpoint-with-pr <stage> <task-slug> <body> <pr-url> Render checkpoint with PR")
+      io.println("  render-refusal <task-slug> <reason-class> <reasoning>         Render refusal checkpoint")
+      io.println("  render-pr-summary <task-slug> <pr-url> <branch-url>           Render PR summary")
+      io.println("")
+      io.println("Linear integration commands:")
+      io.println("  linear-state <stage>                                          Show Linear state for stage")
+      io.println("  linear-comment-mutation <issue-id> <body> <stage> <task-slug> Show Linear comment mutation")
+      io.println("  linear-state-mutation <issue-id> <state-id>                   Show Linear state mutation")
+      io.println("  check-token                                                   Check Linear token availability")
+      io.println("  mutation-debug <issue-id> <body> <stage> <task-slug>          Show mutation debug info")
+      exit(2)
+    }
+  }
+}
+
+fn emit_marker(stage: String, task_slug: String) -> Nil {
+  case main.validate_checkpoint_stage(stage) {
+    Ok(validated_stage) -> io.print(main.format_checkpoint_marker(validated_stage, task_slug))
+    Error(message) -> {
+      io.println("progress cli error: " <> message)
+      exit(1)
+    }
+  }
+}
+
+fn emit_result(result: Result(String, String)) -> Nil {
+  case result {
+    Ok(value) -> io.print(value)
+    Error(message) -> {
+      io.println("progress cli error: " <> message)
+      exit(1)
+    }
+  }
+}
+
+fn emit_linear_state(stage: String) -> Nil {
+  emit_result(main.cli_plan_linear_state(stage, env_get))
+}
+
+fn emit_mutation(result: Result(linear_mutation.MutationRequest, String)) -> Nil {
+  case result {
+    Ok(request) -> {
+      io.println(request.query)
+      io.println(request.variables_json)
+      io.println(request.idempotency_key)
+    }
+    Error(message) -> {
+      io.println("progress cli error: " <> message)
+      exit(1)
+    }
+  }
+}
+
+fn emit_token_status() -> Nil {
+  let status = main.check_linear_token_availability(fn() {
+    case env_get("GRKR_LINEAR_ACCESS_TOKEN") {
+      "" -> Error(Nil)
+      token -> Ok(token)
+    }
+  })
+  case status {
+    linear_mutation.TokenAvailable -> io.println("Token available")
+    linear_mutation.TokenUnavailable -> io.println("Token unavailable")
+    linear_mutation.TokenInvalid -> io.println("Token invalid")
+  }
+}
+
+fn emit_debug(result: Result(String, String)) -> Nil {
+  emit_result(result)
+}
+
+@external(javascript, "../progress/cli_ffi.mjs", "argv")
+fn argv() -> List(String)
+
+@external(javascript, "../progress/cli_ffi.mjs", "env_get")
+fn env_get(key: String) -> String
+
+@external(javascript, "process", "exit")
+fn exit(code: Int) -> Nil

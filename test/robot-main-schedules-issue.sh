@@ -1,18 +1,23 @@
 #!/bin/bash
 set -euo pipefail
 
+repo_root=$(pwd)
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-robot-main-schedule.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
 cp bin/robot-main.sh "$tmpdir/robot-main.sh"
-cp bin/worker-sync-main.sh "$tmpdir/worker-sync-main.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
-chmod +x "$tmpdir/robot-main.sh" "$tmpdir/worker-sync-main.sh" "$tmpdir/doctor.sh"
+chmod +x "$tmpdir/robot-main.sh" "$tmpdir/doctor.sh"
 
 real_git=$(command -v git)
 mkdir -p "$tmpdir/bin" "$tmpdir/.grkr/state" "$tmpdir/.grkr/locks"
-git_log="$tmpdir/git.log"
 runner_log="$tmpdir/grkr.log"
+
+cat > "$tmpdir/bin/worker-sync-main.sh" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+chmod +x "$tmpdir/bin/worker-sync-main.sh"
 
 cat > "$tmpdir/.grkr/config.sh" <<'EOF'
 REPO="stepango/grkr"
@@ -27,21 +32,6 @@ LOOP_INTERVAL_SECS="0"
 EOF
 
 printf '{}\n' > "$tmpdir/.grkr/state/active_jobs.json"
-
-cat > "$tmpdir/worker-pick-issue.sh" <<'EOF'
-#!/bin/bash
-cat <<'OUT'
-SELECTED=1
-ISSUE_NUMBER=5
-JOB_KEY='issue:5:execution'
-TASK_SLUG='issue-5-scheduled-by-supervisor'
-PROJECT_ITEM_ID='ITEM_5'
-ISSUE_TITLE='Scheduled issue'
-ISSUE_UPDATED_AT='2026-03-30T00:00:00Z'
-PRIORITY_NAME='P0'
-PRIORITY_NUMBER=''
-OUT
-EOF
 
 cat > "$tmpdir/grkr" <<EOF
 #!/bin/bash
@@ -80,31 +70,59 @@ cat > "$tmpdir/bin/git" <<EOF
 case "\$*" in
   'rev-parse --show-toplevel') printf '%s\n' "$tmpdir" ;;
   'remote get-url origin') printf 'git@github.com:stepango/grkr.git\n' ;;
-  'fetch origin main --prune') printf 'fetch\n' >> "$git_log" ;;
-  'checkout main') printf 'checkout\n' >> "$git_log" ;;
-  'reset --hard origin/main') printf 'reset\n' >> "$git_log" ;;
   *) exec "$real_git" "\$@" ;;
 esac
 EOF
 
-chmod +x "$tmpdir/worker-pick-issue.sh" "$tmpdir/grkr" "$tmpdir/bin/gh" "$tmpdir/bin/codex" "$tmpdir/bin/git" "$tmpdir/bin/timeout" "$tmpdir/bin/flock"
+chmod +x "$tmpdir/grkr" "$tmpdir/bin/gh" "$tmpdir/bin/codex" "$tmpdir/bin/git" "$tmpdir/bin/timeout" "$tmpdir/bin/flock"
 
 output_file="$tmpdir/output.log"
 (
   cd "$tmpdir"
-  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_MAX_TICKS=1 bash "$tmpdir/robot-main.sh" >"$output_file" 2>&1
+  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" \
+    GRKR_GLEAM_PROJECT_ROOT="$repo_root" \
+    GITHUB_FIXTURE_PATH="$repo_root/test/fixtures/github-project-items.json" \
+    GRKR_ACTIVE_JOBS_PATH="$tmpdir/.grkr/state/active_jobs.json" \
+    BOT_LOGIN=robot \
+    GRKR_ISSUE_PROVIDER=github \
+    GRKR_MAX_TICKS=1 bash "$tmpdir/robot-main.sh" >"$output_file" 2>&1
 )
 
-sleep 0.1
+sleep 0.2
 
-grep -F 'scheduled_jobs=1 selected_issue=5 task_slug=issue-5-scheduled-by-supervisor' "$tmpdir/.grkr/logs/loop.log" >/dev/null
-jq -e '.["issue:5:execution"].entity_type == "issue"' "$tmpdir/.grkr/state/active_jobs.json" >/dev/null
-jq -e '.["issue:5:execution"].entity_id == "5"' "$tmpdir/.grkr/state/active_jobs.json" >/dev/null
-jq -e '.["issue:5:execution"].lock_name == "issue-5"' "$tmpdir/.grkr/state/active_jobs.json" >/dev/null
-jq -e '.["issue:5:execution"].task_slug == "issue-5-scheduled-by-supervisor"' "$tmpdir/.grkr/state/active_jobs.json" >/dev/null
-[ -f "$tmpdir/.grkr/logs/jobs/issue-5-execution.log" ]
-[ -f "$tmpdir/.grkr/locks/issue-5.lock" ]
+grep -F 'scheduled_jobs=1' "$tmpdir/.grkr/logs/loop.log" | grep -F 'selected_issue=42' >/dev/null
+grep -F 'task_slug=issue-42-fixture-pick-issue' "$tmpdir/.grkr/logs/loop.log" >/dev/null
+jq -e '.["issue:42:execution"].entity_type == "issue"' "$tmpdir/.grkr/state/active_jobs.json" >/dev/null
+jq -e '.["issue:42:execution"].entity_id == "42"' "$tmpdir/.grkr/state/active_jobs.json" >/dev/null
+jq -e '.["issue:42:execution"].lock_name == "issue-42"' "$tmpdir/.grkr/state/active_jobs.json" >/dev/null
+jq -e '.["issue:42:execution"].task_slug == "issue-42-fixture-pick-issue"' "$tmpdir/.grkr/state/active_jobs.json" >/dev/null
+jq -e '.["issue:42:execution"].project_item_id == "PVTI_pick1"' "$tmpdir/.grkr/state/active_jobs.json" >/dev/null
+[ -f "$tmpdir/.grkr/logs/jobs/issue-42-execution.log" ]
+[ -f "$tmpdir/.grkr/locks/issue-42.lock" ]
 
-grep -F 'fetch' "$git_log" >/dev/null
-grep -F 'checkout' "$git_log" >/dev/null
-grep -F 'reset' "$git_log" >/dev/null
+for _ in {1..20}; do
+  if grep -F -- '--issue 42' "$runner_log" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.1
+done
+
+grep -F -- '--issue 42' "$runner_log" >/dev/null
+
+printf '{}\n' > "$tmpdir/.grkr/state/active_jobs.json"
+runner_lines_before=$(wc -l < "$runner_log" | tr -d ' ')
+
+(
+  cd "$tmpdir"
+  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" \
+    GRKR_GLEAM_PROJECT_ROOT="$repo_root" \
+    GRKR_ISSUE_PROVIDER=linear \
+    LINEAR_ASSIGNEE_ID=u1 \
+    LINEAR_FIXTURE_PATH="$repo_root/test/fixtures/linear-assigned-issues.json" \
+    GRKR_MAX_TICKS=1 bash "$tmpdir/robot-main.sh" >"$output_file" 2>&1
+)
+
+runner_lines_after=$(wc -l < "$runner_log" | tr -d ' ')
+[ "$runner_lines_after" = "$runner_lines_before" ]
+grep -F 'selected_issue_missing_number=true' "$tmpdir/.grkr/logs/loop.log" >/dev/null
+jq -e 'length == 0' "$tmpdir/.grkr/state/active_jobs.json" >/dev/null

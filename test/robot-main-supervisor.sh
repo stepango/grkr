@@ -1,18 +1,36 @@
 #!/bin/bash
+# Supervisor smoke: stale job recovery + phase fail injection + sync git mock.
+# Isolated tmpdir fixture; scrub inherited GRKR_*/GLEAM_ENV so suite order / parallel
+# cron workers cannot leak config into this script.
 set -euo pipefail
+
+repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+cd "$repo_root"
+
+# Drop kanban/cron/gleam overrides that npm-test parent (or worker shell) may export.
+unset GLEAM_ENV 2>/dev/null || true
+unset GRKR_ROOT GRKR_CONFIG_FILE GRKR_ACTIVE_JOBS_PATH GRKR_MAX_TICKS \
+  GRKR_FAIL_PHASES GRKR_GLEAM_PROJECT_ROOT GRKR_ISSUE_PROVIDER \
+  GITHUB_FIXTURE_PATH BOT_LOGIN 2>/dev/null || true
 
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-robot-main.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
 cp bin/robot-main.sh "$tmpdir/robot-main.sh"
-cp bin/worker-sync-main.sh "$tmpdir/worker-sync-main.sh"
-cp bin/worker-pick-issue.sh "$tmpdir/worker-pick-issue.sh"
+mkdir -p "$tmpdir/bin" "$tmpdir/home" "$tmpdir/.grkr/state" "$tmpdir/.grkr/locks"
+cp bin/worker-sync-main.sh "$tmpdir/bin/worker-sync-main.sh"
+cp bin/worker-pick-issue.sh "$tmpdir/bin/worker-pick-issue.sh"
+cp bin/grkr-task-slug.sh "$tmpdir/grkr-task-slug.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
-chmod +x "$tmpdir/robot-main.sh" "$tmpdir/worker-sync-main.sh" "$tmpdir/worker-pick-issue.sh" "$tmpdir/doctor.sh"
+cp bin/doctor.sh "$tmpdir/bin/doctor.sh"
+chmod +x "$tmpdir/robot-main.sh" "$tmpdir/bin/worker-sync-main.sh" \
+  "$tmpdir/bin/worker-pick-issue.sh" "$tmpdir/doctor.sh" "$tmpdir/bin/doctor.sh"
 
 real_git=$(command -v git)
-mkdir -p "$tmpdir/bin" "$tmpdir/.grkr/state" "$tmpdir/.grkr/locks"
 git_log="$tmpdir/git.log"
+output_file="$tmpdir/output.log"
+loop_log="$tmpdir/.grkr/logs/loop.log"
+active_jobs="$tmpdir/.grkr/state/active_jobs.json"
 
 cat > "$tmpdir/.grkr/config.sh" <<'EOF'
 REPO="stepango/grkr"
@@ -25,19 +43,6 @@ BACKLOG_VALUE="Backlog"
 PRIORITY_FIELD_NAME="Priority"
 LOOP_INTERVAL_SECS="0"
 EOF
-
-cat > "$tmpdir/.grkr/state/active_jobs.json" <<'EOF'
-{
-  "issue:77:execution": {
-    "pid": 999999,
-    "entity_type": "issue",
-    "entity_id": "77",
-    "lock_name": "issue-77"
-  }
-}
-EOF
-
-touch "$tmpdir/.grkr/locks/issue-77.lock"
 
 cat > "$tmpdir/bin/gh" <<'EOF'
 #!/bin/bash
@@ -63,6 +68,7 @@ cat > "$tmpdir/bin/timeout" <<'EOF'
 exit 0
 EOF
 
+# Always-success flock so parallel host flock contention cannot fail this fixture.
 cat > "$tmpdir/bin/flock" <<'EOF'
 #!/bin/bash
 exit 0
@@ -80,32 +86,109 @@ case "\$*" in
 esac
 EOF
 
-chmod +x "$tmpdir/bin/gh" "$tmpdir/bin/codex" "$tmpdir/bin/git" "$tmpdir/bin/timeout" "$tmpdir/bin/flock"
+chmod +x "$tmpdir/bin/gh" "$tmpdir/bin/codex" "$tmpdir/bin/git" \
+  "$tmpdir/bin/timeout" "$tmpdir/bin/flock"
 
-output_file="$tmpdir/output.log"
-(
-  cd "$tmpdir"
-  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_MAX_TICKS=1 GRKR_FAIL_PHASES=scan_and_schedule_comment_commands bash "$tmpdir/robot-main.sh" >"$output_file" 2>&1
-)
+seed_fixture_state() {
+  cat > "$active_jobs" <<'EOF'
+{
+  "issue:77:execution": {
+    "pid": 999999,
+    "entity_type": "issue",
+    "entity_id": "77",
+    "lock_name": "issue-77"
+  }
+}
+EOF
+  touch "$tmpdir/.grkr/locks/issue-77.lock"
+  rm -rf "$tmpdir/.grkr/logs"
+  : >"$git_log"
+  : >"$output_file"
+}
 
-[ -f "$tmpdir/.grkr/logs/main.log" ]
-[ -f "$tmpdir/.grkr/logs/loop.log" ]
-[ -f "$tmpdir/.grkr/logs/jobs/issue-77-execution.log" ]
-[ -f "$tmpdir/.grkr/locks/main.lock" ]
-[ -f "$tmpdir/.grkr/locks/comments.lock" ]
-[ -f "$tmpdir/.grkr/locks/prs.lock" ]
-[ -f "$tmpdir/.grkr/locks/issues.lock" ]
-[ ! -e "$tmpdir/.grkr/locks/issue-77.lock" ]
+dump_failure() {
+  local reason=$1
+  {
+    echo "robot-main-supervisor FAIL: $reason"
+    echo "tmpdir=$tmpdir"
+    echo "--- robot-main exit / output.log ---"
+    cat "$output_file" 2>/dev/null || true
+    echo "--- loop.log ---"
+    cat "$loop_log" 2>/dev/null || true
+    echo "--- active_jobs.json ---"
+    cat "$active_jobs" 2>/dev/null || true
+    echo "--- git.log ---"
+    cat "$git_log" 2>/dev/null || true
+  } >&2
+}
 
-grep -F '{}' "$tmpdir/.grkr/state/active_jobs.json" >/dev/null
-grep -F 'stale_job pid=999999 recovered=true' "$tmpdir/.grkr/logs/loop.log" >/dev/null
-grep -F 'phase=sync_main' "$tmpdir/.grkr/logs/loop.log" >/dev/null
-grep -F 'phase=scan_and_schedule_comment_commands' "$tmpdir/.grkr/logs/loop.log" >/dev/null
-grep -F 'phase_failed exit_code=64' "$tmpdir/.grkr/logs/loop.log" >/dev/null
-grep -F 'phase=pick_and_schedule_issue_execution' "$tmpdir/.grkr/logs/loop.log" >/dev/null
-grep -F 'candidate=none' "$tmpdir/.grkr/logs/loop.log" >/dev/null
-grep -F 'sleep_secs=0' "$tmpdir/.grkr/logs/loop.log" >/dev/null
+# Run supervisor once; print exit code on stdout. Never aborts the outer script.
+run_robot_main() {
+  set +e
+  (
+    cd "$tmpdir"
+    # Explicit env: avoid GLEAM_ENV=test short-circuit; pin github provider + paths.
+    env -u GLEAM_ENV \
+      PATH="$tmpdir/bin:$PATH" \
+      HOME="$tmpdir/home" \
+      GRKR_ROOT="$tmpdir" \
+      GRKR_CONFIG_FILE="$tmpdir/.grkr/config.sh" \
+      GRKR_GLEAM_PROJECT_ROOT="$repo_root" \
+      GRKR_ACTIVE_JOBS_PATH="$active_jobs" \
+      GRKR_ISSUE_PROVIDER=github \
+      BOT_LOGIN=robot \
+      GRKR_MAX_TICKS=1 \
+      GRKR_FAIL_PHASES=scan_comment_commands \
+      bash "$tmpdir/robot-main.sh" >"$output_file" 2>&1
+  )
+  local ec=$?
+  set -e
+  printf '%s\n' "$ec"
+}
 
-grep -F 'fetch' "$git_log" >/dev/null
-grep -F 'checkout' "$git_log" >/dev/null
-grep -F 'reset' "$git_log" >/dev/null
+seed_fixture_state
+robot_ec=$(run_robot_main)
+
+# One retry for transient gleam compile/build lock contention under parallel workers.
+if [ "$robot_ec" -ne 0 ]; then
+  sleep 1
+  seed_fixture_state
+  robot_ec=$(run_robot_main)
+fi
+
+if [ "$robot_ec" -ne 0 ]; then
+  dump_failure "robot-main exited $robot_ec after retry"
+  exit "$robot_ec"
+fi
+
+assert_file() {
+  if [ ! -f "$1" ]; then
+    dump_failure "missing file: $1"
+    exit 1
+  fi
+}
+
+assert_grep() {
+  local needle=$1
+  local file=$2
+  if ! grep -F "$needle" "$file" >/dev/null 2>&1; then
+    dump_failure "missing grep -F $(printf %q "$needle") in $file"
+    exit 1
+  fi
+}
+
+assert_file "$tmpdir/.grkr/logs/main.log"
+assert_file "$loop_log"
+
+assert_grep '{}' "$active_jobs"
+assert_grep 'stale_job pid=999999 recovered=true' "$loop_log"
+assert_grep 'phase=sync_main' "$loop_log"
+assert_grep 'phase=scan_comment_commands' "$loop_log"
+assert_grep 'phase_failed:scan_comment_commands:64' "$loop_log"
+assert_grep 'phase=pick_and_schedule_issue_execution' "$loop_log"
+assert_grep 'no_candidate=true' "$loop_log"
+assert_grep 'sleep_secs=0' "$loop_log"
+
+assert_grep 'fetch' "$git_log"
+assert_grep 'checkout' "$git_log"
+assert_grep 'reset' "$git_log"

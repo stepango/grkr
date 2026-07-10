@@ -22,6 +22,24 @@ SCRIPT_DIR=$(cd "$(dirname "$SCRIPT_PATH")" && pwd)
 . "$SCRIPT_DIR/doctor.sh"
 . "$SCRIPT_DIR/grkr-project-status.sh"
 . "$SCRIPT_DIR/grkr-issue-workflow.sh"
+. "$SCRIPT_DIR/lib/refusal_paths.sh"
+. "$SCRIPT_DIR/lib/task_progress.sh"
+. "$SCRIPT_DIR/grkr-task-slug.sh"
+
+usage() {
+  local exit_code=${1:-1}
+  echo "Usage: grkr init <project-id> | grkr --issue <number> | grkr --project <id>"
+  echo "Example: grkr init 42"
+  echo "Example: grkr --issue 1"
+  echo "Example: grkr --project 42"
+  exit "$exit_code"
+}
+
+case "${1:-}" in
+  --help|-h|help)
+    usage 0
+    ;;
+esac
 
 mkdir -p "${HOME:-.}/.grkr/logs"
 LOGFILE="${HOME:-.}/.grkr/logs/grkr-$(date +%Y%m%d-%H%M%S).log"
@@ -41,14 +59,6 @@ if command -v tee >/dev/null 2>&1; then
 else
   exec >>"$LOGFILE" 2>&1
 fi
-usage() {
-  echo "Usage: grkr init <project-id> | grkr --issue <number> | grkr --project <id>"
-  echo "Example: grkr init 42"
-  echo "Example: grkr --issue 1"
-  echo "Example: grkr --project 42"
-  exit 1
-}
-
 MAX_FILE_LINES=1000
 MAX_PR_BODY_CHARS=60000
 VALIDATION_OK=0
@@ -146,32 +156,32 @@ check_file_line_limit() {
   return $violations
 }
 
-timestamp_utc() {
-  date -u +"%Y-%m-%dT%H:%M:%SZ"
-}
 
-slugify_text() {
-  printf '%s' "$1" \
-    | tr '[:upper:]' '[:lower:]' \
-    | sed 's/[^a-z0-9]/-/g; s/-\{2,\}/-/g; s/^-//; s/-$//' \
-    | cut -c1-80
-}
+run_progress_cli() {
+  local project_root
+  project_root=${GRKR_GLEAM_PROJECT_ROOT:-$(dirname "$SCRIPT_DIR")}
 
-task_slug_for_issue() {
-  local issue=$1
-  local title=$2
-  local title_slug
+  if [ -f "$project_root/gleam.toml" ]; then
+    (cd "$project_root" && gleam run -m grkr/progress/cli -- "$@")
+    return
+  fi
 
-  title_slug=$(slugify_text "$title")
-  [ -n "$title_slug" ] || title_slug="task"
-  printf 'issue-%s-%s\n' "$issue" "$title_slug"
+  case "${1:-}" in
+    marker)
+      printf '<!-- grkr:checkpoint stage=%s task=%s version=1 -->' "$2" "$3"
+      ;;
+    *)
+      printf 'Missing Gleam project root for grkr progress CLI: %s\n' "$project_root" >&2
+      return 1
+      ;;
+  esac
 }
 
 checkpoint_marker() {
   local stage=$1
   local task_slug=$2
 
-  printf '<!-- grkr:checkpoint stage=%s task=%s version=1 -->' "$stage" "$task_slug"
+  run_progress_cli marker "$stage" "$task_slug"
 }
 
 fetch_issue_comments_json() {
@@ -213,170 +223,6 @@ checkpoint_comment_body_from_json() {
   '
 }
 
-ensure_task_progress_file() {
-  local progress_file=$1
-  local issue=$2
-  local project_item_id=$3
-  local task_slug=$4
-  local branch=$5
-  local now
-  local tmp_file
-
-  [ -f "$progress_file" ] && return 0
-
-  now=$(timestamp_utc)
-  tmp_file=$(mktemp "${TMPDIR:-/tmp}/grkr-progress.XXXXXX")
-  jq -n \
-    --argjson issue_number "$issue" \
-    --arg project_item_id "$project_item_id" \
-    --arg task_slug "$task_slug" \
-    --arg branch "$branch" \
-    --arg started_at "$now" \
-    --arg updated_at "$now" '
-    {
-      issue_number: $issue_number,
-      task_slug: $task_slug,
-      branch: $branch,
-      status: "planning",
-      decision: "undecided",
-      stages: {
-        research: {status: "pending"},
-        plan: {status: "pending"},
-        implement_or_refuse: {status: "pending"},
-        test: {status: "pending"}
-      },
-      started_at: $started_at,
-      updated_at: $updated_at
-    }
-    | if $project_item_id == "" then . else . + {project_item_id: $project_item_id} end
-  ' > "$tmp_file"
-  mv "$tmp_file" "$progress_file"
-}
-
-update_task_progress_stage() {
-  local progress_file=$1
-  local stage=$2
-  local status=$3
-  local comment_id=$4
-  local now
-  local tmp_file
-
-  now=$(timestamp_utc)
-  tmp_file=$(mktemp "${TMPDIR:-/tmp}/grkr-progress.XXXXXX")
-  jq \
-    --arg stage "$stage" \
-    --arg status "$status" \
-    --arg comment_id "$comment_id" \
-    --arg updated_at "$now" '
-    .status = "planning"
-    | .updated_at = $updated_at
-    | .stages[$stage].status = $status
-    | if $comment_id == "" then
-        del(.stages[$stage].comment_id)
-      else
-        .stages[$stage].comment_id = ($comment_id | tonumber? // $comment_id)
-      end
-  ' "$progress_file" > "$tmp_file"
-  mv "$tmp_file" "$progress_file"
-}
-
-mark_task_progress_failed() {
-  local progress_file=$1
-  local stage=$2
-  local now
-  local tmp_file
-
-  now=$(timestamp_utc)
-  tmp_file=$(mktemp "${TMPDIR:-/tmp}/grkr-progress.XXXXXX")
-  jq \
-    --arg stage "$stage" \
-    --arg updated_at "$now" '
-    .status = "failed"
-    | .updated_at = $updated_at
-    | .stages[$stage].status = "failed"
-  ' "$progress_file" > "$tmp_file"
-  mv "$tmp_file" "$progress_file"
-}
-
-mark_task_progress_complete() {
-  local progress_file=$1
-  local branch_url=$2
-  local pr_url=$3
-  local now
-  local tmp_file
-
-  now=$(timestamp_utc)
-  tmp_file=$(mktemp "${TMPDIR:-/tmp}/grkr-progress.XXXXXX")
-  jq \
-    --arg branch_url "$branch_url" \
-    --arg pr_url "$pr_url" \
-    --arg updated_at "$now" '
-    .status = "complete"
-    | .decision = "proceed"
-    | .updated_at = $updated_at
-    | .stages.implement_or_refuse.status = "done"
-    | .stages.test.status = "done"
-    | .branch_url = $branch_url
-    | .pr_url = $pr_url
-  ' "$progress_file" > "$tmp_file"
-  mv "$tmp_file" "$progress_file"
-}
-
-mark_task_progress_refused() {
-  local progress_file=$1
-  local reason_class=$2
-  local comment_id=$3
-  local now
-  local tmp_file
-
-  now=$(timestamp_utc)
-  tmp_file=$(mktemp "${TMPDIR:-/tmp}/grkr-progress.XXXXXX")
-  jq \
-    --arg reason_class "$reason_class" \
-    --arg comment_id "$comment_id" \
-    --arg updated_at "$now" '
-    .status = "refused"
-    | .decision = "refuse"
-    | .updated_at = $updated_at
-    | .stages.implement_or_refuse.status = "done"
-    | .stages.implement_or_refuse.reason_class = $reason_class
-    | if $comment_id == "" then
-        del(.stages.implement_or_refuse.comment_id)
-      else
-        .stages.implement_or_refuse.comment_id = ($comment_id | tonumber? // $comment_id)
-      end
-    | .stages.test.status = "skipped"
-  ' "$progress_file" > "$tmp_file"
-  mv "$tmp_file" "$progress_file"
-}
-
-write_task_meta_env() {
-  local task_dir=$1
-  local issue=$2
-  local task_slug=$3
-  local branch=$4
-  local url=$5
-  local project_item_id=$6
-  local meta_file
-
-  meta_file="$task_dir/meta.env"
-  {
-    printf 'ISSUE_NUMBER=%q\n' "$issue"
-    printf 'TASK_SLUG=%q\n' "$task_slug"
-    printf 'BRANCH=%q\n' "$branch"
-    printf 'ISSUE_URL=%q\n' "$url"
-    printf 'PROJECT_ITEM_ID=%q\n' "$project_item_id"
-  } > "$meta_file"
-}
-
-write_issue_context_file() {
-  local task_dir=$1
-  local issue_json=$2
-  local context_file
-
-  context_file="$task_dir/issue-context.json"
-  printf '%s' "$issue_json" | jq '.' > "$context_file"
-}
 
 ensure_checkpoint_stage() {
   local stage=$1
@@ -567,6 +413,11 @@ ensure_test_checkpoint() {
     fi
   fi
 
+  # Wire test stage hook (Gleam) per spec/26 + t_d87d2215 / #18 spec item 9.
+  # Thin hook only (pure message); heavy verification + test.md + gh post stay in this shell per slice pattern.
+  # Mirrors generate_implement_commit_message wiring for implement stage.
+  run_test_stage_hook
+
   command_list_file=$(mktemp "${TMPDIR:-/tmp}/grkr-test-commands.XXXXXX")
   results_file=$(mktemp "${TMPDIR:-/tmp}/grkr-test-results.XXXXXX")
   build_command_list > "$command_list_file"
@@ -676,6 +527,7 @@ extract_codex_pr_body() {
   local issue=$5
   local url=$6
 
+  # task_log_is_sharded + emit_task_log_stream now delegate to Gleam (t_ef6b855f wiring; persist already was)
   if [ -s "$codex_output_file" ] || task_log_is_sharded "$codex_output_file"; then
     emit_task_log_stream "$codex_output_file" | awk '
       /^## / {found=1}
@@ -766,7 +618,10 @@ publish_issue_changes() {
     return 1
   fi
 
-  git_in_issue_context commit -m "feat: implement #$ISSUE - $TITLE"
+  # Use Gleam hook for conventional msg (per implement_stage + spec/25 + t_39ab1e08)
+  local commit_msg
+  commit_msg=$(generate_implement_commit_message "$ISSUE" "$TITLE")
+  git_in_issue_context commit -m "$commit_msg" 
   git_in_issue_context push -u origin "$BRANCH"
   BRANCH_URL="https://github.com/$REPO/tree/$BRANCH"
   PR_BODY_FILE=$(mktemp "${TMPDIR:-/tmp}/grkr-pr-body.XXXXXX")
@@ -862,27 +717,33 @@ process_issue() {
   decision_prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-decision-prompt.XXXXXX")
   decision_output_file=$(mktemp "${TMPDIR:-/tmp}/grkr-decision-output.XXXXXX")
   write_decision_prompt_file "$decision_prompt_file" "$ISSUE" "$TITLE" "$URL" "$BODY" "$TASK_SLUG" "$ISSUE_WORKTREE_DIR"
-  run_implementation_decision_gate "$ISSUE" "$PROGRESS_FILE" "$decision_prompt_file" "$decision_output_file" "$ISSUE_WORKTREE_DIR" || {
-    rm -f "$decision_prompt_file" "$decision_output_file"
-    return 1
-  }
-  decision=$IMPLEMENTATION_DECISION
-  if [ "$decision" != "proceed" ]; then
-    refusal_result=$(complete_issue_refusal "$ISSUE" "$ISSUE_JSON" "$TASK_SLUG" "$TASK_DIR" "$TITLE" "$PROGRESS_FILE" "$decision_output_file" "$ISSUE_WORKTREE_DIR") || {
+  # Wired to Gleam decision_gate (spec/22 implement-or-refuse + t_4e22c63f): thin shell runs codex to output file (orchestration); gate does extract, progress update, refuse path (calls refusal/flow for checkpoint/backlog/comment), prints "proceed"/"refuse" on stdout.
+  # Replaces prior inlined run_implementation_decision_gate + extract/update/handle_decision_refusal (now dupe removed; gate reuses Gleam decision + refusal/flow).
+  run_codex_prompt "$decision_prompt_file" "$decision_output_file" "decide whether to implement the issue" replace "$ISSUE_WORKTREE_DIR"
+  decision=$(run_decision_gate "$ISSUE" "$decision_output_file" "$PROGRESS_FILE" "$TASK_SLUG" "$ISSUE_WORKTREE_DIR" "$decision_prompt_file" || echo "")
+  decision=$(printf '%s' "$decision" | tr -d '\r\n' | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  case "$decision" in
+    proceed|refuse)
+      IMPLEMENTATION_DECISION=$decision
+      ;;
+    *)
+      echo "❌ Decision gate for issue #$ISSUE returned an invalid result."
       rm -f "$decision_prompt_file" "$decision_output_file"
       return 1
-    }
-    refusal_class=$(printf '%s\n' "$refusal_result" | tail -n2 | head -n1)
-    refusal_comment_id=$(printf '%s\n' "$refusal_result" | tail -n1)
-    mark_task_progress_refused "$PROGRESS_FILE" "$refusal_class" "$refusal_comment_id"
-    rm -f "$decision_prompt_file" "$decision_output_file"
+      ;;
+  esac
+  rm -f "$decision_prompt_file" "$decision_output_file"
+  if [ "$decision" != "proceed" ]; then
+    # Refusal side effects (checkpoint, backlog move, progress, comment post) already performed inside decision_gate CLI via refusal/flow.
+    if [ -n "${ISSUE_WORKTREE_DIR:-}" ]; then
+      cleanup_issue_worktree "$ISSUE_WORKTREE_DIR"
+      echo "🧹 Removed issue worktree: $ISSUE_WORKTREE_DIR"
+    fi
     CURRENT_ISSUE_WORKTREE=""
-    echo "⏸️ Refused implementation for issue #$ISSUE."
     ATTACH_ISSUE_LOGS=0
     attach_issue_logs
     return 0
   fi
-  rm -f "$decision_prompt_file" "$decision_output_file"
   move_issue_to_in_progress "$ISSUE" "$ISSUE_JSON" || return 1
   CURRENT_ISSUE_WORKTREE="$ISSUE_WORKTREE_DIR"
   prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-prompt.XXXXXX")
@@ -890,6 +751,35 @@ process_issue() {
   write_issue_prompt_file "$prompt_file" "$ISSUE" "$TITLE" "$URL" "$BODY" "$TASK_SLUG" "$ISSUE_WORKTREE_DIR"
   codex_output_file="$TASK_DIR/implementation.log"
   run_codex_prompt "$prompt_file" "$codex_output_file" "implement the issue" replace "$ISSUE_WORKTREE_DIR"
+  implementation_refusal=$(detect_implementation_refusal "$codex_output_file")
+  if [ -n "$implementation_refusal" ]; then
+    echo "⚠️ Implementation discovered blockers that require refusal."
+    echo "🔄 Converting implementation attempt to refusal for issue #$ISSUE."
+    implementation_refusal_class=$(normalize_refusal_class "$implementation_refusal")
+    implementation_refusal_reasoning=$(extract_refusal_reasoning "$implementation_refusal" "Implementation discovered that the issue is not ready for safe autonomous completion.")
+    mkdir -p "$TASK_DIR/codex"
+    cp "$codex_output_file" "$TASK_DIR/codex/implementation-before-refusal.log"
+    refusal_result=$(handle_implementation_refusal "$ISSUE" "$PROGRESS_FILE" "$implementation_refusal_class" "$implementation_refusal_reasoning") || {
+      CURRENT_ISSUE_WORKTREE=""
+      rm -f "$prompt_file"
+      CURRENT_PROMPT_FILE=""
+      return 1
+    }
+    refusal_class=$(printf '%s\n' "$refusal_result" | tail -n2 | head -n1)
+    refusal_comment_id=$(printf '%s\n' "$refusal_result" | tail -n1)
+    mark_task_progress_refused "$PROGRESS_FILE" "$refusal_class" "$refusal_comment_id"
+    if [ -n "${ISSUE_WORKTREE_DIR:-}" ]; then
+      cleanup_issue_worktree "$ISSUE_WORKTREE_DIR"
+      echo "🧹 Removed issue worktree: $ISSUE_WORKTREE_DIR"
+    fi
+    CURRENT_ISSUE_WORKTREE=""
+    rm -f "$prompt_file"
+    CURRENT_PROMPT_FILE=""
+    echo "⏸️ Refused implementation for issue #$ISSUE (converted during implementation)."
+    ATTACH_ISSUE_LOGS=0
+    attach_issue_logs
+    return 0
+  fi
   ensure_publishable_file_sizes "$ISSUE" "$TITLE" "$TASK_SLUG" "$prompt_file" "$codex_output_file" || {
     CURRENT_ISSUE_WORKTREE=""
     return 1

@@ -1,16 +1,19 @@
 #!/bin/bash
 set -euo pipefail
 
+repo_root=$(pwd)
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-smoke.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
 cp bin/grkr "$tmpdir/grkr.sh"
 cp bin/grkr-issue-workflow.sh "$tmpdir/grkr-issue-workflow.sh"
 cp bin/grkr-project-status.sh "$tmpdir/grkr-project-status.sh"
+cp bin/grkr-task-slug.sh "$tmpdir/grkr-task-slug.sh"
 cp bin/grkr-templates.sh "$tmpdir/grkr-templates.sh"
 cp bin/doctor.sh "$tmpdir/doctor.sh"
 chmod +x "$tmpdir/grkr.sh"
 chmod +x "$tmpdir/doctor.sh"
+bash "$(dirname "$0")/test-copy-grkr-lib.sh" "$tmpdir"
 
 real_git=$(command -v git)
 mkdir -p "$tmpdir/bin"
@@ -105,7 +108,7 @@ case "\${1-} \${2-}" in
     echo 'https://example.com/pr/1'
     ;;
   'project view') printf '{"id":"PROJECT_1"}\n' ;;
-  'project field-list') printf '[{"id":"FIELD_STATUS","name":"Status","options":[{"id":"OPTION_TODO","name":"Todo"},{"id":"OPTION_IN_PROGRESS","name":"In progress"},{"id":"OPTION_DONE","name":"Done"}]}]\n' ;;
+  'project field-list') printf '[{"id":"FIELD_STATUS","name":"Status","options":[{"id":"OPTION_TODO","name":"Todo"},{"id":"OPTION_IN_PROGRESS","name":"In Progress"},{"id":"OPTION_DONE","name":"Done"}]}]\n' ;;
   'project item-edit') exit 0 ;;
   'issue edit') exit 0 ;;
   *) exit 0 ;;
@@ -114,6 +117,9 @@ EOF
 
 cat > "$tmpdir/bin/codex" <<EOF
 #!/bin/bash
+case "\${1-}" in
+  --help) exit 0 ;;
+esac
 prompt_file=\$(mktemp "${TMPDIR:-/tmp}/grkr-codex-prompt.XXXXXX")
 cat > "\$prompt_file"
 if grep -Fq "Reply with exactly one word on the first non-empty line: proceed or refuse." "\$prompt_file"; then
@@ -189,7 +195,7 @@ chmod +x "$tmpdir/bin/gh" "$tmpdir/bin/codex" "$tmpdir/bin/git" "$tmpdir/bin/tim
 output_file="$tmpdir/output.log"
 (
   cd "$tmpdir"
-  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" bash "$tmpdir/grkr.sh" --issue 1 >"$output_file" 2>&1
+  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_GLEAM_PROJECT_ROOT="$repo_root" bash "$tmpdir/grkr.sh" --issue 1 >"$output_file" 2>&1
 )
 
 grep -F "✅ Startup validation passed." "$output_file" >/dev/null

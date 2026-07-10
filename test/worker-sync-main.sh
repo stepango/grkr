@@ -1,20 +1,22 @@
 #!/bin/bash
 set -euo pipefail
 
+if ! command -v flock >/dev/null 2>&1; then
+  echo "⚠️ flock not available, skipping worker-sync-main test"
+  exit 0
+fi
+
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-worker-sync-main.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
-cp bin/worker-sync-main.sh "$tmpdir/worker-sync-main.sh"
-cp bin/doctor.sh "$tmpdir/doctor.sh"
-chmod +x "$tmpdir/worker-sync-main.sh" "$tmpdir/doctor.sh"
-
+repo_root=$(pwd)
 real_git=$(command -v git)
 git_log="$tmpdir/git.log"
 mkdir -p "$tmpdir/bin" "$tmpdir/.grkr"
 
-cat > "$tmpdir/.grkr/config.sh" <<'EOF'
+cat > "$tmpdir/.grkr/config.sh" <<'CONFIG'
 MAIN_BRANCH="main"
-EOF
+CONFIG
 
 cat > "$tmpdir/bin/git" <<EOF
 #!/bin/bash
@@ -31,7 +33,7 @@ chmod +x "$tmpdir/bin/git"
 
 (
   cd "$tmpdir"
-  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" bash "$tmpdir/worker-sync-main.sh"
+  GRKR_ROOT="$tmpdir" GRKR_GLEAM_PROJECT_ROOT="$repo_root" PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" bash "$repo_root/bin/worker-sync-main.sh"
 )
 
 [ -f "$tmpdir/.grkr/locks/main.lock" ]
@@ -52,7 +54,7 @@ sleep 0.2
 set +e
 (
   cd "$tmpdir"
-  PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" bash "$tmpdir/worker-sync-main.sh"
+  GRKR_ROOT="$tmpdir" GRKR_GLEAM_PROJECT_ROOT="$repo_root" PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" bash "$repo_root/bin/worker-sync-main.sh"
 )
 status=$?
 set -e

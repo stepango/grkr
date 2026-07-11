@@ -16,6 +16,7 @@ import grkr/issue_provider/types
 /// - `team-projects-query <team-id>`: print project discovery query for a team
 /// - `issue-query <identifier>`: print single issue query
 /// - `assigned-issues-query`: print assigned issues query using current config
+/// - `fetch-issue <identifier>`: load one issue (fixture or live) and emit shell KEY=val
 ///
 /// Default behavior (no args): select a Linear issue and emit shell assignments
 pub fn main() -> Nil {
@@ -27,6 +28,7 @@ pub fn main() -> Nil {
     ["issue-query", identifier] ->
       emit_query(query.build_issue_query(identifier))
     ["assigned-issues-query"] -> emit_assigned_issues_query()
+    ["fetch-issue", identifier] -> emit_fetch_issue(identifier)
     [] -> {
       case run() {
         Ok(issue) -> emit_success(issue)
@@ -69,6 +71,7 @@ fn emit_usage() -> Nil {
   io.println("       gleam run -m grkr/issue_provider/main -- team-projects-query <team-id>")
   io.println("       gleam run -m grkr/issue_provider/main -- issue-query <identifier>")
   io.println("       gleam run -m grkr/issue_provider/main -- assigned-issues-query")
+  io.println("       gleam run -m grkr/issue_provider/main -- fetch-issue <identifier>")
   io.println("")
   io.println("Linear issue provider discovery/query CLI:")
   io.println("  (no args)           Select a Linear issue and emit shell assignments")
@@ -77,9 +80,10 @@ fn emit_usage() -> Nil {
   io.println("  team-projects-query Print the project discovery query for a team")
   io.println("  issue-query         Print a single issue query by identifier")
   io.println("  assigned-issues-query Print the assigned-issues query using current config")
+  io.println("  fetch-issue         Load one issue (fixture/live) and emit shell KEY=val")
   io.println("")
-  io.println("All query commands are safe/non-mutating and only print GraphQL queries.")
-  io.println("These commands never read or print credentials.")
+  io.println("Query-only commands never read credentials. fetch-issue uses LINEAR_FIXTURE_PATH")
+  io.println("when set; otherwise GRKR_LINEAR_ACCESS_TOKEN or ~/.linear/token.txt.")
   exit(2)
 }
 
@@ -129,8 +133,8 @@ fn result_try_config(
 
 fn result_try_provider(
   result: Result(a, types.ProviderError),
-  next: fn(a) -> Result(types.SelectedIssue, types.ProviderError),
-) -> Result(types.SelectedIssue, types.ProviderError) {
+  next: fn(a) -> Result(b, types.ProviderError),
+) -> Result(b, types.ProviderError) {
   case result {
     Ok(value) -> next(value)
     Error(error) -> Error(error)
@@ -161,6 +165,103 @@ fn emit_success(issue: types.SelectedIssue) -> Nil {
   io.println("ISSUE_TITLE=" <> shell_quote(issue.title))
   io.println("ISSUE_URL=" <> shell_quote(issue.url))
   io.println("ISSUE_STATE=" <> shell_quote(issue.state_name))
+  io.println(
+    "ISSUE_PRIORITY=" <> shell_quote(priority_to_string(issue.priority)),
+  )
+  io.println("ISSUE_UPDATED_AT=" <> shell_quote(issue.updated_at))
+  io.println(
+    "JOB_KEY=" <> shell_quote(types.job_key_for_identifier(issue.identifier)),
+  )
+  io.println(
+    "TASK_SLUG=" <> shell_quote(types.task_slug_for_identifier(issue.identifier)),
+  )
+}
+
+fn emit_fetch_issue(identifier: String) -> Nil {
+  case string.trim(identifier) {
+    "" -> {
+      io.println("FOUND=0")
+      io.println("ERROR=" <> shell_quote("empty Linear issue identifier"))
+      exit(1)
+    }
+    id ->
+      case fetch_issue_by_identifier(id) {
+        Ok(issue) -> emit_issue_context(issue)
+        Error(error) -> {
+          io.println("FOUND=0")
+          io.println(
+            "ERROR=" <> shell_quote(types.provider_error_to_string(error)),
+          )
+          exit(1)
+        }
+      }
+  }
+}
+
+/// Load one Linear issue by human identifier for `grkr --linear-issue`.
+/// Prefer fixture (`LINEAR_FIXTURE_PATH` assigned-issues JSON or single-issue
+/// `{data.issue}` JSON). Live path uses resolve_access_token + issue query.
+pub fn fetch_issue_by_identifier(
+  identifier: String,
+) -> Result(types.LinearIssue, types.ProviderError) {
+  let fixture_path = get_env("LINEAR_FIXTURE_PATH")
+  case fixture_path == "" {
+    True -> fetch_issue_live(identifier)
+    False -> fetch_issue_from_fixture(fixture_path, identifier)
+  }
+}
+
+fn fetch_issue_from_fixture(
+  path: String,
+  identifier: String,
+) -> Result(types.LinearIssue, types.ProviderError) {
+  use contents <- result_try_provider(read_fixture(path))
+  case decoder.decode_issue_response(contents) {
+    Ok(issue) -> {
+      case string.lowercase(issue.identifier) == string.lowercase(identifier) {
+        True -> Ok(issue)
+        False ->
+          Error(types.QueryError(
+            "Fixture issue identifier mismatch: expected "
+            <> identifier
+            <> ", got "
+            <> issue.identifier,
+          ))
+      }
+    }
+    Error(_) -> {
+      use issues <- result_try_provider(decode_fixture(contents))
+      case decoder.find_issue_by_identifier(issues, identifier) {
+        Ok(issue) -> Ok(issue)
+        Error(message) -> Error(types.QueryError(message))
+      }
+    }
+  }
+}
+
+fn fetch_issue_live(
+  identifier: String,
+) -> Result(types.LinearIssue, types.ProviderError) {
+  use token <- result_try_provider(client.resolve_access_token())
+  let graphql_query = query.build_issue_query(identifier)
+  use contents <- result_try_provider(
+    client.run_graphql_query(token, graphql_query),
+  )
+  case decoder.decode_issue_response(contents) {
+    Ok(issue) -> Ok(issue)
+    Error(message) -> Error(types.ParseError(message))
+  }
+}
+
+fn emit_issue_context(issue: types.LinearIssue) -> Nil {
+  io.println("FOUND=1")
+  io.println("ISSUE_ID=" <> shell_quote(issue.id))
+  io.println("ISSUE_IDENTIFIER=" <> shell_quote(issue.identifier))
+  io.println("ISSUE_TITLE=" <> shell_quote(issue.title))
+  io.println("ISSUE_DESCRIPTION=" <> shell_quote(issue.description))
+  io.println("ISSUE_URL=" <> shell_quote(issue.url))
+  io.println("ISSUE_STATE=" <> shell_quote(issue.state.name))
+  io.println("ISSUE_STATE_ID=" <> shell_quote(issue.state.id))
   io.println(
     "ISSUE_PRIORITY=" <> shell_quote(priority_to_string(issue.priority)),
   )

@@ -2,15 +2,18 @@ import gleam/option.{type Option}
 import gleam/string
 import gleam/int
 
-/// Job key variants for active jobs (GitHub-only for this slice)
+/// Job key variants for active jobs (GitHub + Linear execution).
 pub type JobKey {
   PrConflict(number: Int)
   IssueExecution(number: Int)
+  /// Linear issue execution keyed by provider identifier (e.g. ENG-123).
+  LinearExecution(identifier: String)
   Comment(id: String)
   // Future: IssueRefusal(number: Int)
 }
 
-/// Parse job key string e.g. "pr:123:conflict-resolution" or "issue:42:execution" or "comment:123"
+/// Parse job key string e.g. "pr:123:conflict-resolution", "issue:42:execution",
+/// "linear:ENG-123:execution", or "comment:123".
 pub fn job_key_from_string(s: String) -> Result(JobKey, String) {
   let parts = string.split(s, ":")
   case parts {
@@ -26,6 +29,12 @@ pub fn job_key_from_string(s: String) -> Result(JobKey, String) {
         Error(_) -> Error("invalid issue number in key: " <> s)
       }
     }
+    ["linear", identifier, "execution"] -> {
+      case string.trim(identifier) {
+        "" -> Error("empty linear identifier in key: " <> s)
+        id -> Ok(LinearExecution(id))
+      }
+    }
     ["comment", id] -> Ok(Comment(id))
     _ -> Error("unknown job key format: " <> s)
   }
@@ -35,6 +44,7 @@ pub fn job_key_to_string(key: JobKey) -> String {
   case key {
     PrConflict(n) -> "pr:" <> int.to_string(n) <> ":conflict-resolution"
     IssueExecution(n) -> "issue:" <> int.to_string(n) <> ":execution"
+    LinearExecution(id) -> "linear:" <> id <> ":execution"
     Comment(id) -> "comment:" <> id
   }
 }
@@ -43,6 +53,11 @@ pub fn job_key_lock_name(key: JobKey) -> String {
   case key {
     PrConflict(n) -> "pr-" <> int.to_string(n)
     IssueExecution(n) -> "issue-" <> int.to_string(n)
+    // eng-123 style: lowercase identifier (matches Linear task_slug convention)
+    LinearExecution(id) ->
+      id
+      |> string.lowercase
+      |> string.replace("/", "-")
     Comment(id) -> "comment-" <> id
   }
 }

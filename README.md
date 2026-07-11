@@ -188,7 +188,7 @@ Linear credential setup:
 4. Store the access token at `~/.linear/token.txt` (or set `GRKR_LINEAR_TOKEN_PATH`), or set `GRKR_LINEAR_ACCESS_TOKEN` for the current run.
 5. Do not use OAuth app credentials as a personal API key. grkr sends only the derived token with Linear's required bearer authorization header, never reads `~/.linear/secret.txt` as an API token, and redacts token values from client errors.
 
-For fixture-backed selection, set `LINEAR_FIXTURE_PATH` to a JSON file containing Linear API response data. This slice returns shell-safe Linear issue metadata (`ISSUE_IDENTIFIER`, title, URL, state, priority, update time, job key, and task slug), but the supervisor only schedules executable work when a provider returns the GitHub `ISSUE_NUMBER` required by `grkr --issue`. Full Linear issue execution is still pending.
+For fixture-backed selection, set `LINEAR_FIXTURE_PATH` to a JSON file containing Linear API response data. Selection emits shell-safe Linear issue metadata (`ISSUE_IDENTIFIER`, title, URL, state, priority, update time, job key `linear:<ID>:execution`, and task slug). The supervisor schedules Linear work via `JobKey.LinearExecution`, records `entity_type=issue_linear` in `active_jobs.json` with lock names in `eng-123` style, and spawns `grkr --linear-issue <identifier>`. The GitHub path (`grkr --issue N`, `entity_type=issue`) is unchanged. The `grkr --linear-issue` workflow CLI itself may still be an MVP/stub until the follow-up Linear workflow card lands.
 
 The Linear provider supports:
 - Team and project-scoped issue queries

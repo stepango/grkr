@@ -220,7 +220,7 @@ fn run_pick_and_schedule_issue_execution_phase(
                       None -> "unknown"
                     }
                   },
-                  "scheduled_jobs=0 linear_execution_scheduler_pending=true "
+                  "scheduled_jobs=0 schedule_pending=true "
                     <> pick.schedule_pending_log_fields(work),
                 )
               False

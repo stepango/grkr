@@ -85,20 +85,41 @@ pub fn from_linear(sel: linear_types.SelectedIssue) -> SelectedWork {
   )
 }
 
-/// Schedule execution for a picked issue. GitHub uses spawn_issue_execution;
-/// Linear scheduling is added in a follow-up card (logs pending when identifier-only).
+/// Schedule execution for a picked issue.
+/// GitHub: spawn_issue_execution (`grkr --issue N`).
+/// Linear: spawn_linear_issue_execution (`grkr --linear-issue IDENT`).
 pub fn schedule_selected(
   config: t.SupervisorConfig,
   work: SelectedWork,
 ) -> Result(Bool, t.SupervisorError) {
-  case work.issue_number {
-    Some(n) -> {
-      case scheduler.spawn_issue_execution(config, n, work.task_slug, work.project_item_id) {
+  case work.issue_number, work.identifier {
+    Some(n), _ -> {
+      case
+        scheduler.spawn_issue_execution(
+          config,
+          n,
+          work.task_slug,
+          work.project_item_id,
+        )
+      {
         Ok(_) -> Ok(True)
         Error(e) -> Error(e)
       }
     }
-    None -> Ok(False)
+    None, Some(identifier) -> {
+      case
+        scheduler.spawn_linear_issue_execution(
+          config,
+          identifier,
+          work.task_slug,
+          work.project_item_id,
+        )
+      {
+        Ok(_) -> Ok(True)
+        Error(e) -> Error(e)
+      }
+    }
+    None, None -> Ok(False)
   }
 }
 
@@ -155,15 +176,15 @@ pub fn selected_log_fields(work: SelectedWork) -> String {
 /// Shell-parity fields for pick_and_schedule success logs (robot-main-schedules-issue.sh).
 pub fn schedule_success_log_fields(work: SelectedWork) -> String {
   let base = selected_log_fields(work)
-  case work.issue_number {
-    Some(n) ->
-      base <> " selected_issue=" <> int.to_string(n)
-    None -> base
+  case work.issue_number, work.identifier {
+    Some(n), _ -> base <> " selected_issue=" <> int.to_string(n)
+    None, Some(id) -> base <> " selected_issue=" <> id
+    None, None -> base
   }
 }
 
-/// Shell-parity fields when pick succeeded but execution spawn is deferred (Linear).
+/// Fields when pick succeeded but schedule could not spawn (missing ids).
 pub fn schedule_pending_log_fields(work: SelectedWork) -> String {
-  "selected_issue_missing_number=true "
+  "selected_issue_missing_ids=true "
     <> selected_log_fields(work)
 }

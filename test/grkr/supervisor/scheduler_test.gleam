@@ -139,3 +139,57 @@ pub fn spawn_issue_execution_returns_positive_pid_test() {
 
   cleanup_fixture(root)
 }
+
+pub fn spawn_linear_issue_execution_records_active_job_test() {
+  let #(root, _runner_log) = prepare_issue_spawn_fixture()
+  set_env("GRKR_ROOT", root)
+
+  let cfg = load_test_config(root)
+  let assert Ok(_) = config.ensure_layout(cfg)
+
+  let task_slug = "eng-123"
+  let assert Ok(pid) =
+    scheduler.spawn_linear_issue_execution(cfg, "ENG-123", task_slug, None)
+  case pid > 0 {
+    True -> Nil
+    False -> should.fail()
+  }
+
+  pause_for_spawn()
+
+  let assert Ok(jobs) = state.read_active_jobs(cfg.active_jobs_file)
+  let assert Ok(aj) = dict.get(jobs, "linear:ENG-123:execution")
+  let types.ActiveJob(_, et, eid, ln, ts, _, proj) = aj
+  et |> should.equal("issue_linear")
+  eid |> should.equal("ENG-123")
+  ln |> should.equal("eng-123")
+  ts |> should.equal(task_slug)
+  proj |> should.equal(None)
+
+  let job_log = cfg.job_logs_dir <> "/linear-ENG-123-execution.log"
+  ffi.exists(job_log) |> should.be_true()
+
+  let lock_file = cfg.locks_dir <> "/eng-123.lock"
+  ffi.exists(lock_file) |> should.be_true()
+
+  cleanup_fixture(root)
+}
+
+pub fn spawn_linear_issue_execution_runs_grkr_linear_issue_argv_test() {
+  let #(root, runner_log) = prepare_issue_spawn_fixture()
+  set_env("GRKR_ROOT", root)
+
+  let cfg = load_test_config(root)
+  let assert Ok(_) = config.ensure_layout(cfg)
+
+  let assert Ok(_) =
+    scheduler.spawn_linear_issue_execution(cfg, "ENG-123", "eng-123", None)
+
+  pause_for_spawn()
+
+  let log = read_runner_log(runner_log)
+  string.contains(log, "--linear-issue") |> should.be_true()
+  string.contains(log, "ENG-123") |> should.be_true()
+
+  cleanup_fixture(root)
+}

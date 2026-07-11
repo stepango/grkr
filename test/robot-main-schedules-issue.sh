@@ -110,7 +110,7 @@ done
 grep -F -- '--issue 42' "$runner_log" >/dev/null
 
 printf '{}\n' > "$tmpdir/.grkr/state/active_jobs.json"
-runner_lines_before=$(wc -l < "$runner_log" | tr -d ' ')
+: > "$runner_log"
 
 (
   cd "$tmpdir"
@@ -119,10 +119,26 @@ runner_lines_before=$(wc -l < "$runner_log" | tr -d ' ')
     GRKR_ISSUE_PROVIDER=linear \
     LINEAR_ASSIGNEE_ID=u1 \
     LINEAR_FIXTURE_PATH="$repo_root/test/fixtures/linear-assigned-issues.json" \
+    GRKR_ACTIVE_JOBS_PATH="$tmpdir/.grkr/state/active_jobs.json" \
     GRKR_MAX_TICKS=1 bash "$tmpdir/robot-main.sh" >"$output_file" 2>&1
 )
 
-runner_lines_after=$(wc -l < "$runner_log" | tr -d ' ')
-[ "$runner_lines_after" = "$runner_lines_before" ]
-grep -F 'selected_issue_missing_number=true' "$tmpdir/.grkr/logs/loop.log" >/dev/null
-jq -e 'length == 0' "$tmpdir/.grkr/state/active_jobs.json" >/dev/null
+sleep 0.2
+
+grep -F 'scheduled_jobs=1' "$tmpdir/.grkr/logs/loop.log" | grep -F 'selected_issue=ENG-123' >/dev/null
+grep -F 'task_slug=eng-123' "$tmpdir/.grkr/logs/loop.log" >/dev/null
+jq -e '.["linear:ENG-123:execution"].entity_type == "issue_linear"' "$tmpdir/.grkr/state/active_jobs.json" >/dev/null
+jq -e '.["linear:ENG-123:execution"].entity_id == "ENG-123"' "$tmpdir/.grkr/state/active_jobs.json" >/dev/null
+jq -e '.["linear:ENG-123:execution"].lock_name == "eng-123"' "$tmpdir/.grkr/state/active_jobs.json" >/dev/null
+jq -e '.["linear:ENG-123:execution"].task_slug == "eng-123"' "$tmpdir/.grkr/state/active_jobs.json" >/dev/null
+[ -f "$tmpdir/.grkr/logs/jobs/linear-ENG-123-execution.log" ]
+[ -f "$tmpdir/.grkr/locks/eng-123.lock" ]
+
+for _ in {1..20}; do
+  if grep -F -- '--linear-issue ENG-123' "$runner_log" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.1
+done
+
+grep -F -- '--linear-issue ENG-123' "$runner_log" >/dev/null

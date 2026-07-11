@@ -26,6 +26,16 @@ pub fn job_key_roundtrip_test() {
     }
     Error(_) -> should.fail()
   }
+
+  let linear_key = types.job_key_from_string("linear:ENG-123:execution")
+  case linear_key {
+    Ok(k) -> {
+      types.job_key_to_string(k) |> should.equal("linear:ENG-123:execution")
+      types.job_key_lock_name(k) |> should.equal("eng-123")
+      types.job_key_log_basename(k) |> should.equal("linear-ENG-123-execution")
+    }
+    Error(_) -> should.fail()
+  }
 }
 
 pub fn job_key_invalid_test() {

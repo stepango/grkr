@@ -5,7 +5,7 @@
 //// - acquire_lock(path) returns LockResult (Acquired | Busy)
 //// - release_lock(path) -> Bool
 //// - check_stale_lock(path) for recovery / purge_stale_lock_files
-//// - convenience helpers for JobKey-based per-job locks (pr-N, issue-N, comment-ID)
+//// - convenience helpers for JobKey-based per-job locks (pr-N, issue-N, eng-123, comment-ID)
 ////
 //// Matches shell semantics from bin/robot-main.sh:
 ////   - flock -n 9 || exit 75  (Busy treated as non-fatal skip in phases)
@@ -63,7 +63,7 @@ pub fn lock_path(locks_dir: String, lock_name: String) -> String {
   locks_dir <> "/" <> lock_name <> ".lock"
 }
 
-/// Acquire a per-job lock derived from JobKey (uses job_key_lock_name: "pr-42", "issue-7", "comment-abc123").
+/// Acquire a per-job lock derived from JobKey (uses job_key_lock_name: "pr-42", "issue-7", "eng-123", "comment-abc123").
 pub fn acquire_lock_for_job_key(
   locks_dir: String,
   job_key: JobKey,

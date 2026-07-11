@@ -111,7 +111,7 @@ pub fn schedule_success_log_fields_github_test() {
   string.contains(msg, "task_slug=issue-42-fixture-pick-issue") |> should.be_true()
 }
 
-pub fn schedule_pending_log_fields_linear_test() {
+pub fn schedule_success_log_fields_linear_test() {
   let work =
     pick.SelectedWork(
       issue_number: None,
@@ -122,9 +122,25 @@ pub fn schedule_pending_log_fields_linear_test() {
       project_item_id: None,
       provider: "linear",
     )
-  let msg = pick.schedule_pending_log_fields(work)
-  string.contains(msg, "selected_issue_missing_number=true") |> should.be_true()
+  let msg = pick.schedule_success_log_fields(work)
+  string.contains(msg, "selected_issue=ENG-123") |> should.be_true()
   string.contains(msg, "identifier=ENG-123") |> should.be_true()
+  string.contains(msg, "task_slug=eng-123") |> should.be_true()
+}
+
+pub fn schedule_pending_log_fields_missing_ids_test() {
+  let work =
+    pick.SelectedWork(
+      issue_number: None,
+      identifier: None,
+      issue_title: "t",
+      job_key: "unknown",
+      task_slug: "unknown",
+      project_item_id: None,
+      provider: "unknown",
+    )
+  let msg = pick.schedule_pending_log_fields(work)
+  string.contains(msg, "selected_issue_missing_ids=true") |> should.be_true()
 }
 
 fn fixture_root() -> String {

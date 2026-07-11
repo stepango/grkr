@@ -178,12 +178,16 @@ pub fn remove_active_job(path: String, key: String) -> Result(Nil, t.SupervisorE
   write_active_jobs_atomic(path, updated)
 }
 
-/// Count how many active jobs are issue:<n>:execution (used by picker to gate concurrency).
+/// Count active issue executions (GitHub issue:N:execution and Linear linear:ID:execution).
+/// Used by pickers to gate concurrency.
 pub fn count_active_issue_executions(jobs: Dict(String, t.ActiveJob)) -> Int {
   jobs
   |> dict.keys
   |> list.filter(fn(k) {
-    string.starts_with(k, "issue:") && string.contains(k, ":execution")
+    string.contains(k, ":execution")
+    && {
+      string.starts_with(k, "issue:") || string.starts_with(k, "linear:")
+    }
   })
   |> list.length
 }

@@ -1,8 +1,8 @@
 //// scheduler.gleam
 //// Background workflow spawner + active job recorder for supervisor pick phase etc.
 //// Replicates shell `schedule_issue_execution_job` exactly (flock wrapper, pid capture, record, logs via caller).
-//// Types: ScheduledJob + spawn_workflow / spawn_issue_execution helpers.
-//// GitHub-only v2. Uses state.record_active_job (atomic), ffi.spawn_detached + exists.
+//// Types: ScheduledJob + spawn_workflow / spawn_issue_execution / spawn_linear_issue_execution helpers.
+//// GitHub + Linear. Uses state.record_active_job (atomic), ffi.spawn_detached + exists.
 //// Per supervisor-design-final.md, spec/parts/07/09/39, AGENTS.md (file <1000 LOC).
 
 import gleam/dict
@@ -87,7 +87,7 @@ pub fn spawn_workflow(
   }
 }
 
-/// Convenience for the current GitHub pick phase (issue:NNN:execution workflow).
+/// Convenience for the GitHub pick phase (issue:NNN:execution workflow).
 pub fn spawn_issue_execution(
   config: t.SupervisorConfig,
   issue_number: Int,
@@ -101,9 +101,25 @@ pub fn spawn_issue_execution(
   spawn_workflow(config, sj)
 }
 
+/// Convenience for Linear pick phase (linear:IDENTIFIER:execution workflow).
+/// Spawns `grkr --linear-issue <identifier>` (CLI workflow may still be MVP/stub).
+pub fn spawn_linear_issue_execution(
+  config: t.SupervisorConfig,
+  identifier: String,
+  task_slug: String,
+  project_item_id: Option(String),
+) -> Result(Int, t.SupervisorError) {
+  let key = t.LinearExecution(identifier)
+  let grkr_bin = resolve_grkr_bin(config)
+  let worker_cmd = [grkr_bin, "--linear-issue", identifier]
+  let sj = ScheduledJob(key, task_slug, project_item_id, worker_cmd)
+  spawn_workflow(config, sj)
+}
+
 fn entity_from_key(key: t.JobKey) -> #(String, String) {
   case key {
     t.IssueExecution(n) -> #("issue", int.to_string(n))
+    t.LinearExecution(id) -> #("issue_linear", id)
     t.PrConflict(n) -> #("pr", int.to_string(n))
     t.Comment(id) -> #("comment", id)
   }

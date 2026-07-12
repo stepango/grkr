@@ -18,8 +18,48 @@ run_issue_provider_cli() {
   (cd "$prj" && gleam run -m grkr/issue_provider/main -- "$@")
 }
 
-# Parse KEY="value" shell assignments from gleam stdout into named vars via eval-safe source.
-# Only accepts known keys; values already shell-quoted by the Gleam emitter.
+# Decode a Gleam shell_quote payload (optional surrounding double quotes).
+# Wire protocol is single-line KEY="..." with escapes: \\ \" \$ \` \n \r.
+# Physical newlines must never appear inside values (multi-line Linear bodies use \n).
+decode_shell_assignment_value() {
+  local val="$1"
+  local output=""
+  local i=0
+  local len
+  local c
+  local next
+
+  if [ "${val#\"}" != "$val" ] && [ "${val%\"}" != "$val" ]; then
+    val=${val#\"}
+    val=${val%\"}
+  fi
+
+  len=${#val}
+  while [ "$i" -lt "$len" ]; do
+    c=${val:i:1}
+    if [ "$c" = '\' ] && [ $((i + 1)) -lt "$len" ]; then
+      next=${val:i+1:1}
+      case "$next" in
+        n) output+=$'\n' ;;
+        r) output+=$'\r' ;;
+        \\) output+='\' ;;
+        '"') output+='"' ;;
+        '$') output+='$' ;;
+        '`') output+='`' ;;
+        *) output+="$next" ;;
+      esac
+      i=$((i + 2))
+    else
+      output+="$c"
+      i=$((i + 1))
+    fi
+  done
+  printf '%s' "$output"
+}
+
+# Parse single-line KEY="value" shell assignments from gleam fetch-issue stdout.
+# Only accepts known keys; values are shell_quote-encoded by the Gleam emitter
+# (including \n/\r for multi-line title/description).
 load_linear_issue_assignments() {
   local identifier=$1
   local raw
@@ -51,14 +91,7 @@ load_linear_issue_assignments() {
     case "$line" in
       FOUND=*|ISSUE_ID=*|ISSUE_IDENTIFIER=*|ISSUE_TITLE=*|ISSUE_DESCRIPTION=*|ISSUE_URL=*|ISSUE_STATE=*|ISSUE_STATE_ID=*|ISSUE_PRIORITY=*|ISSUE_UPDATED_AT=*|JOB_KEY=*|TASK_SLUG=*|ERROR=*)
         key=${line%%=*}
-        val=${line#*=}
-        # Strip surrounding double quotes if present
-        if [ "${val#\"}" != "$val" ] && [ "${val%\"}" != "$val" ]; then
-          val=${val#\"}
-          val=${val%\"}
-          val=${val//\\\"/\"}
-          val=${val//\\\\/\\}
-        fi
+        val=$(decode_shell_assignment_value "${line#*=}")
         case "$key" in
           FOUND) FOUND=$val ;;
           ISSUE_ID) ISSUE_ID=$val ;;

@@ -152,6 +152,77 @@ if grep -F 'issue view' "$gh_log" >/dev/null 2>&1; then
   exit 1
 fi
 
+# Multi-line title/description wire protocol regression (ENG-456 fixture).
+# Real Linear bodies contain newlines; KEY=val must preserve full body.
+multiline_out="$tmpdir/multiline.log"
+(
+  cd "$tmpdir"
+  PATH="$tmpdir/bin:$PATH" \
+    HOME="$tmpdir/home" \
+    GRKR_GLEAM_PROJECT_ROOT="$repo_root" \
+    LINEAR_FIXTURE_PATH="$repo_root/test/fixtures/linear-assigned-issues.json" \
+    bash "$tmpdir/grkr.sh" --linear-issue ENG-456 >"$multiline_out" 2>&1
+)
+grep -F 'Linear MVP complete for ENG-456' "$multiline_out" >/dev/null || {
+  echo "multi-line MVP completion marker missing" >&2
+  cat "$multiline_out" >&2
+  exit 1
+}
+
+ml_task_dir="$tmpdir/.grkr/tasks/eng-456"
+[ -f "$ml_task_dir/issue-context.json" ]
+[ -f "$ml_task_dir/research.md" ]
+
+# Full multi-line description preserved in issue-context.json
+jq -e '
+  .identifier == "ENG-456"
+  and (.description | contains("First paragraph with \"quotes\" and $vars."))
+  and (.description | contains("Second paragraph:"))
+  and (.description | contains("- bullet one"))
+  and (.description | contains("- bullet two with path\\segment"))
+  and (.description | contains("End of body."))
+  and (.description | test("\n\n"))
+  and (.title | contains("Multi-line body:"))
+  and (.title | contains("preserve newlines"))
+' "$ml_task_dir/issue-context.json" >/dev/null || {
+  echo "multi-line description/title not preserved in issue-context.json" >&2
+  cat "$ml_task_dir/issue-context.json" >&2
+  exit 1
+}
+
+# Research checkpoint embeds the full body (not truncated at first newline)
+grep -F 'First paragraph with "quotes" and $vars.' "$ml_task_dir/research.md" >/dev/null
+grep -F 'End of body.' "$ml_task_dir/research.md" >/dev/null || {
+  echo "research.md missing trailing multi-line body content" >&2
+  cat "$ml_task_dir/research.md" >&2
+  exit 1
+}
+
+# Emitter must keep each KEY=val on one physical line (\\n escapes, no raw newlines in values)
+wire_raw=$(
+  cd "$repo_root" && \
+  LINEAR_FIXTURE_PATH="$repo_root/test/fixtures/linear-assigned-issues.json" \
+    gleam run -m grkr/issue_provider/main -- fetch-issue ENG-456 2>/dev/null
+)
+printf '%s\n' "$wire_raw" | grep -E '^ISSUE_DESCRIPTION="' >/dev/null || {
+  echo "fetch-issue missing ISSUE_DESCRIPTION assignment" >&2
+  printf '%s\n' "$wire_raw" >&2
+  exit 1
+}
+# Description assignment is a single line containing escaped \n sequences
+desc_line=$(printf '%s\n' "$wire_raw" | grep -E '^ISSUE_DESCRIPTION=' | head -n1)
+printf '%s' "$desc_line" | grep -F '\n' >/dev/null || {
+  echo "ISSUE_DESCRIPTION missing \\n escapes for multi-line body" >&2
+  printf '%s\n' "$desc_line" >&2
+  exit 1
+}
+# No raw multi-line: count of ISSUE_DESCRIPTION= lines must be exactly 1
+desc_count=$(printf '%s\n' "$wire_raw" | grep -c -E '^ISSUE_DESCRIPTION=' || true)
+[ "$desc_count" = "1" ] || {
+  echo "expected one ISSUE_DESCRIPTION line, got $desc_count" >&2
+  exit 1
+}
+
 # empty identifier rejected
 if PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_GLEAM_PROJECT_ROOT="$repo_root" \
   bash "$tmpdir/grkr.sh" --linear-issue '' >"$tmpdir/empty.log" 2>&1; then

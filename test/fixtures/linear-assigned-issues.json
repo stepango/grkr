@@ -32,6 +32,36 @@
             },
             "createdAt": "2026-04-28T00:00:00Z",
             "updatedAt": "2026-04-28T12:00:00Z"
+          },
+          {
+            "id": "LIN-002",
+            "identifier": "ENG-456",
+            "title": "Multi-line body:\npreserve newlines",
+            "description": "First paragraph with \"quotes\" and $vars.\n\nSecond paragraph:\n- bullet one\n- bullet two with path\\segment\n\nEnd of body.",
+            "url": "https://linear.app/issue/ENG-456",
+            "state": {
+              "id": "s1",
+              "name": "Todo",
+              "type": "backlog"
+            },
+            "priority": 3,
+            "assignee": {
+              "id": "u1",
+              "name": "bot",
+              "displayName": "Robot Bot"
+            },
+            "project": {
+              "id": "p1",
+              "name": "Integration",
+              "url": "https://linear.app/project/p1"
+            },
+            "team": {
+              "id": "t1",
+              "key": "ENG",
+              "name": "Engineering"
+            },
+            "createdAt": "2026-07-11T00:00:00Z",
+            "updatedAt": "2026-07-11T12:00:00Z"
           }
         ]
       }

@@ -16,7 +16,8 @@ import grkr/issue_provider/types
 /// - `team-projects-query <team-id>`: print project discovery query for a team
 /// - `issue-query <identifier>`: print single issue query
 /// - `assigned-issues-query`: print assigned issues query using current config
-/// - `fetch-issue <identifier>`: load one issue (fixture or live) and emit shell KEY=val
+/// - `fetch-issue <identifier>`: load one issue (fixture or live) and emit
+///   single-line shell KEY="val" assignments (`\n`/`\r` escaped in values)
 ///
 /// Default behavior (no args): select a Linear issue and emit shell assignments
 pub fn main() -> Nil {
@@ -289,6 +290,10 @@ fn priority_to_string(priority: types.LinearPriority) -> String {
   }
 }
 
+/// Encode a value as a single-line shell KEY="..." assignment payload.
+/// Escapes backslash, quote, $, backtick, and physical newlines/CRs so multi-line
+/// Linear title/description never break the line-oriented KEY=val wire protocol
+/// consumed by bin/lib/linear_issue.sh load_linear_issue_assignments.
 fn shell_quote(value: String) -> String {
   "\""
   <> {
@@ -297,6 +302,8 @@ fn shell_quote(value: String) -> String {
     |> string.replace("\"", "\\\"")
     |> string.replace("$", "\\$")
     |> string.replace("`", "\\`")
+    |> string.replace("\r", "\\r")
+    |> string.replace("\n", "\\n")
   }
   <> "\""
 }

@@ -56,7 +56,11 @@ pub fn is_valid_stage(stage: String) -> Bool {
 }
 
 pub fn requires_linear_state_update(stage: CheckpointStage) -> Bool {
-  list.any([Research, Plan, Implementation, Test, PrSummary], fn(s) { s == stage })
+  // Refusal maps to Backlog (spec/23); include with other stage→state transitions.
+  list.any(
+    [Research, Plan, Refusal, Implementation, Test, PrSummary],
+    fn(s) { s == stage },
+  )
 }
 
 pub fn terminal_stage() -> CheckpointStage {

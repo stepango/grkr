@@ -61,3 +61,7 @@ pub fn update_progress_for_refusal(progress_file: String, reason_class: String, 
 /// Check if a file exists (for idempotency checks on refusal.md).
 @external(javascript, "../refusal/fs.mjs", "exists_file")
 pub fn exists_file(path: String) -> Bool
+
+/// Read file text or return "" on error/missing (for context/meta reads in linear path).
+@external(javascript, "../refusal/fs.mjs", "read_text_or_empty")
+pub fn read_text_or_empty(path: String) -> String

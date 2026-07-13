@@ -1,8 +1,9 @@
 import gleeunit
+import gleam/option
 import gleam/string
 import gleeunit/should
 import grkr/progress/checkpoint_stage
-import grkr/progress/main
+import grkr/progress/main as progress
 import grkr/progress/linear_mutation
 
 pub fn main() {
@@ -11,7 +12,7 @@ pub fn main() {
 
 pub fn plan_checkpoint_render_test() {
   let result =
-    main.plan_checkpoint_render(
+    progress.plan_checkpoint_render(
       "issue-123-test",
       checkpoint_stage.Research,
       "Research findings here",
@@ -29,7 +30,7 @@ pub fn plan_checkpoint_render_test() {
 
 pub fn plan_checkpoint_render_with_pr_test() {
   let result =
-    main.plan_checkpoint_render_with_pr(
+    progress.plan_checkpoint_render_with_pr(
       "issue-456-impl",
       checkpoint_stage.Implementation,
       "Implementation complete",
@@ -51,7 +52,7 @@ pub fn plan_checkpoint_render_with_pr_test() {
 
 pub fn plan_refusal_render_test() {
   let result =
-    main.plan_refusal_render(
+    progress.plan_refusal_render(
       "issue-789-refuse",
       "underspecified",
       "This issue needs more details",
@@ -69,7 +70,7 @@ pub fn plan_refusal_render_test() {
 
 pub fn plan_pr_summary_render_test() {
   let result =
-    main.plan_pr_summary_render(
+    progress.plan_pr_summary_render(
       "issue-999-summary",
       "https://github.com/test/repo/pull/456",
       "https://github.com/test/repo/tree/feature",
@@ -84,23 +85,23 @@ pub fn plan_pr_summary_render_test() {
 
 pub fn plan_linear_state_update_test() {
   let mock_env = fn(_key) { "Custom State" }
-  let result = main.plan_linear_state_update(checkpoint_stage.Research, mock_env)
+  let result = progress.plan_linear_state_update(checkpoint_stage.Research, mock_env)
 
   result
   |> should.equal(Ok("Custom State"))
 }
 
 pub fn validate_checkpoint_stage_test() {
-  main.validate_checkpoint_stage("research")
+  progress.validate_checkpoint_stage("research")
   |> should.equal(Ok(checkpoint_stage.Research))
 
-  main.validate_checkpoint_stage("invalid")
+  progress.validate_checkpoint_stage("invalid")
   |> should.be_error()
 }
 
 pub fn generate_idempotency_key_test() {
   let result =
-    main.generate_idempotency_key(checkpoint_stage.Plan, "issue-777-key")
+    progress.generate_idempotency_key(checkpoint_stage.Plan, "issue-777-key")
 
   result
   |> should.equal("grkr-checkpoint-plan-issue-777-key")
@@ -108,7 +109,7 @@ pub fn generate_idempotency_key_test() {
 
 pub fn format_checkpoint_marker_test() {
   let result =
-    main.format_checkpoint_marker(checkpoint_stage.Test, "issue-888-marker")
+    progress.format_checkpoint_marker(checkpoint_stage.Test, "issue-888-marker")
 
   string.contains(result, "grkr:checkpoint")
   |> should.be_true()
@@ -122,21 +123,21 @@ pub fn format_checkpoint_marker_test() {
 
 pub fn check_linear_token_availability_test() {
   let mock_getter = fn() { Ok("test-token") }
-  let result = main.check_linear_token_availability(mock_getter)
+  let result = progress.check_linear_token_availability(mock_getter)
 
   result
   |> should.equal(linear_mutation.TokenAvailable)
 }
 
 pub fn explain_unavailable_token_test() {
-  let result = main.explain_unavailable_token()
+  let result = progress.explain_unavailable_token()
 
   string.contains(result, "OAuth")
   |> should.be_true()
 }
 
 pub fn cli_render_checkpoint_test() {
-  let result = main.cli_render_checkpoint("research", "issue-111-cli", "CLI test")
+  let result = progress.cli_render_checkpoint("research", "issue-111-cli", "CLI test")
 
   result
   |> should.equal(Ok("<!-- grkr:checkpoint stage=research task=issue-111-cli version=1 -->\n\n## Research checkpoint\n\nCLI test"))
@@ -144,7 +145,7 @@ pub fn cli_render_checkpoint_test() {
 
 pub fn cli_render_checkpoint_with_pr_test() {
   let result =
-    main.cli_render_checkpoint_with_pr(
+    progress.cli_render_checkpoint_with_pr(
       "implementation",
       "issue-222-cli",
       "CLI impl",
@@ -161,7 +162,7 @@ pub fn cli_render_checkpoint_with_pr_test() {
 }
 
 pub fn cli_render_refusal_test() {
-  let result = main.cli_render_refusal("issue-333-cli", "blocked", "CLI refusal")
+  let result = progress.cli_render_refusal("issue-333-cli", "blocked", "CLI refusal")
 
   string.contains(result, "blocked")
   |> should.be_true()
@@ -169,7 +170,7 @@ pub fn cli_render_refusal_test() {
 
 pub fn cli_render_pr_summary_test() {
   let result =
-    main.cli_render_pr_summary(
+    progress.cli_render_pr_summary(
       "issue-444-cli",
       "https://github.com/test/repo/pull/444",
       "https://github.com/test/repo/tree/branch",
@@ -181,7 +182,7 @@ pub fn cli_render_pr_summary_test() {
 
 pub fn cli_plan_linear_state_test() {
   let mock_env = fn(_key) { "Test State" }
-  let result = main.cli_plan_linear_state("plan", mock_env)
+  let result = progress.cli_plan_linear_state("plan", mock_env)
 
   result
   |> should.equal(Ok("Test State"))
@@ -189,7 +190,7 @@ pub fn cli_plan_linear_state_test() {
 
 pub fn cli_plan_linear_mutation_test() {
   let result =
-    main.cli_plan_linear_mutation(
+    progress.cli_plan_linear_mutation(
       "LIN-555",
       "Test body",
       "test",
@@ -207,7 +208,7 @@ pub fn cli_plan_linear_mutation_test() {
 
 pub fn cli_plan_linear_comment_mutation_alias_test() {
   let result =
-    main.cli_plan_linear_comment_mutation(
+    progress.cli_plan_linear_comment_mutation(
       "LIN-556",
       "Alias body",
       "implementation",
@@ -227,7 +228,7 @@ pub fn cli_plan_linear_comment_mutation_alias_test() {
 }
 
 pub fn cli_plan_linear_state_mutation_test() {
-  let result = main.cli_plan_linear_state_mutation("LIN-557", "state-123")
+  let result = progress.cli_plan_linear_state_mutation("LIN-557", "state-123")
 
   case result {
     Ok(mutation) -> {
@@ -243,7 +244,7 @@ pub fn cli_plan_linear_state_mutation_test() {
 
 pub fn cli_format_mutation_debug_redacts_variables_test() {
   let result =
-    main.cli_format_mutation_debug(
+    progress.cli_format_mutation_debug(
       "LIN-558",
       "checkpoint body that should not be echoed",
       "plan",
@@ -260,4 +261,99 @@ pub fn cli_format_mutation_debug_redacts_variables_test() {
     }
     Error(_) -> should.fail()
   }
+}
+
+pub fn plan_linear_refusal_without_state_id_test() {
+  let mock_env = fn(key) {
+    case key {
+      "LINEAR_STATE_BACKLOG" -> "Icebox"
+      _ -> ""
+    }
+  }
+  let plan =
+    progress.plan_linear_refusal(
+      "LIN-001",
+      "eng-123",
+      "underspecified",
+      "Needs clearer AC",
+      "",
+      mock_env,
+    )
+
+  string.contains(plan.body, "underspecified")
+  |> should.be_true()
+
+  string.contains(plan.body, "grkr:checkpoint stage=refusal")
+  |> should.be_true()
+
+  plan.comment_mutation.idempotency_key
+  |> should.equal("grkr-checkpoint-refusal-eng-123")
+
+  string.contains(plan.comment_mutation.query, "commentCreate")
+  |> should.be_true()
+
+  plan.target_state_name
+  |> should.equal("Icebox")
+
+  plan.state_mutation
+  |> should.equal(option.None)
+}
+
+pub fn plan_linear_refusal_with_state_id_test() {
+  let mock_env = fn(_key) { "" }
+  let plan =
+    progress.plan_linear_refusal(
+      "LIN-001",
+      "eng-123",
+      "too_large",
+      "Split into smaller issues",
+      "STATE-BACKLOG-1",
+      mock_env,
+    )
+
+  plan.target_state_name
+  |> should.equal("Backlog")
+
+  case plan.state_mutation {
+    option.Some(req) -> {
+      string.contains(req.query, "issueUpdate")
+      |> should.be_true()
+
+      string.contains(req.variables_json, "STATE-BACKLOG-1")
+      |> should.be_true()
+
+      req.idempotency_key
+      |> should.equal("grkr-state-update-LIN-001")
+    }
+    option.None -> should.fail()
+  }
+}
+
+pub fn format_linear_refusal_plan_test() {
+  let mock_env = fn(_key) { "" }
+  let plan =
+    progress.plan_linear_refusal(
+      "LIN-9",
+      "eng-9",
+      "other",
+      "reason",
+      "sid-1",
+      mock_env,
+    )
+  let formatted = progress.format_linear_refusal_plan(plan)
+
+  string.contains(formatted, "TARGET_STATE=Backlog")
+  |> should.be_true()
+
+  string.contains(formatted, "COMMENT_IDEMPOTENCY_KEY=grkr-checkpoint-refusal-eng-9")
+  |> should.be_true()
+
+  string.contains(formatted, "STATE_MUTATION_PLANNED=1")
+  |> should.be_true()
+
+  string.contains(formatted, "---BODY---")
+  |> should.be_true()
+
+  string.contains(formatted, "commentCreate")
+  |> should.be_true()
 }

@@ -1,4 +1,5 @@
 import gleam/list
+import gleam/option.{type Option}
 import gleam/string
 
 /// Refusal class enum matching the 7 classes from spec and bash
@@ -20,10 +21,12 @@ pub type RefusalError {
   CheckpointFailed(String)
 }
 
-/// Result of running refusal flow
+/// Result of running refusal flow (GitHub or Linear provider).
 pub type RefusalResult {
   RefusalResult(
-    issue_number: Int,
+    provider: String,
+    issue_number: Option(Int),
+    issue_identifier: Option(String),
     task_slug: String,
     class: RefusalClass,
     comment_id: String,
@@ -32,7 +35,7 @@ pub type RefusalResult {
   )
 }
 
-/// Config loaded at runtime for refusal (GitHub only for now)
+/// Config loaded at runtime for refusal
 pub type RefusalConfig {
   RefusalConfig(
     repo: String,

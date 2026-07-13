@@ -69,3 +69,12 @@ export function exists_file(path) {
     return false;
   }
 }
+
+export function read_text_or_empty(path) {
+  try {
+    if (!existsSync(path)) return "";
+    return readFileSync(path, { encoding: "utf-8" }) || "";
+  } catch (_) {
+    return "";
+  }
+}

@@ -1,11 +1,14 @@
 import gleam/int
+import gleam/option.{None, Some}
 import gleam/result
 import gleam/string
 
+import grkr/refusal/config
 import grkr/refusal/flow
+import grkr/refusal/linear_flow
 import grkr/refusal/types.{
-  type RefusalError, CheckpointFailed, FetchFailed,
-  OtherError, ProjectMoveFailed, to_string,
+  type RefusalError, CheckpointFailed, FetchFailed, OtherError, ProjectMoveFailed,
+  to_string,
 }
 
 @external(javascript, "../refusal/cli_ffi.mjs", "argv")
@@ -55,17 +58,19 @@ pub fn main() {
 }
 
 fn emit_usage() {
-  console_log("Usage: gleam run -m grkr/refusal/cli -- <issue-number> [refusal-class] [refusal-reasoning]")
+  console_log("Usage: gleam run -m grkr/refusal/cli -- <issue-number-or-identifier> [refusal-class] [refusal-reasoning]")
   console_log("")
-  console_log("Refusal CLI entrypoint (GitHub-only v2):")
-  console_log("  <issue> [class] [reason]   Execute refusal flow (fetch, checkpoint, progress update, optional backlog move)")
+  console_log("Refusal CLI entrypoint (provider-aware):")
+  console_log("  GRKR_ISSUE_PROVIDER=github (default): <issue-number> ...   (GitHub numeric)")
+  console_log("  GRKR_ISSUE_PROVIDER=linear: <identifier> ...               (e.g. ENG-123)")
+  console_log("  <issue> [class] [reason]   Execute refusal flow (checkpoint, progress, plan mutations)")
   console_log("  help                       Show this message")
   console_log("")
   console_log("Valid classes: underspecified too_large missing_dependency needs_design_decision unsafe_autonomous_change repo_not_ready other")
   console_log("Defaults: class=underspecified, reasoning=\"The issue does not appear ready for safe autonomous implementation...\"")
   console_log("Emits shell-compatible KEY=\"val\" lines on success for robot-main.sh / supervisor parsing.")
-  console_log("Uses REFUSAL_* / ENABLE_PROJECT_STATUS_UPDATES / TASKS_DIR etc from env (via refusal/config).")
-  console_log("Supports test mocks via PATH (gh, etc). No fixture mode yet (real gh path).")
+  console_log("Uses REFUSAL_* / ENABLE_* / TASKS_DIR / GRKR_ISSUE_PROVIDER from env.")
+  console_log("GitHub: uses gh. Linear: uses issue_provider (fixture/live) + plans Linear mutations; no gh calls.")
   exit(2)
 }
 
@@ -82,6 +87,14 @@ fn run_from_args(args: List(String)) {
 }
 
 fn run_cli(issue_str: String, class_raw: String, reasoning_raw: String) {
+  let provider = config.issue_provider_name()
+  case provider {
+    "linear" -> run_cli_linear(issue_str, class_raw, reasoning_raw)
+    _ -> run_cli_github(issue_str, class_raw, reasoning_raw)
+  }
+}
+
+fn run_cli_github(issue_str: String, class_raw: String, reasoning_raw: String) {
   console_error("📋 Fetching issue #" <> issue_str <> "...")
   case parse_issue_number(issue_str) {
     Error(msg) -> {
@@ -97,11 +110,15 @@ fn run_cli(issue_str: String, class_raw: String, reasoning_raw: String) {
             False -> Nil
           }
           emit("REFUSAL_PROCESSED", "1")
-          emit("ISSUE_NUMBER", int.to_string(res.issue_number))
+          case res.issue_number {
+            Some(n) -> emit("ISSUE_NUMBER", int.to_string(n))
+            None -> Nil
+          }
           emit("TASK_SLUG", res.task_slug)
           emit("REFUSAL_CLASS", to_string(res.class))
           emit("REFUSAL_COMMENT_ID", res.comment_id)
           emit("PROGRESS_FILE", res.progress_file)
+          emit("PROVIDER", res.provider)
           console_error("⏸️ Refused implementation for issue #" <> issue_str <> ".")
           exit(0)
         }
@@ -110,6 +127,32 @@ fn run_cli(issue_str: String, class_raw: String, reasoning_raw: String) {
           exit(1)
         }
       }
+    }
+  }
+}
+
+fn run_cli_linear(issue_str: String, class_raw: String, reasoning_raw: String) {
+  console_error("📋 Loading Linear issue " <> issue_str <> "...")
+  case linear_flow.run_refusal_linear(issue_str, class_raw, reasoning_raw) {
+    Ok(res) -> {
+      console_error("📝 Planning refusal checkpoint for Linear " <> issue_str <> "...")
+      // For Linear we plan mutations (no live gh backlog); always emit processed
+      emit("REFUSAL_PROCESSED", "1")
+      emit("PROVIDER", "linear")
+      case res.issue_identifier {
+        Some(id) -> emit("ISSUE_IDENTIFIER", id)
+        None -> emit("ISSUE_IDENTIFIER", issue_str)
+      }
+      emit("TASK_SLUG", res.task_slug)
+      emit("REFUSAL_CLASS", to_string(res.class))
+      emit("REFUSAL_COMMENT_ID", res.comment_id)
+      emit("PROGRESS_FILE", res.progress_file)
+      console_error("⏸️ Refused implementation for Linear " <> issue_str <> ".")
+      exit(0)
+    }
+    Error(e) -> {
+      emit_error(refusal_error_to_string(e))
+      exit(1)
     }
   }
 }

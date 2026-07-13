@@ -4,7 +4,7 @@ Status snapshot (Gleam v2 @ `6a34d26`, **295** `gleam test`; GitHub-default refu
 
 - Items **1 through 5** were the historical baseline (doctor, supervisor shell loop, sync-main, picker, research/plan checkpoints).
 - Items **6 through 12** are **implemented** in Gleam v2 with thin `bin/` delegates; see primary wiring below.
-- **Still forward-looking (not blocking GitHub core):** Linear issue provider full execution spawn (`GRKR_ISSUE_PROVIDER=linear` pick exists; spawn deferred); ongoing PR / e2e process polish.
+- **Still forward-looking (not blocking GitHub core):** Linear workflow CLI body + refusal/state mutations (`GRKR_ISSUE_PROVIDER=linear` pick+schedule+spawn already lands `grkr --linear-issue`; GitHub remains default); ongoing PR / e2e process polish.
 
 | # | Item | Status | Primary code / wiring |
 |---|------|--------|------------------------|

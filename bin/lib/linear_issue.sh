@@ -356,6 +356,57 @@ ensure_linear_refusal_checkpoint() {
   echo "✅ Linear refuse progress planned for $identifier (no live Linear mutations by default)."
 }
 
+# Plan Linear "In Progress" state mutation (dry-run) for implement stage.
+# Writes implement.linear-state-mutation.txt (when state id available) + logs.
+# Updates progress implement_or_refuse to done (parity after proceed decision).
+# Does not perform live GraphQL; GRKR_LINEAR_MUTATE has no effect in this slice.
+ensure_linear_implement_in_progress() {
+  local identifier=$1
+  local linear_issue_id=$2
+  local task_slug=$3
+  local task_dir=$4
+  local progress_file=$5
+  local state_id=${6:-}
+  local target_state
+  local mutation_out
+  local idempotency_key
+  local mutation_file
+
+  mutation_file="$task_dir/implement.linear-state-mutation.txt"
+
+  if [ -z "$identifier" ] || [ -z "$task_slug" ] || [ -z "$progress_file" ]; then
+    echo "❌ ensure_linear_implement_in_progress requires identifier, task_slug, progress_file" >&2
+    return 1
+  fi
+
+  target_state=$(run_progress_cli linear-state implementation 2>/dev/null || echo "In Progress")
+
+  echo "📝 Planning Linear implement In Progress mutation for $identifier (target=$target_state)..."
+
+  if [ -n "$state_id" ]; then
+    mutation_out=$(run_progress_cli linear-state-mutation "$linear_issue_id" "$state_id" 2>/dev/null) || mutation_out=""
+  else
+    mutation_out=""
+  fi
+
+  if [ -n "$mutation_out" ]; then
+    idempotency_key=$(printf '%s\n' "$mutation_out" | tail -n1)
+    printf '%s\n' "$mutation_out" > "$mutation_file"
+    echo "🔑 implement state mutation idempotency_key=$idempotency_key (dry-run; set GRKR_LINEAR_MUTATE=1 when live apply lands)"
+  else
+    # Name-only record for dry-run when no concrete state id is known
+    {
+      printf 'TARGET_STATE=%s\n' "$target_state"
+      printf 'STATE_MUTATION_PLANNED=0\n'
+    } > "$mutation_file"
+    echo "🔑 implement state target=$target_state (dry-run; no state id provided; set GRKR_LINEAR_MUTATE=1 when live apply lands)"
+  fi
+
+  # Mark implement_or_refuse done (decision gate already set decision=proceed)
+  update_task_progress_stage "$progress_file" "implement_or_refuse" "done" "${idempotency_key:-}"
+  echo "✅ Linear implement In Progress mutation planned for $identifier (worktree left for subsequent stages)."
+}
+
 process_linear_issue() {
   local IDENTIFIER=$1
   local ISSUE_WORKTREE_DIR
@@ -430,9 +481,93 @@ process_linear_issue() {
 
   ISSUE_WORKTREE_DIR=$(prepare_issue_worktree "$BRANCH" "$TASK_SLUG") || return 1
   CURRENT_ISSUE_WORKTREE="$ISSUE_WORKTREE_DIR"
-  echo "🌿 Linear MVP worktree ready: $ISSUE_WORKTREE_DIR"
-  echo "✅ Linear MVP complete for $ISSUE_IDENTIFIER (research+plan only; implement/test/PR deferred)."
-  echo "MVP_STAGE=plan"
+  echo "🌿 Linear worktree ready: $ISSUE_WORKTREE_DIR"
+
+  # Ensure provider context for decision_gate + linear_flow (provider-aware).
+  GRKR_ISSUE_PROVIDER=linear
+  export GRKR_ISSUE_PROVIDER
+
+  # Decision gate (reuses existing provider-aware gate + linear_flow for refuse).
+  decision_prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-decision-prompt.XXXXXX")
+  decision_output_file=$(mktemp "${TMPDIR:-/tmp}/grkr-decision-output.XXXXXX")
+  write_decision_prompt_file "$decision_prompt_file" "$ISSUE_IDENTIFIER" "$ISSUE_TITLE" "$ISSUE_URL" "$BODY" "$TASK_SLUG" "$ISSUE_WORKTREE_DIR"
+  run_codex_prompt "$decision_prompt_file" "$decision_output_file" "decide whether to implement the issue" replace "$ISSUE_WORKTREE_DIR"
+  decision=$(run_decision_gate "$ISSUE_IDENTIFIER" "$decision_output_file" "$PROGRESS_FILE" "$TASK_SLUG" "$ISSUE_WORKTREE_DIR" "$decision_prompt_file" || echo "")
+  decision=$(printf '%s' "$decision" | tr -d '\r\n' | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
+  case "$decision" in
+    proceed|refuse)
+      IMPLEMENTATION_DECISION=$decision
+      ;;
+    *)
+      echo "❌ Decision gate for Linear $ISSUE_IDENTIFIER returned an invalid result."
+      rm -f "$decision_prompt_file" "$decision_output_file"
+      return 1
+      ;;
+  esac
+  rm -f "$decision_prompt_file" "$decision_output_file"
+
+  if [ "$decision" != "proceed" ]; then
+    # Refusal side effects (checkpoint, planned Backlog mutation, progress refused) already performed
+    # inside decision_gate via linear_flow. Clean local worktree only.
+    if [ -n "${ISSUE_WORKTREE_DIR:-}" ]; then
+      cleanup_issue_worktree "$ISSUE_WORKTREE_DIR"
+      echo "🧹 Removed Linear worktree: $ISSUE_WORKTREE_DIR"
+    fi
+    CURRENT_ISSUE_WORKTREE=""
+    echo "⏸️ Refused Linear issue $ISSUE_IDENTIFIER at decision gate."
+    echo "TASK_DIR=$TASK_DIR"
+    return 0
+  fi
+
+  # Proceed: plan In Progress state mutation (dry-run), then run implement codex.
+  # Use ISSUE_STATE_ID as a candidate if it represents the target; prefer explicit LINEAR_STATE_IMPLEMENTATION_ID.
+  local impl_state_id=${LINEAR_STATE_IMPLEMENTATION_ID:-${ISSUE_STATE_ID:-}}
+  ensure_linear_implement_in_progress \
+    "$ISSUE_IDENTIFIER" "$mutation_issue_id" "$TASK_SLUG" "$TASK_DIR" \
+    "$PROGRESS_FILE" "$impl_state_id"
+
+  # Implement codex (mirrors GitHub process_issue path; no gh, no test, no publish in this slice).
+  prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-prompt.XXXXXX")
+  CURRENT_PROMPT_FILE="$prompt_file"
+  write_issue_prompt_file "$prompt_file" "$ISSUE_IDENTIFIER" "$ISSUE_TITLE" "$ISSUE_URL" "$BODY" "$TASK_SLUG" "$ISSUE_WORKTREE_DIR"
+  codex_output_file="$TASK_DIR/implementation.log"
+  run_codex_prompt "$prompt_file" "$codex_output_file" "implement the issue" replace "$ISSUE_WORKTREE_DIR"
+  implementation_refusal=$(detect_implementation_refusal "$codex_output_file")
+  if [ -n "$implementation_refusal" ]; then
+    echo "⚠️ Implementation discovered blockers that require refusal."
+    echo "🔄 Converting implementation attempt to refusal for Linear $ISSUE_IDENTIFIER."
+    implementation_refusal_class=$(normalize_refusal_class "$implementation_refusal")
+    implementation_refusal_reasoning=$(extract_refusal_reasoning "$implementation_refusal" "Implementation discovered that the Linear issue is not ready for safe autonomous completion.")
+    mkdir -p "$TASK_DIR/codex"
+    cp "$codex_output_file" "$TASK_DIR/codex/implementation-before-refusal.log"
+    # Reuse the already-Liner-aware refusal checkpoint helper (no dupe logic).
+    ensure_linear_refusal_checkpoint \
+      "$ISSUE_IDENTIFIER" "$mutation_issue_id" "$TASK_SLUG" "$TASK_DIR" \
+      "$PROGRESS_FILE" "$implementation_refusal_class" "$implementation_refusal_reasoning" "$impl_state_id" || {
+      CURRENT_ISSUE_WORKTREE=""
+      rm -f "$prompt_file"
+      CURRENT_PROMPT_FILE=""
+      return 1
+    }
+    if [ -n "${ISSUE_WORKTREE_DIR:-}" ]; then
+      cleanup_issue_worktree "$ISSUE_WORKTREE_DIR"
+      echo "🧹 Removed Linear worktree: $ISSUE_WORKTREE_DIR"
+    fi
+    CURRENT_ISSUE_WORKTREE=""
+    rm -f "$prompt_file"
+    CURRENT_PROMPT_FILE=""
+    echo "⏸️ Refused Linear issue $ISSUE_IDENTIFIER (converted during implementation)."
+    echo "TASK_DIR=$TASK_DIR"
+    return 0
+  fi
+
+  # Success path for implement slice: progress already marked done by ensure_linear_implement_in_progress.
+  # Leave worktree and implementation.log for subsequent stages (test/publish deferred).
+  CURRENT_ISSUE_WORKTREE="$ISSUE_WORKTREE_DIR"
+  rm -f "$prompt_file"
+  CURRENT_PROMPT_FILE=""
+  echo "✅ Linear implement stage complete for $ISSUE_IDENTIFIER (decision=proceed; In Progress mutation planned; implementation.log written)."
+  echo "STAGE=implement"
   echo "TASK_DIR=$TASK_DIR"
   echo "WORKTREE=$ISSUE_WORKTREE_DIR"
   return 0

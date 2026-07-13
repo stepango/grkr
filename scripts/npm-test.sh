@@ -23,6 +23,7 @@ bash test/grkr-implementation-to-refusal.sh
 bash test/grkr-progress-cli.sh
 bash test/grkr-linear-issue-mvp.sh
 bash test/grkr-linear-refuse-progress.sh
+bash test/grkr-linear-issue-implement.sh
 bash test/grkr-line-limit.sh
 bash test/grkr-pr-body-limit.sh
 bash test/grkr-dirty-worktree-warning.sh

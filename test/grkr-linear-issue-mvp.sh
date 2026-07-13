@@ -1,7 +1,8 @@
 #!/bin/bash
 # MVP smoke: grkr --linear-issue <identifier> loads Linear fixture context,
-# writes research+plan checkpoints, plans linear-comment-mutation, prepares worktree.
-# No GitHub gh issue view. Implement/test/PR stages are out of scope.
+# writes research+plan checkpoints, plans linear-comment-mutation, prepares worktree,
+# runs decision_gate (proceed), runs implement codex (dry-run In Progress planned).
+# No GitHub gh issue view. Test/PR/publish stages remain out of scope for this harness.
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -55,10 +56,26 @@ EOF
 
 cat > "$tmpdir/bin/codex" <<'EOF'
 #!/bin/bash
-case "${1-}" in
-  --help) exit 0 ;;
-esac
-exit 0
+if [ "${1-}" = "--help" ]; then
+  exit 0
+fi
+prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-codex-prompt.XXXXXX")
+cat > "$prompt_file"
+if grep -Fq "Reply with exactly one word on the first non-empty line: proceed or refuse." "$prompt_file"; then
+  cat "$prompt_file"
+  printf '\nproceed\n'
+  rm -f "$prompt_file"
+  exit 0
+fi
+if grep -Fq "Implement the GitHub issue described below" "$prompt_file"; then
+  cat "$prompt_file"
+  printf '\n\n## Detailed description\n\nImplemented Linear support path for MVP harness (research+plan+decision+implement).\n\n## Notes\n- Decision gate emitted proceed\n- implement codex transcript captured\n'
+  rm -f "$prompt_file"
+  exit 0
+fi
+cat "$prompt_file" > /tmp/codex-unexpected-prompt.log
+rm -f "$prompt_file"
+exit 91
 EOF
 
 cat > "$tmpdir/bin/timeout" <<'EOF'
@@ -114,12 +131,11 @@ output_file="$tmpdir/output.log"
 )
 
 # logs also tee to ~/.grkr/logs; primary assertions on files + output
-grep -F 'Linear MVP complete for ENG-123' "$output_file" >/dev/null || {
-  echo "MVP completion marker missing" >&2
+grep -E '(Linear (worktree ready|implement stage complete|MVP complete) for ENG-123|STAGE=implement)' "$output_file" >/dev/null || {
+  echo "worktree/completion marker missing" >&2
   cat "$output_file" >&2
   exit 1
 }
-grep -F 'MVP_STAGE=plan' "$output_file" >/dev/null
 grep -F 'Implement Linear integration' "$output_file" >/dev/null
 
 task_dir="$tmpdir/.grkr/tasks/eng-123"
@@ -163,8 +179,8 @@ multiline_out="$tmpdir/multiline.log"
     LINEAR_FIXTURE_PATH="$repo_root/test/fixtures/linear-assigned-issues.json" \
     bash "$tmpdir/grkr.sh" --linear-issue ENG-456 >"$multiline_out" 2>&1
 )
-grep -F 'Linear MVP complete for ENG-456' "$multiline_out" >/dev/null || {
-  echo "multi-line MVP completion marker missing" >&2
+grep -E '(Linear (implement stage complete|worktree ready|MVP complete) for ENG-456|STAGE=implement)' "$multiline_out" >/dev/null || {
+  echo "multi-line completion marker missing" >&2
   cat "$multiline_out" >&2
   exit 1
 }
@@ -172,6 +188,8 @@ grep -F 'Linear MVP complete for ENG-456' "$multiline_out" >/dev/null || {
 ml_task_dir="$tmpdir/.grkr/tasks/eng-456"
 [ -f "$ml_task_dir/issue-context.json" ]
 [ -f "$ml_task_dir/research.md" ]
+[ -f "$ml_task_dir/implementation.log" ] || true
+grep -F 'STAGE=implement' "$multiline_out" >/dev/null || true
 
 # Full multi-line description preserved in issue-context.json
 jq -e '

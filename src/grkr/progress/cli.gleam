@@ -34,6 +34,28 @@ pub fn main() -> Nil {
       emit_mutation(main.cli_plan_linear_comment_mutation(issue_id, body, stage, task_slug))
     ["linear-state-mutation", issue_id, state_id] ->
       emit_mutation(main.cli_plan_linear_state_mutation(issue_id, state_id))
+    ["plan-linear-refusal", issue_id, task_slug, reason_class, reasoning] ->
+      io.print(
+        main.cli_plan_linear_refusal(
+          issue_id,
+          task_slug,
+          reason_class,
+          reasoning,
+          "",
+          env_get,
+        ),
+      )
+    ["plan-linear-refusal", issue_id, task_slug, reason_class, reasoning, state_id] ->
+      io.print(
+        main.cli_plan_linear_refusal(
+          issue_id,
+          task_slug,
+          reason_class,
+          reasoning,
+          state_id,
+          env_get,
+        ),
+      )
     ["check-token"] -> emit_token_status()
     ["mutation-debug", issue_id, body, stage, task_slug] ->
       emit_debug(main.cli_format_mutation_debug(issue_id, body, stage, task_slug))
@@ -51,6 +73,8 @@ pub fn main() -> Nil {
       io.println("  linear-state <stage>                                          Show Linear state for stage")
       io.println("  linear-comment-mutation <issue-id> <body> <stage> <task-slug> Show Linear comment mutation")
       io.println("  linear-state-mutation <issue-id> <state-id>                   Show Linear state mutation")
+      io.println("  plan-linear-refusal <issue-id> <task-slug> <class> <reason> [state-id]")
+      io.println("                                                                Plan refuse comment+Backlog mutations (dry-run)")
       io.println("  check-token                                                   Check Linear token availability")
       io.println("  mutation-debug <issue-id> <body> <stage> <task-slug>          Show mutation debug info")
       exit(2)

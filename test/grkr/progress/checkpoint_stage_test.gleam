@@ -90,8 +90,9 @@ pub fn requires_linear_state_update_test() {
   checkpoint_stage.requires_linear_state_update(checkpoint_stage.Plan)
   |> should.be_true()
 
+  // Refusal → Backlog (spec/23); must plan linear-state-mutation on refuse path
   checkpoint_stage.requires_linear_state_update(checkpoint_stage.Refusal)
-  |> should.be_false()
+  |> should.be_true()
 
   checkpoint_stage.requires_linear_state_update(checkpoint_stage.Implementation)
   |> should.be_true()

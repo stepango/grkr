@@ -84,7 +84,9 @@ pub fn run_refusal(
   }
 
   Ok(RefusalResult(
-    issue_number: issue_number,
+    provider: "github",
+    issue_number: Some(issue_number),
+    issue_identifier: None,
     task_slug: task_slug,
     class: class,
     comment_id: comment_id_str,

@@ -91,3 +91,13 @@ fn resolve_tasks_dir(raw: String, grkr_root: String) -> String {
 pub fn load_runtime_config() -> Result(types.RefusalConfig, types.RefusalError) {
   load()
 }
+
+/// Issue provider selected by GRKR_ISSUE_PROVIDER (default github).
+pub fn issue_provider_name() -> String {
+  let raw =
+    string.lowercase(string.trim(ffi.get_env_with_default("GRKR_ISSUE_PROVIDER", "github")))
+  case raw {
+    "linear" -> "linear"
+    _ -> "github"
+  }
+}

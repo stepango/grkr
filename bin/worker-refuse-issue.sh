@@ -6,9 +6,12 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 usage() {
   printf '%s\n' \
-    "Usage: worker-refuse-issue.sh <issue-number> [refusal-class] [refusal-reasoning]" \
+    "Usage: worker-refuse-issue.sh <issue-number-or-identifier> [refusal-class] [refusal-reasoning]" \
     "" \
-    "Refuse an issue as a valid terminal state (GitHub-only v2)." \
+    "Refuse an issue as a valid terminal state." \
+    "Provider via GRKR_ISSUE_PROVIDER (default: github; linear supported)." \
+    "  github: numeric issue number" \
+    "  linear: identifier e.g. ENG-123 (plans Linear comment + Backlog state; no gh backlog move)" \
     "Use --help, -h, or help to show this message."
 }
 
@@ -42,6 +45,9 @@ export IN_PROGRESS_VALUE=${IN_PROGRESS_VALUE:-In Progress} DONE_VALUE=${DONE_VAL
 export BACKLOG_VALUE=${BACKLOG_VALUE:-Backlog} PRIORITY_FIELD_NAME=${PRIORITY_FIELD_NAME:-Priority}
 export ENABLE_PROJECT_STATUS_UPDATES=${ENABLE_PROJECT_STATUS_UPDATES:-true}
 export REFUSAL_REQUIRES_BACKLOG_MOVE=${REFUSAL_REQUIRES_BACKLOG_MOVE:-true}
+export GRKR_ISSUE_PROVIDER=${GRKR_ISSUE_PROVIDER:-github}
+export LINEAR_FIXTURE_PATH=${LINEAR_FIXTURE_PATH:-}
+export GRKR_LINEAR_ACCESS_TOKEN=${GRKR_LINEAR_ACCESS_TOKEN:-}
 export GRKR_GLEAM_PROJECT_ROOT
 
 # Ensure we run from Gleam project root (supports override for tests)

@@ -25,6 +25,26 @@ pub fn create_comment_mutation_test() {
   |> should.equal("grkr-checkpoint-research-issue-456-test")
 }
 
+pub fn create_refusal_comment_mutation_test() {
+  let issue_id = linear_mutation.to_linear_issue_id("LIN-001")
+  let request =
+    linear_mutation.create_comment_mutation(
+      issue_id,
+      "Refusal body",
+      checkpoint_stage.Refusal,
+      "eng-123",
+    )
+
+  string.contains(request.query, "commentCreate")
+  |> should.be_true()
+
+  request.idempotency_key
+  |> should.equal("grkr-checkpoint-refusal-eng-123")
+
+  string.contains(request.variables_json, "grkr:checkpoint stage=refusal")
+  |> should.be_true()
+}
+
 pub fn update_state_mutation_test() {
   let issue_id = linear_mutation.to_linear_issue_id("LIN-456")
   let request = linear_mutation.update_state_mutation(issue_id, "STATE-789")

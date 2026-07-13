@@ -18,6 +18,17 @@ pub type ProgressUpdate {
   )
 }
 
+/// Planned Linear refuse path (comment checkpoint + backlog state). Dry-run only;
+/// no network. Used by progress CLI + shell refuse helpers (post-MVP t_503ca0f3).
+pub type LinearRefusalPlan {
+  LinearRefusalPlan(
+    body: String,
+    comment_mutation: linear_mutation.MutationRequest,
+    target_state_name: String,
+    state_mutation: Option(linear_mutation.MutationRequest),
+  )
+}
+
 pub fn plan_checkpoint_render(
   task_slug: String,
   stage: checkpoint_stage.CheckpointStage,
@@ -93,6 +104,40 @@ pub fn plan_linear_state_mutation(
 ) -> linear_mutation.MutationRequest {
   let issue_id = linear_mutation.to_linear_issue_id(linear_issue_id)
   linear_mutation.update_state_mutation(issue_id, state_id)
+}
+
+
+/// Compose refuse checkpoint body + Linear commentCreate plan + Backlog state plan.
+/// When `state_id` is non-empty, also plans issueUpdate state mutation (still no network).
+pub fn plan_linear_refusal(
+  linear_issue_id: String,
+  task_slug: String,
+  reason_class: String,
+  reasoning: String,
+  state_id: String,
+  env_getter: fn(String) -> String,
+) -> LinearRefusalPlan {
+  let body = plan_refusal_render(task_slug, reason_class, reasoning)
+  let comment_mutation =
+    plan_linear_comment_mutation(
+      linear_issue_id,
+      body,
+      checkpoint_stage.Refusal,
+      task_slug,
+    )
+  let mapping = linear_state.from_env(env_getter)
+  let target_state_name =
+    linear_state.state_for_stage(mapping, checkpoint_stage.Refusal)
+  let state_mutation = case string.trim(state_id) {
+    "" -> None
+    sid -> Some(plan_linear_state_mutation(linear_issue_id, sid))
+  }
+  LinearRefusalPlan(
+    body: body,
+    comment_mutation: comment_mutation,
+    target_state_name: target_state_name,
+    state_mutation: state_mutation,
+  )
 }
 
 pub fn validate_checkpoint_stage(
@@ -218,6 +263,59 @@ pub fn cli_plan_linear_state_mutation(
   state_id: String,
 ) -> Result(linear_mutation.MutationRequest, String) {
   Ok(plan_linear_state_mutation(linear_issue_id, state_id))
+}
+
+
+/// Format a LinearRefusalPlan for shell consumption (dry-run KEY=val + mutation dumps).
+pub fn format_linear_refusal_plan(plan: LinearRefusalPlan) -> String {
+  let comment_id_key = plan.comment_mutation.idempotency_key
+  let state_block = case plan.state_mutation {
+    None ->
+      "STATE_MUTATION_PLANNED=0\n"
+      <> "STATE_IDEMPOTENCY_KEY=\n"
+    Some(req) ->
+      "STATE_MUTATION_PLANNED=1\n"
+      <> "STATE_IDEMPOTENCY_KEY="
+      <> req.idempotency_key
+      <> "\n"
+      <> "---STATE_QUERY---\n"
+      <> req.query
+      <> "\n---STATE_VARIABLES---\n"
+      <> req.variables_json
+      <> "\n"
+  }
+  "TARGET_STATE="
+  <> plan.target_state_name
+  <> "\nCOMMENT_IDEMPOTENCY_KEY="
+  <> comment_id_key
+  <> "\n"
+  <> state_block
+  <> "---COMMENT_QUERY---\n"
+  <> plan.comment_mutation.query
+  <> "\n---COMMENT_VARIABLES---\n"
+  <> plan.comment_mutation.variables_json
+  <> "\n---BODY---\n"
+  <> plan.body
+}
+
+pub fn cli_plan_linear_refusal(
+  linear_issue_id: String,
+  task_slug: String,
+  reason_class: String,
+  reasoning: String,
+  state_id: String,
+  env_getter: fn(String) -> String,
+) -> String {
+  let plan =
+    plan_linear_refusal(
+      linear_issue_id,
+      task_slug,
+      reason_class,
+      reasoning,
+      state_id,
+      env_getter,
+    )
+  format_linear_refusal_plan(plan)
 }
 
 pub fn cli_format_mutation_debug(

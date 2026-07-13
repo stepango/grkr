@@ -1,10 +1,10 @@
 ## 31. Recommended implementation order
 
-Status snapshot (Gleam v2 @ `6a34d26`, **295** `gleam test`; GitHub-default refusal-aware pipeline):
+Status snapshot (Gleam v2 main tip **`28e4794`** post PR #92/#93; GitHub-default refusal-aware pipeline; historical counts e.g. **298** pre-MVP / **300** on Linear MVP tip):
 
 - Items **1 through 5** were the historical baseline (doctor, supervisor shell loop, sync-main, picker, research/plan checkpoints).
 - Items **6 through 12** are **implemented** in Gleam v2 with thin `bin/` delegates; see primary wiring below.
-- **Still forward-looking (not blocking GitHub core):** Linear implement/test/PR + refusal/state mutations after `--linear-issue` research/plan MVP (`GRKR_ISSUE_PROVIDER=linear` pick+schedule+spawn already lands; research/plan MVP landed; GitHub remains default); ongoing PR / e2e process polish.
+- **Still forward-looking (not blocking GitHub core):** Linear implement/test/PR stages still deferred after `--linear-issue` research/plan MVP on main @ **28e4794** (t_48db8096 / PR #93); Linear refuse/state mutations still open (**t_503ca0f3** + **t_e47417cb**); `GRKR_ISSUE_PROVIDER=linear` pick+schedule+spawn already lands (t_51747d23 @ ce61881); GitHub remains default; ongoing PR / e2e process polish.
 
 | # | Item | Status | Primary code / wiring |
 |---|------|--------|------------------------|

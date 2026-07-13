@@ -166,6 +166,73 @@ pub fn issue_decoder_test() {
   }
 }
 
+pub fn decode_issue_response_and_find_by_identifier_test() {
+  let single =
+    "
+{
+  \"data\": {
+    \"issue\": {
+      \"id\": \"LIN-001\",
+      \"identifier\": \"ENG-123\",
+      \"title\": \"Implement Linear integration\",
+      \"description\": \"Add Linear issue provider support\",
+      \"url\": \"https://linear.app/issue/ENG-123\",
+      \"state\": {\"id\": \"s1\", \"name\": \"Todo\", \"type\": \"backlog\"},
+      \"priority\": 2,
+      \"assignee\": null,
+      \"project\": null,
+      \"team\": null,
+      \"createdAt\": \"2026-04-28T00:00:00Z\",
+      \"updatedAt\": \"2026-04-28T12:00:00Z\"
+    }
+  }
+}
+"
+  case decoder.decode_issue_response(single) {
+    Ok(issue) -> {
+      issue.identifier |> should.equal("ENG-123")
+      issue.description |> should.equal("Add Linear issue provider support")
+      Nil
+    }
+    Error(err) -> {
+      io.println("Failed single issue decode: " <> err)
+      should.fail()
+    }
+  }
+
+  case decoder.decode_issues_response(fixture_issue_json) {
+    Ok(issues) -> {
+      case decoder.find_issue_by_identifier(issues, "eng-123") {
+        Ok(issue) -> {
+          issue.identifier |> should.equal("ENG-123")
+          Nil
+        }
+        Error(err) -> {
+          io.println("find failed: " <> err)
+          should.fail()
+        }
+      }
+      case decoder.find_issue_by_identifier(issues, "NOPE") {
+        Ok(_) -> should.fail()
+        Error(_) -> Nil
+      }
+    }
+    Error(err) -> {
+      io.println("list decode failed: " <> err)
+      should.fail()
+    }
+  }
+}
+
+pub fn normalize_token_file_test() {
+  client.normalize_token_file("token=abc123\n")
+  |> should.equal("abc123")
+  client.normalize_token_file("token: xyz\n")
+  |> should.equal("xyz")
+  client.normalize_token_file("raw-token-value\n")
+  |> should.equal("raw-token-value")
+}
+
 pub fn team_decoder_test() {
   let result = decoder.decode_teams_response(fixture_teams_json)
 

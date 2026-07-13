@@ -7,6 +7,52 @@ pub fn access_token_from_env() -> Result(String, types.ProviderError) {
   require_access_token(get_env("GRKR_LINEAR_ACCESS_TOKEN"))
 }
 
+/// Resolve OAuth access token for Linear GraphQL.
+/// Order: `GRKR_LINEAR_ACCESS_TOKEN`, then `GRKR_LINEAR_TOKEN_PATH` / `~/.linear/token.txt`
+/// (token=... or raw token file shapes). Never treats OAuth app secrets as tokens.
+pub fn resolve_access_token() -> Result(String, types.ProviderError) {
+  case string.trim(get_env("GRKR_LINEAR_ACCESS_TOKEN")) {
+    "" -> {
+      let path = token_store_path()
+      case read_token_file(path) {
+        Ok(raw) -> require_access_token(normalize_token_file(raw))
+        Error(_) ->
+          Error(types.QueryError(
+            "Linear live calls need GRKR_LINEAR_ACCESS_TOKEN or a token file at "
+            <> path
+            <> " (OAuth app credentials in secret.txt are not API tokens)",
+          ))
+      }
+    }
+    token -> Ok(token)
+  }
+}
+
+pub fn token_store_path() -> String {
+  case string.trim(get_env("GRKR_LINEAR_TOKEN_PATH")) {
+    "" -> home_dir() <> "/.linear/token.txt"
+    path -> path
+  }
+}
+
+pub fn normalize_token_file(raw: String) -> String {
+  let trimmed = string.trim(raw)
+  case string.split(trimmed, "\n") {
+    [first, ..] -> {
+      let line = string.trim(first)
+      case string.starts_with(line, "token=") {
+        True -> string.trim(string.drop_start(line, 6))
+        False ->
+          case string.starts_with(line, "token:") {
+            True -> string.trim(string.drop_start(line, 6))
+            False -> line
+          }
+      }
+    }
+    [] -> ""
+  }
+}
+
 pub fn require_access_token(
   token: String,
 ) -> Result(String, types.ProviderError) {
@@ -20,6 +66,14 @@ pub fn require_access_token(
 }
 
 pub fn run_assigned_issues_query(
+  access_token: String,
+  graphql_query: String,
+) -> Result(String, types.ProviderError) {
+  run_graphql_query(access_token, graphql_query)
+}
+
+/// Run any Linear GraphQL query/mutation body with bearer auth.
+pub fn run_graphql_query(
   access_token: String,
   graphql_query: String,
 ) -> Result(String, types.ProviderError) {
@@ -56,6 +110,12 @@ fn result_try(
 
 @external(javascript, "../issue_provider/env.mjs", "getEnv")
 fn get_env(name: String) -> String
+
+@external(javascript, "../issue_provider/env.mjs", "homeDir")
+fn home_dir() -> String
+
+@external(javascript, "../issue_provider/file.mjs", "readFileSync")
+fn read_token_file(path: String) -> Result(String, String)
 
 @external(javascript, "../issue_provider/linear_http.mjs", "postGraphqlSync")
 fn post_graphql(

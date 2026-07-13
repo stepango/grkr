@@ -33,3 +33,11 @@ export function hasEnv(name) {
   const value = process.env[name];
   return !!(value && value.trim() !== "");
 }
+
+/**
+ * @returns {string} User home directory (empty string if unavailable)
+ */
+export function homeDir() {
+  return process.env.HOME || process.env.USERPROFILE || "";
+}
+

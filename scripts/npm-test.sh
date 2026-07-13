@@ -21,6 +21,7 @@ bash test/grkr-branch-exists.sh
 bash test/grkr-refusal.sh
 bash test/grkr-implementation-to-refusal.sh
 bash test/grkr-progress-cli.sh
+bash test/grkr-linear-issue-mvp.sh
 bash test/grkr-line-limit.sh
 bash test/grkr-pr-body-limit.sh
 bash test/grkr-dirty-worktree-warning.sh

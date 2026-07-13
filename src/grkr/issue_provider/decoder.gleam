@@ -184,6 +184,40 @@ pub fn decode_issues_response(
   }
 }
 
+/// Decode Linear single-issue API response: `{ "data": { "issue": { ... } } }`.
+pub fn decode_issue_response(
+  json_string: String,
+) -> Result(types.LinearIssue, String) {
+  case ffi.parse(json_string) {
+    Ok(parsed) -> {
+      let data = ffi.get_field(parsed, "data")
+      let issue = ffi.get_field(data, "issue")
+      case ffi.is_null(issue) {
+        True -> Error("Issue not found")
+        False -> decode_issue(issue)
+      }
+    }
+    Error(msg) -> Error("JSON parse error: " <> msg)
+  }
+}
+
+/// Find an issue by human identifier (case-insensitive) in an assigned-issues
+/// fixture or live list response.
+pub fn find_issue_by_identifier(
+  issues: List(types.LinearIssue),
+  identifier: String,
+) -> Result(types.LinearIssue, String) {
+  let needle = string.lowercase(string.trim(identifier))
+  case
+    list.find(issues, fn(issue) {
+      string.lowercase(issue.identifier) == needle
+    })
+  {
+    Ok(issue) -> Ok(issue)
+    Error(_) -> Error("Issue not found: " <> identifier)
+  }
+}
+
 /// Decode Linear teams response
 pub fn decode_teams_response(
   json_string: String,

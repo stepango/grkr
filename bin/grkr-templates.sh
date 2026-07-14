@@ -63,3 +63,52 @@ append_issue_footer() {
   local issue=$2
   gleam_tpl render-issue-footer "$issue" >> "$pr_body_file"
 }
+
+# Linear PR body helpers (thin; reuse default/compact renders, NEVER append "Fixes #N").
+# Called only from Linear publish path. Appends "Linear: <identifier>" + url marker.
+# Mirrors extract_codex_pr_body + ensure_pr_body_limit structure but omits GitHub footer.
+# GitHub paths and ensure_pr_body_limit behavior are untouched.
+
+ensure_linear_pr_body_limit() {
+  local pr_body_file=$1
+  local body=$2
+  local title=$3
+  local identifier=$4
+  local url=$5
+  local body_length
+
+  body_length=$(wc -m < "$pr_body_file" | tr -d '[:space:]')
+  if [ "$body_length" -gt "${MAX_PR_BODY_CHARS:-60000}" ]; then
+    write_compact_pr_body "$pr_body_file" "$body" "$title"
+  fi
+
+  if ! grep -Fq "Linear: $identifier" "$pr_body_file" 2>/dev/null; then
+    printf '\nLinear: %s\n' "$identifier" >> "$pr_body_file"
+    if [ -n "$url" ]; then
+      printf '%s\n' "$url" >> "$pr_body_file"
+    fi
+  fi
+}
+
+extract_linear_codex_pr_body() {
+  local codex_output_file=$1
+  local pr_body_file=$2
+  local body=$3
+  local title=$4
+  local identifier=$5
+  local url=$6
+
+  if [ -s "$codex_output_file" ] || task_log_is_sharded "$codex_output_file"; then
+    emit_task_log_stream "$codex_output_file" | awk '
+      /^## / {found=1}
+      found {print}
+    ' > "$pr_body_file"
+    if [ -s "$pr_body_file" ]; then
+      ensure_linear_pr_body_limit "$pr_body_file" "$body" "$title" "$identifier" "$url"
+      return 0
+    fi
+  fi
+
+  write_default_pr_body "$pr_body_file" "$body" "$title"
+  ensure_linear_pr_body_limit "$pr_body_file" "$body" "$title" "$identifier" "$url"
+}

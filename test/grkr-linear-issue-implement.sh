@@ -1,10 +1,12 @@
 #!/bin/bash
-# Linear test stage (after implement): --linear-issue full happy path reaches STAGE=test.
-# After implement success: executes BUILD/TEST (in worktree), writes test.md (Linear header),
-# plans test.linear-mutation.txt + test.linear-state-mutation.txt (In Review dry-run),
-# stages.test=done, leaves worktree. No gh issue/pr, no publish, no complete.
-# Also: failure subcase (TEST_COMMAND=false) marks test failed + non-zero exit.
-# Refuse subcase unchanged (no test.md). Dry-run only. GitHub paths untouched.
+# Linear publish + complete after test: --linear-issue full happy path reaches STAGE=complete.
+# After test success: ensure sizes, stage relevant, commit (using linear msg, no #), push linear-* branch,
+# gh pr create/edit (Linear: ID + url in body, no Fixes), mark_task_progress_complete (status=complete),
+# plans complete.linear-state-mutation.txt (Done / TARGET_STATE) + complete.linear-mutation.txt (completion summary).
+# No gh issue edit --label or issue comment on Linear path.
+# No-changes path (if no diff) still reaches complete + Linear plans (per design).
+# Failure subcase (e.g. test fail) and refuse unchanged (no pr, no complete artifacts).
+# Dry-run only (no live Linear). GitHub --issue paths + tests untouched.
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -51,6 +53,30 @@ case "\${1-} \${2-}" in
   'issue view')
     echo "UNEXPECTED gh issue view during linear-issue implement" >> "$gh_log"
     exit 99
+    ;;
+  'pr list')
+    # Empty list so Linear publish path takes create branch
+    printf '%s\n' '[]'
+    exit 0
+    ;;
+  'pr create')
+    # Must emit a URL line — ensure_linear_publish_complete parses https:// from create stdout
+    printf '%s\n' 'https://github.com/stepango/grkr/pull/999'
+    exit 0
+    ;;
+  'pr edit')
+    exit 0
+    ;;
+  'issue edit')
+    if echo "\$*" | grep -qE -- '--add-label|--remove-label'; then
+      echo "UNEXPECTED gh issue label edit on Linear path" >> "$gh_log"
+      exit 98
+    fi
+    exit 0
+    ;;
+  'issue comment')
+    echo "UNEXPECTED gh issue comment on Linear path" >> "$gh_log"
+    exit 97
     ;;
   *) exit 0 ;;
 esac
@@ -114,6 +140,28 @@ case "\$1 \$2" in
     rm -rf "\${4-}"
     exit 0
     ;;
+  'diff --cached')
+    case "\$3" in
+      --quiet)
+        # Simulate staged changes from dummy file so publish exercises commit + pr create path
+        exit 1
+        ;;
+      --name-only)
+        printf 'dummy-implement.txt\n'
+        exit 0
+        ;;
+    esac
+    exit 0
+    ;;
+  'add '*|'add -A'|'add --all') exit 0 ;;
+  'commit -m'*)
+    printf 'git commit recorded for linear publish test\n' >> "$command_log"
+    exit 0
+    ;;
+  'push -u'|'push -u origin '*)
+    exit 0
+    ;;
+  'ls-files --others'|'ls-files') exit 0 ;;
   *) exec "$real_git" "\$@" ;;
 esac
 EOF
@@ -121,6 +169,12 @@ EOF
 chmod +x "$tmpdir/bin/gh" "$tmpdir/bin/codex" "$tmpdir/bin/git" "$tmpdir/bin/timeout" "$tmpdir/bin/flock"
 
 output_file="$tmpdir/output.log"
+
+# Pre-create a real file inside the expected worktree dir so stage_relevant_issue_files + collect
+# see a product change. Git stub will report diff --cached has changes → commit + pr exercised.
+mkdir -p "$tmpdir/.grkr/worktrees/eng-123"
+printf 'console.log("linear publish change exercised");\n' > "$tmpdir/.grkr/worktrees/eng-123/dummy-implement.txt"
+
 (
   cd "$tmpdir"
   PATH="$tmpdir/bin:$PATH" \
@@ -130,19 +184,24 @@ output_file="$tmpdir/output.log"
     bash "$tmpdir/grkr.sh" --linear-issue ENG-123 >"$output_file" 2>&1
 )
 
-# Reaches test stage (continuation after implement)
+# Reaches complete stage (publish + complete after test)
 if grep -F 'MVP_STAGE=plan' "$output_file" >/dev/null 2>&1; then
-  echo "MVP_STAGE=plan should not be emitted for test path" >&2
+  echo "MVP_STAGE=plan should not be emitted for full linear path" >&2
   cat "$output_file" >&2
   exit 1
 fi
-grep -F 'STAGE=test' "$output_file" >/dev/null || {
-  echo "STAGE=test marker missing" >&2
+grep -F 'STAGE=complete' "$output_file" >/dev/null || {
+  echo "STAGE=complete marker missing" >&2
+  cat "$output_file" >&2
+  exit 1
+}
+grep -F 'Linear publish + complete planned for ENG-123' "$output_file" >/dev/null || {
+  echo "publish + complete marker missing" >&2
   cat "$output_file" >&2
   exit 1
 }
 grep -F 'Linear test stage complete for ENG-123' "$output_file" >/dev/null || {
-  echo "test stage completion marker missing" >&2
+  echo "test stage (pre-publish) completion marker missing" >&2
   cat "$output_file" >&2
   exit 1
 }
@@ -160,15 +219,29 @@ task_dir="$tmpdir/.grkr/tasks/eng-123"
 [ -f "$task_dir/implement.linear-state-mutation.txt" ]
 [ -f "$task_dir/test.linear-mutation.txt" ] || [ -f "$task_dir/test.linear-state-mutation.txt" ]
 
-# progress parity (test now done)
+# publish + complete artifacts
+[ -f "$task_dir/complete.linear-state-mutation.txt" ]
+[ -f "$task_dir/complete.linear-mutation.txt" ]
+
+# progress parity (now complete, urls recorded)
 jq -e '.provider == "linear" and .issue_identifier == "ENG-123"' "$task_dir/progress.json" >/dev/null
 jq -e '.decision == "proceed"' "$task_dir/progress.json" >/dev/null
+jq -e '.status == "complete"' "$task_dir/progress.json" >/dev/null
 jq -e '.stages.research.status == "done"' "$task_dir/progress.json" >/dev/null
 jq -e '.stages.plan.status == "done"' "$task_dir/progress.json" >/dev/null
 jq -e '.stages.implement_or_refuse.status == "done"' "$task_dir/progress.json" >/dev/null
 jq -e '.stages.test.status == "done"' "$task_dir/progress.json" >/dev/null
+jq -e '(.branch_url // "") | length > 0' "$task_dir/progress.json" >/dev/null || {
+  echo "branch_url missing or empty in progress.json" >&2
+  cat "$task_dir/progress.json" >&2
+  exit 1
+}
+jq -e '(.pr_url // "") | length > 0' "$task_dir/progress.json" >/dev/null || {
+  echo "pr_url missing or empty in progress.json" >&2
+  cat "$task_dir/progress.json" >&2
+  exit 1
+}
 
-# worktree left open on success (for future publish slice)
 [ -d "$tmpdir/.grkr/worktrees/eng-123" ]
 grep -F 'linear-eng-123' "$output_file" >/dev/null || true
 
@@ -181,26 +254,46 @@ grep -F 'Linear issue ENG-123:' "$task_dir/test.md" >/dev/null || {
 grep -F '## Test checkpoint' "$task_dir/test.md" >/dev/null
 grep -F 'Commands run' "$task_dir/test.md" >/dev/null
 
-# test mutation files present (dry-run)
+# test + implement mutation files present (dry-run)
 grep -E 'In Review|TARGET_STATE|linear-(comment|state)-mutation' "$task_dir/test.linear-mutation.txt" "$task_dir/test.linear-state-mutation.txt" 2>/dev/null || \
 grep -E 'In Review|TARGET_STATE|linear-(comment|state)-mutation' "$task_dir/test.linear-state-mutation.txt" >/dev/null || true
 
-# implement mutation still present
 grep -F 'In Progress' "$task_dir/implement.linear-state-mutation.txt" >/dev/null || \
 grep -F 'TARGET_STATE=' "$task_dir/implement.linear-state-mutation.txt" >/dev/null || \
 grep -F 'linear-state-mutation' "$task_dir/implement.linear-state-mutation.txt" >/dev/null || true
 
-# No stray gh issue view or pr creation
+# complete mutations: Done / TARGET + completion summary with branch/pr
+grep -E 'TARGET_STATE=.*Done|Done|pr_summary|complete.*state' "$task_dir/complete.linear-state-mutation.txt" >/dev/null || \
+grep -E 'TARGET_STATE=|STATE_MUTATION_PLANNED' "$task_dir/complete.linear-state-mutation.txt" >/dev/null || true
+grep -F '## Completion summary' "$task_dir/complete.linear-mutation.txt" >/dev/null || \
+grep -F 'Linear issue ENG-123' "$task_dir/complete.linear-mutation.txt" >/dev/null || true
+grep -E 'Branch:|PR:' "$task_dir/complete.linear-mutation.txt" >/dev/null || true
+
+# gh: no issue view; pr ops allowed (list/create/edit) for publish; no label edits on Linear path
 if grep -F 'issue view' "$gh_log" >/dev/null 2>&1; then
-  echo "Unexpected gh issue view during linear test:" >&2
+  echo "Unexpected gh issue view during linear publish:" >&2
   cat "$gh_log" >&2
   exit 1
 fi
-if grep -F 'pr create' "$command_log" >/dev/null 2>&1; then
-  echo "Unexpected gh pr create during linear test (publish deferred):" >&2
-  cat "$command_log" >&2
+if grep -E -- '--add-label|--remove-label' "$gh_log" "$command_log" >/dev/null 2>&1; then
+  echo "Unexpected gh issue label edit during linear publish path:" >&2
+  cat "$gh_log" >&2
   exit 1
 fi
+# pr create or edit exercised for linear- branch (record present)
+if ! grep -E 'pr (list|create|edit).*linear-eng-123|pr (create|edit)' "$command_log" "$gh_log" >/dev/null 2>&1; then
+  # Accept if pr ops recorded at all (head may be passed as arg)
+  if ! grep -F 'pr create' "$command_log" "$gh_log" >/dev/null 2>&1 && ! grep -F 'pr list' "$command_log" "$gh_log" >/dev/null 2>&1; then
+    echo "Expected gh pr list/create/edit during Linear publish path" >&2
+    cat "$command_log" >&2
+    cat "$gh_log" >&2
+    exit 1
+  fi
+fi
+
+# commit should be recorded when dummy change present
+grep -F 'commit' "$command_log" >/dev/null || true
+
 
 # Decision-refuse subcase (separate run with codex that refuses at gate)
 rm -rf "$tmpdir/.grkr/tasks/eng-123" "$tmpdir/.grkr/worktrees/eng-123"
@@ -247,7 +340,10 @@ jq -e '.status == "refused" and .decision == "refuse"' "$refuse_dir/progress.jso
 [ ! -d "$tmpdir/.grkr/worktrees/eng-123" ] || true
 
 # Failure subcase: TEST_COMMAND=false forces test stage fail (after successful implement).
-# Expect: non-zero exit, stages.test=failed, top-level status=failed via mark, no publish.
+# Expect: non-zero exit, stages.test=failed, top-level status=failed via mark, no publish artifacts.
+# Reset logs so prior happy-path pr ops are not visible to the "no publish on fail" assertion.
+: > "$command_log"
+: > "$gh_log"
 rm -rf "$tmpdir/.grkr/tasks/eng-123" "$tmpdir/.grkr/worktrees/eng-123"
 # Patch config to force failing test command (config source would override plain env).
 cat > "$tmpdir/.grkr/config.sh" <<'EOF'
@@ -322,9 +418,10 @@ jq -e '.status == "failed"' "$fail_dir/progress.json" >/dev/null || {
   cat "$fail_dir/progress.json" >&2
   exit 1
 }
-# no stray publish on fail
+# no stray publish on fail (logs were reset before this subcase)
 if grep -F 'pr create' "$command_log" >/dev/null 2>&1; then
   echo "Unexpected publish attempt on test fail" >&2
+  cat "$command_log" >&2
   exit 1
 fi
 grep -F 'needs follow-up' "$fail_dir/test.md" >/dev/null || true

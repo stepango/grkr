@@ -1,13 +1,20 @@
 # bin/lib/linear_issue.sh
-# Linear --linear-issue helpers for bin/grkr (research + plan + decision + implement + test + publish+complete dry-run).
+# Linear --linear-issue helpers for bin/grkr (research + plan + decision + implement + test + publish+complete).
 # Loads Linear issue context via Gleam issue_provider fetch-issue (fixture or live).
-# Posts/plans checkpoints via progress/cli linear-comment-mutation + existing templates.
-# GitHub PR created from linear-* branch (no Fixes footer); Done state + completion comment planned (dry-run).
-# No live GraphQL; GRKR_LINEAR_MUTATE ignored. GitHub default + all GitHub paths untouched.
+# Plans checkpoints via progress/cli; when GRKR_LINEAR_MUTATE=1 + token, applies after each dump (guarded).
+# Default remains pure dry-run (identical logs/artifacts). GitHub PR from linear-*; Done + completion.
+# GitHub default + all GitHub paths untouched. Live mutate writes sidecars + §8 markers.
 
 linear_issue_project_root() {
   printf '%s\n' "${GRKR_GLEAM_PROJECT_ROOT:-$(dirname "$SCRIPT_DIR")}"
 }
+
+# Source the guarded mutate apply helper (keeps this file under 1000 LOC per AGENTS.md).
+# The helper is thin and provides maybe_apply_linear_mutation.
+MUTATE_LIB_CANDIDATE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/linear_mutate.sh"
+if [ -f "$MUTATE_LIB_CANDIDATE" ]; then
+  . "$MUTATE_LIB_CANDIDATE"
+fi
 
 run_issue_provider_cli() {
   local prj
@@ -186,7 +193,7 @@ ensure_linear_task_progress_file() {
 
 # Write research/plan checkpoint files and plan Linear comment mutations via progress CLI.
 # MVP does not require live Linear mutation success: mutation plan is always logged.
-# Optional GRKR_LINEAR_MUTATE=1 may attempt live GraphQL later; currently dry-run only.
+# Optional GRKR_LINEAR_MUTATE=1 applies live (soft-fail default). Dumps + sidecars written; default OFF.
 ensure_linear_checkpoint_stage() {
   local stage=$1
   local identifier=$2
@@ -232,7 +239,8 @@ ensure_linear_checkpoint_stage() {
   if [ -n "$mutation_out" ]; then
     idempotency_key=$(printf '%s\n' "$mutation_out" | tail -n1)
     printf '%s\n' "$mutation_out" > "$task_dir/$stage.linear-mutation.txt"
-    echo "🔑 $stage mutation idempotency_key=$idempotency_key (dry-run; set GRKR_LINEAR_MUTATE=1 when live apply lands)"
+    maybe_apply_linear_mutation "$task_dir/$stage.linear-mutation.txt"
+    echo "🔑 $stage mutation idempotency_key=$idempotency_key (set GRKR_LINEAR_MUTATE=1 to apply)"
   else
     echo "⚠️ progress CLI linear-comment-mutation planning failed for $stage; local checkpoint kept."
   fi
@@ -321,13 +329,15 @@ ensure_linear_refusal_checkpoint() {
     } > "$plan_file"
     if [ -n "$state_id" ]; then
       local state_mut
-      state_mut=$(run_progress_cli linear-state-mutation "$linear_issue_id" "$state_id" 2>/dev/null) || state_mut=""
+      state_mut=$(run_progress_cli linear-state-mutation "$linear_issue_id" "$state_id" refusal 2>/dev/null) || state_mut=""
       if [ -n "$state_mut" ]; then
         printf '%s\n' "$state_mut" > "$mutation_state_file"
         printf 'STATE_MUTATION_PLANNED=1\n' >> "$plan_file"
         printf 'STATE_IDEMPOTENCY_KEY=%s\n' "$(printf '%s\n' "$state_mut" | tail -n1)" >> "$plan_file"
       fi
     fi
+    maybe_apply_linear_mutation "$mutation_comment_file"
+    maybe_apply_linear_mutation "$mutation_state_file"
   else
     printf '%s\n' "$plan_out" > "$plan_file"
     target_state=$(printf '%s\n' "$plan_out" | grep -E '^TARGET_STATE=' | head -1 | sed 's/^[^=]*=//')
@@ -349,9 +359,13 @@ ensure_linear_refusal_checkpoint() {
         printf '%s\n' "$plan_out" | grep -E '^STATE_IDEMPOTENCY_KEY=' | head -1 | sed 's/^[^=]*=//'
       } > "$mutation_state_file"
     fi
+    maybe_apply_linear_mutation "$mutation_comment_file"
+    maybe_apply_linear_mutation "$mutation_state_file"
   fi
 
-  echo "🔑 refuse comment idempotency_key=${comment_key:-unknown} target_state=${target_state:-Backlog} (dry-run; set GRKR_LINEAR_MUTATE=1 when live apply lands)"
+  maybe_apply_linear_mutation "$mutation_comment_file"
+  maybe_apply_linear_mutation "$mutation_state_file"
+  echo "🔑 refuse comment idempotency_key=${comment_key:-unknown} target_state=${target_state:-Backlog} (set GRKR_LINEAR_MUTATE=1 to apply)"
   # comment_id in progress uses idempotency key string until live mutate returns real id
   mark_task_progress_refused "$progress_file" "$reason_class" "${comment_key:-}"
   echo "✅ Linear refuse progress planned for $identifier (no live Linear mutations by default)."
@@ -360,7 +374,7 @@ ensure_linear_refusal_checkpoint() {
 # Plan Linear "In Progress" state mutation (dry-run) for implement stage.
 # Writes implement.linear-state-mutation.txt (when state id available) + logs.
 # Updates progress implement_or_refuse to done (parity after proceed decision).
-# Does not perform live GraphQL; GRKR_LINEAR_MUTATE has no effect in this slice.
+# GRKR_LINEAR_MUTATE=1 applies via maybe_apply (guarded).
 ensure_linear_implement_in_progress() {
   local identifier=$1
   local linear_issue_id=$2
@@ -385,7 +399,7 @@ ensure_linear_implement_in_progress() {
   echo "📝 Planning Linear implement In Progress mutation for $identifier (target=$target_state)..."
 
   if [ -n "$state_id" ]; then
-    mutation_out=$(run_progress_cli linear-state-mutation "$linear_issue_id" "$state_id" 2>/dev/null) || mutation_out=""
+    mutation_out=$(run_progress_cli linear-state-mutation "$linear_issue_id" "$state_id" implement 2>/dev/null) || mutation_out=""
   else
     mutation_out=""
   fi
@@ -393,14 +407,16 @@ ensure_linear_implement_in_progress() {
   if [ -n "$mutation_out" ]; then
     idempotency_key=$(printf '%s\n' "$mutation_out" | tail -n1)
     printf '%s\n' "$mutation_out" > "$mutation_file"
-    echo "🔑 implement state mutation idempotency_key=$idempotency_key (dry-run; set GRKR_LINEAR_MUTATE=1 when live apply lands)"
+    maybe_apply_linear_mutation "$mutation_file"
+    echo "🔑 implement state mutation idempotency_key=$idempotency_key"
   else
     # Name-only record for dry-run when no concrete state id is known
     {
       printf 'TARGET_STATE=%s\n' "$target_state"
       printf 'STATE_MUTATION_PLANNED=0\n'
     } > "$mutation_file"
-    echo "🔑 implement state target=$target_state (dry-run; no state id provided; set GRKR_LINEAR_MUTATE=1 when live apply lands)"
+    maybe_apply_linear_mutation "$mutation_file"
+    echo "🔑 implement state target=$target_state (no state id provided; set GRKR_LINEAR_MUTATE=1 when live apply lands)"
   fi
 
   # Mark implement_or_refuse done (decision gate already set decision=proceed)
@@ -408,7 +424,7 @@ ensure_linear_implement_in_progress() {
   echo "✅ Linear implement In Progress mutation planned for $identifier (worktree left for subsequent stages)."
 }
 
-# Wire Linear test stage after successful implement (spec/26 parity, dry-run only).
+# Wire Linear test stage after successful implement (spec/26 parity).
 # Reuses shared build_command_list, run_test_stage_hook, cleanup_test_result_logs,
 # write_test_checkpoint_with_header (Linear header), checkpoint_marker, run_progress_cli.
 # Executes BUILD/TEST (or npm test) inside CURRENT_ISSUE_WORKTREE.
@@ -416,6 +432,7 @@ ensure_linear_implement_in_progress() {
 # Plans test.linear-mutation.txt (comment) + test.linear-state-mutation.txt ("In Review").
 # Updates stages.test done|failed; leaves worktree on success; no gh, no publish, no complete.
 # Resume: local test.md + progress done (no remote lookup).
+# GRKR_LINEAR_MUTATE=1 applies after dumps (soft).
 ensure_linear_test_checkpoint() {
   local identifier=$1
   local mutation_issue_id=$2
@@ -517,7 +534,8 @@ ensure_linear_test_checkpoint() {
   if [ -n "$mutation_out" ]; then
     idempotency_key=$(printf '%s\n' "$mutation_out" | tail -n1)
     printf '%s\n' "$mutation_out" > "$task_dir/test.linear-mutation.txt"
-    echo "🔑 test mutation idempotency_key=${idempotency_key} (dry-run; set GRKR_LINEAR_MUTATE=1 when live apply lands)"
+    maybe_apply_linear_mutation "$task_dir/test.linear-mutation.txt"
+    echo "🔑 test mutation idempotency_key=${idempotency_key} (set GRKR_LINEAR_MUTATE=1 to apply)"
   else
     echo "⚠️ progress CLI linear-comment-mutation planning failed for test; local checkpoint kept."
   fi
@@ -529,22 +547,25 @@ ensure_linear_test_checkpoint() {
   echo "📝 Planning Linear test state mutation for $identifier (target=$target_state)..."
   if [ -n "${LINEAR_STATE_TEST_ID:-}" ]; then
     local state_mut
-    state_mut=$(run_progress_cli linear-state-mutation "$mutation_issue_id" "${LINEAR_STATE_TEST_ID}" 2>/dev/null) || state_mut=""
+    state_mut=$(run_progress_cli linear-state-mutation "$mutation_issue_id" "${LINEAR_STATE_TEST_ID}" test 2>/dev/null) || state_mut=""
     if [ -n "$state_mut" ]; then
       printf '%s\n' "$state_mut" > "$state_mutation_file"
-      echo "🔑 test state mutation idempotency_key=$(printf '%s\n' "$state_mut" | tail -n1) (dry-run)"
+      maybe_apply_linear_mutation "$state_mutation_file"
+      echo "🔑 test state mutation idempotency_key=$(printf '%s\n' "$state_mut" | tail -n1)"
     else
       {
         printf 'TARGET_STATE=%s\n' "$target_state"
         printf 'STATE_MUTATION_PLANNED=0\n'
       } > "$state_mutation_file"
+      maybe_apply_linear_mutation "$state_mutation_file"
     fi
   else
     {
       printf 'TARGET_STATE=%s\n' "$target_state"
       printf 'STATE_MUTATION_PLANNED=0\n'
     } > "$state_mutation_file"
-    echo "🔑 test state target=$target_state (dry-run; no LINEAR_STATE_TEST_ID; set GRKR_LINEAR_MUTATE=1 when live apply lands)"
+    maybe_apply_linear_mutation "$state_mutation_file"
+    echo "🔑 test state target=$target_state (no LINEAR_STATE_TEST_ID; set GRKR_LINEAR_MUTATE=1 when live apply lands)"
   fi
 
   if [ "$failed_commands" -gt 0 ]; then
@@ -649,33 +670,7 @@ ensure_linear_publish_complete() {
   # 3. Mark progress complete (provider-agnostic; records urls even if partial/empty)
   mark_task_progress_complete "$progress_file" "${BRANCH_URL:-}" "${PR_URL:-}"
 
-  # 4. Plan Linear Done state mutation (dry-run)
-  local target_state
-  target_state=$(run_progress_cli linear-state pr_summary 2>/dev/null || echo "Done")
-  local state_mutation_file="$task_dir/complete.linear-state-mutation.txt"
-
-  echo "📝 Planning Linear complete / Done state mutation for $identifier (target=$target_state)..."
-  if [ -n "${LINEAR_STATE_DONE_ID:-}" ]; then
-    local state_mut
-    state_mut=$(run_progress_cli linear-state-mutation "$mutation_issue_id" "${LINEAR_STATE_DONE_ID}" 2>/dev/null) || state_mut=""
-    if [ -n "$state_mut" ]; then
-      printf '%s\n' "$state_mut" > "$state_mutation_file"
-      echo "🔑 complete state mutation idempotency_key=$(printf '%s\n' "$state_mut" | tail -n1) (dry-run)"
-    else
-      {
-        printf 'TARGET_STATE=%s\n' "$target_state"
-        printf 'STATE_MUTATION_PLANNED=0\n'
-      } > "$state_mutation_file"
-    fi
-  else
-    {
-      printf 'TARGET_STATE=%s\n' "$target_state"
-      printf 'STATE_MUTATION_PLANNED=0\n'
-    } > "$state_mutation_file"
-    echo "🔑 complete state target=$target_state (dry-run; no LINEAR_STATE_DONE_ID; set GRKR_LINEAR_MUTATE=1 when live apply lands)"
-  fi
-
-  # 5. Plan completion comment via linear-comment-mutation (stage key pr_summary)
+  # 4. Plan completion comment FIRST (per design: comment before Done state), then apply.
   local mutation_out
   local comment_body
   comment_body=$(cat <<'CMT'
@@ -706,11 +701,42 @@ CMT
     local idempotency_key
     idempotency_key=$(printf '%s\n' "$mutation_out" | tail -n1)
     printf '%s\n' "$mutation_out" > "$complete_mutation_file"
-    echo "🔑 complete comment idempotency_key=${idempotency_key} (dry-run; set GRKR_LINEAR_MUTATE=1 when live apply lands)"
+    maybe_apply_linear_mutation "$complete_mutation_file"
+    echo "🔑 complete comment idempotency_key=${idempotency_key}"
   else
     echo "⚠️ progress CLI linear-comment-mutation planning failed for complete; local summary kept."
     # write a fallback local body for test visibility
     printf '%s\n' "$comment_body" > "$complete_mutation_file"
+    maybe_apply_linear_mutation "$complete_mutation_file"
+  fi
+
+  # 5. Plan Linear Done state mutation AFTER comment (design order).
+  local target_state
+  target_state=$(run_progress_cli linear-state pr_summary 2>/dev/null || echo "Done")
+  local state_mutation_file="$task_dir/complete.linear-state-mutation.txt"
+
+  echo "📝 Planning Linear complete / Done state mutation for $identifier (target=$target_state)..."
+  if [ -n "${LINEAR_STATE_DONE_ID:-}" ]; then
+    local state_mut
+    state_mut=$(run_progress_cli linear-state-mutation "$mutation_issue_id" "${LINEAR_STATE_DONE_ID}" complete 2>/dev/null) || state_mut=""
+    if [ -n "$state_mut" ]; then
+      printf '%s\n' "$state_mut" > "$state_mutation_file"
+      maybe_apply_linear_mutation "$state_mutation_file"
+      echo "🔑 complete state mutation idempotency_key=$(printf '%s\n' "$state_mut" | tail -n1)"
+    else
+      {
+        printf 'TARGET_STATE=%s\n' "$target_state"
+        printf 'STATE_MUTATION_PLANNED=0\n'
+      } > "$state_mutation_file"
+      maybe_apply_linear_mutation "$state_mutation_file"
+    fi
+  else
+    {
+      printf 'TARGET_STATE=%s\n' "$target_state"
+      printf 'STATE_MUTATION_PLANNED=0\n'
+    } > "$state_mutation_file"
+    maybe_apply_linear_mutation "$state_mutation_file"
+    echo "🔑 complete state target=$target_state (no LINEAR_STATE_DONE_ID; set GRKR_LINEAR_MUTATE=1 when live apply lands)"
   fi
 
   echo "✅ Linear publish + complete planned for $identifier"

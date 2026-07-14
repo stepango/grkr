@@ -8,9 +8,8 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/grkr-linear-refuse.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT
 
-mkdir -p "$tmpdir/lib" "$tmpdir/bin" "$tmpdir/.grkr/tasks/eng-123" "$tmpdir/home"
-cp "$repo_root/bin/lib/task_progress.sh" "$tmpdir/lib/"
-cp "$repo_root/bin/lib/linear_issue.sh" "$tmpdir/lib/"
+mkdir -p "$tmpdir/bin" "$tmpdir/.grkr/tasks/eng-123" "$tmpdir/home"
+bash "$repo_root/test/test-copy-grkr-lib.sh" "$tmpdir"
 
 gh_log="$tmpdir/gh.log"
 : >"$gh_log"

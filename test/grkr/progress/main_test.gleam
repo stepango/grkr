@@ -323,7 +323,7 @@ pub fn plan_linear_refusal_with_state_id_test() {
       |> should.be_true()
 
       req.idempotency_key
-      |> should.equal("grkr-state-update-LIN-001")
+      |> should.equal("grkr-state-refusal-LIN-001")
     }
     option.None -> should.fail()
   }

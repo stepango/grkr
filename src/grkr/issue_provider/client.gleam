@@ -84,6 +84,25 @@ pub fn run_graphql_query(
   }
 }
 
+/// Run Linear GraphQL with query + variables (for planned mutations).
+/// Reuses redaction and token validation. Does not affect run_graphql_query callers.
+pub fn run_graphql_with_variables(
+  access_token: String,
+  graphql_query: String,
+  variables_json: String,
+) -> Result(String, types.ProviderError) {
+  use token <- result_try(require_access_token(access_token))
+  case post_graphql_with_variables(
+    endpoint,
+    authorization_header(token),
+    graphql_query,
+    variables_json,
+  ) {
+    Ok(body) -> Ok(body)
+    Error(message) -> Error(types.QueryError(redact(message, token)))
+  }
+}
+
 pub fn authorization_header(access_token: String) -> String {
   case string.starts_with(access_token, "Bearer ") {
     True -> access_token
@@ -122,4 +141,12 @@ fn post_graphql(
   endpoint: String,
   access_token: String,
   query: String,
+) -> Result(String, String)
+
+@external(javascript, "../issue_provider/linear_http.mjs", "postGraphqlWithVariablesSync")
+fn post_graphql_with_variables(
+  endpoint: String,
+  access_token: String,
+  query: String,
+  variables_json: String,
 ) -> Result(String, String)

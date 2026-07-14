@@ -1,6 +1,6 @@
 # Gleam v2 Migration Status
 
-**Current implementation status (2026-07-14, post publish+complete): GitHub picker/refusal/supervisor on **main**; Linear research/plan + refuse + implement + test + publish+complete (dry-run) wired for `--linear-issue` (STAGE=complete; GitHub PR from linear-* branch + Linear Done state + completion comment planned; no live mutate); GitHub default; `gleam build` clean. (See full table + remaining below.)**
+**Current implementation status (2026-07-14, post publish+complete @ bd523a6 / PR #100; main tip 9759669 post-chore): GitHub picker/refusal/supervisor on **main**; Linear research/plan + refuse + implement + test + publish+complete (dry-run) wired for `--linear-issue` (STAGE=complete; GitHub PR from linear-* branch + Linear Done state + completion comment planned; no live mutate); GitHub default; `gleam build` clean. (See full table + remaining below.)**
 
 The migration uses small kanban-driven slices (decomposition required because large parent cards repeatedly hit 90/90 max_iterations limit during complex impl; see e.g. blocked t_483bf2fb etc.). 
 
@@ -82,8 +82,8 @@ Verified **2026-06-22** @ d993152 (`gleam test`: **289 passed, 0 failures**; `gl
 | 12 | cleanup, retry, stale-job recovery | **done** | supervisor cleanup/reap phases, `worktree_cleanup`, `recovery` + active_jobs TTL per `.grkr/supervisor-cleanup-policy.md` §6 (spec/36) |
 
 **Still forward-looking (not blocking GitHub refusal-aware pipeline):**
-- Linear publish + complete dry-run landed (this slice): after test, produces GitHub PR from linear-* branch + plans Linear Done + completion comment (dry-run dumps only). Live `GRKR_LINEAR_MUTATE` apply still optional follow-up. Supervisor Linear pick→schedule→spawn already landed. GitHub remains default `GRKR_ISSUE_PROVIDER`.
-- **PR #79 MERGED** to `main` @ 78f4fb8 (2026-07-10); Linear JobKey @ **ce61881**; MVP tip **28e4794** (PR #93); refuse tip **8aba009** (PR #95); implement tip **d1c1240** (PR #97); main tip **bfee58c** (PR #98 test-stage dry-run); ongoing e2e cron regression + kanban hygiene (process — not missing spec/39 core modules)
+- Linear publish + complete dry-run landed @ **bd523a6** (PR #100): after test, produces GitHub PR from linear-* branch + plans Linear Done + completion comment (dry-run dumps only). Live `GRKR_LINEAR_MUTATE` apply still optional follow-up. Supervisor Linear pick→schedule→spawn already landed. GitHub remains default `GRKR_ISSUE_PROVIDER`.
+- **PR #79 MERGED** to `main` @ 78f4fb8 (2026-07-10); Linear JobKey @ **ce61881**; MVP tip **28e4794** (PR #93); refuse tip **8aba009** (PR #95); implement tip **d1c1240** (PR #97); test tip **bfee58c** (PR #98); publish tip **bd523a6** (PR #100); ongoing e2e cron regression + kanban hygiene (process — not missing spec/39 core modules)
 
 **Completed cross-cutting slices (retained for traceability):** workflow/templates thinning (12cdfd1, t_c4ea323f, t_7cc455e3), comment worker landings (t_13a8a733, t_b3024409), cleanup audit (270→280 tests, audit-cleanup.md).
 
@@ -106,6 +106,8 @@ Verified **2026-06-22** @ d993152 (`gleam test`: **289 passed, 0 failures**; `gl
 **Update (2026-07-13, Linear test stage dry-run):** Product change. `--linear-issue` now continues after implement success: runs verification commands (BUILD/TEST) inside worktree, writes test.md with "Linear issue ID: title" header (shared write_test_checkpoint_with_header), plans test.linear-*.txt (comment + state "In Review" via linear-state / linear-comment-mutation dry-run), updates stages.test=done|failed (mark_task_progress_failed on fail). ensure_linear_test_checkpoint reuses build_command_list/run_test_stage_hook etc. No gh, no publish, no complete. GitHub ensure_test_checkpoint 100% unchanged. Evolved implement test + failure subcase. README + gleam-migration thin notes. design doc included. No live mutate. Ran gleam build/test + targeted linear shell tests.
 
 **Update t_78451b69 (2026-07-14, post-land tip sync after Linear test PR #98):** Docs-only. Main tip promoted to **bfee58c** (PR #98 Linear test-stage dry-run after PR #97 implement @ d1c1240; squash of 18a516a). README + this header + forward-looking bullets + `spec/parts/39` note implement+test dry-run **landed**; remaining gap = **publish + complete**; live `GRKR_LINEAR_MUTATE` still optional; GitHub default `GRKR_ISSUE_PROVIDER`. **305** gleam cited from tip smoke/review. Ran `scripts/sync-spec.sh` after `spec/parts/39` touch. No product code.
+
+**Update t_bb5de443 (2026-07-14, post-land tip sync after Linear publish PR #100):** Docs-only. Main tip promoted to **bd523a6** (PR #100 Linear publish+complete dry-run after test @ bfee58c). README + this header + forward-looking bullets + `spec/parts/39` note publish+complete dry-run **landed** @ bd523a6; remaining gap = optional live `GRKR_LINEAR_MUTATE`; GitHub default. Ran `scripts/sync-spec.sh` after `spec/parts/39` touch. No product code.
 
 **Update t_bb83609e / t_1520c3a7 (2026-06-24, decision gate smoke):** `bin/grkr-issue-workflow.sh`: `gleam run --no-print-progress` for workflow CLIs; `run_decision_gate` splits stderr from stdout and returns last line; `bin/grkr` normalizes gate output (trim/case) before `proceed|refuse` case. `gleam test` **291/291**; `test/robot-main-schedules-issue.sh` exit 0 @ land.
 

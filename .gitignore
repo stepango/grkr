@@ -7,11 +7,9 @@ package-lock.json
 .grkr/locks/
 .grkr/worktrees/
 .grkr/logs/
-.grkr/kanban-cron-body*.txt
-.grkr/kanban-cron-body*.md
-.grkr/kanban-cron-*.body*.md
-.grkr/kanban-cron-orchestrator-body*.md
-.grkr/kanban-cron-created-ids-*.txt
+# Factory pulse artifacts (json/txt/body/create/dispatch/ids/stamp/…)
+.grkr/kanban-cron-*
+.grkr/e2e-logs/
 .grkr/*.log
 .grkr/tmp-*.sh
 .automation-local/

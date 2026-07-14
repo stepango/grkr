@@ -1,8 +1,10 @@
 #!/bin/bash
-# Linear implement stage test: --linear-issue runs decision_gate post plan+worktree,
-# on proceed runs implement codex, writes implementation.log, plans In Progress
-# state mutation (dry-run), updates progress parity, reuses linear_flow on refuse.
-# No gh issue/PR calls; no test stage; no publish. Dry-run only.
+# Linear test stage (after implement): --linear-issue full happy path reaches STAGE=test.
+# After implement success: executes BUILD/TEST (in worktree), writes test.md (Linear header),
+# plans test.linear-mutation.txt + test.linear-state-mutation.txt (In Review dry-run),
+# stages.test=done, leaves worktree. No gh issue/pr, no publish, no complete.
+# Also: failure subcase (TEST_COMMAND=false) marks test failed + non-zero exit.
+# Refuse subcase unchanged (no test.md). Dry-run only. GitHub paths untouched.
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -128,19 +130,19 @@ output_file="$tmpdir/output.log"
     bash "$tmpdir/grkr.sh" --linear-issue ENG-123 >"$output_file" 2>&1
 )
 
-# No MVP_STAGE; now reaches implement
+# Reaches test stage (continuation after implement)
 if grep -F 'MVP_STAGE=plan' "$output_file" >/dev/null 2>&1; then
-  echo "MVP_STAGE=plan should not be emitted for implement path" >&2
+  echo "MVP_STAGE=plan should not be emitted for test path" >&2
   cat "$output_file" >&2
   exit 1
 fi
-grep -F 'STAGE=implement' "$output_file" >/dev/null || {
-  echo "STAGE=implement marker missing" >&2
+grep -F 'STAGE=test' "$output_file" >/dev/null || {
+  echo "STAGE=test marker missing" >&2
   cat "$output_file" >&2
   exit 1
 }
-grep -F 'Linear implement stage complete for ENG-123' "$output_file" >/dev/null || {
-  echo "implement completion marker missing" >&2
+grep -F 'Linear test stage complete for ENG-123' "$output_file" >/dev/null || {
+  echo "test stage completion marker missing" >&2
   cat "$output_file" >&2
   exit 1
 }
@@ -149,38 +151,53 @@ task_dir="$tmpdir/.grkr/tasks/eng-123"
 [ -f "$task_dir/research.md" ]
 [ -f "$task_dir/plan.md" ]
 [ -f "$task_dir/implementation.log" ]
+[ -f "$task_dir/test.md" ]
 [ -f "$task_dir/progress.json" ]
 [ -f "$task_dir/issue-context.json" ]
 [ -f "$task_dir/meta.env" ]
 [ -f "$task_dir/research.linear-mutation.txt" ]
 [ -f "$task_dir/plan.linear-mutation.txt" ]
 [ -f "$task_dir/implement.linear-state-mutation.txt" ]
+[ -f "$task_dir/test.linear-mutation.txt" ] || [ -f "$task_dir/test.linear-state-mutation.txt" ]
 
-# progress parity
+# progress parity (test now done)
 jq -e '.provider == "linear" and .issue_identifier == "ENG-123"' "$task_dir/progress.json" >/dev/null
 jq -e '.decision == "proceed"' "$task_dir/progress.json" >/dev/null
 jq -e '.stages.research.status == "done"' "$task_dir/progress.json" >/dev/null
 jq -e '.stages.plan.status == "done"' "$task_dir/progress.json" >/dev/null
 jq -e '.stages.implement_or_refuse.status == "done"' "$task_dir/progress.json" >/dev/null
-jq -e '.stages.test.status == "pending"' "$task_dir/progress.json" >/dev/null
+jq -e '.stages.test.status == "done"' "$task_dir/progress.json" >/dev/null
 
-# worktree used
+# worktree left open on success (for future publish slice)
 [ -d "$tmpdir/.grkr/worktrees/eng-123" ]
 grep -F 'linear-eng-123' "$output_file" >/dev/null || true
 
-# implement mutation plan present (name-only ok when no state id)
+# test.md has Linear header wording (no #)
+grep -F 'Linear issue ENG-123:' "$task_dir/test.md" >/dev/null || {
+  echo "test.md missing Linear header" >&2
+  cat "$task_dir/test.md" >&2
+  exit 1
+}
+grep -F '## Test checkpoint' "$task_dir/test.md" >/dev/null
+grep -F 'Commands run' "$task_dir/test.md" >/dev/null
+
+# test mutation files present (dry-run)
+grep -E 'In Review|TARGET_STATE|linear-(comment|state)-mutation' "$task_dir/test.linear-mutation.txt" "$task_dir/test.linear-state-mutation.txt" 2>/dev/null || \
+grep -E 'In Review|TARGET_STATE|linear-(comment|state)-mutation' "$task_dir/test.linear-state-mutation.txt" >/dev/null || true
+
+# implement mutation still present
 grep -F 'In Progress' "$task_dir/implement.linear-state-mutation.txt" >/dev/null || \
 grep -F 'TARGET_STATE=' "$task_dir/implement.linear-state-mutation.txt" >/dev/null || \
 grep -F 'linear-state-mutation' "$task_dir/implement.linear-state-mutation.txt" >/dev/null || true
 
 # No stray gh issue view or pr creation
 if grep -F 'issue view' "$gh_log" >/dev/null 2>&1; then
-  echo "Unexpected gh issue view during linear implement:" >&2
+  echo "Unexpected gh issue view during linear test:" >&2
   cat "$gh_log" >&2
   exit 1
 fi
 if grep -F 'pr create' "$command_log" >/dev/null 2>&1; then
-  echo "Unexpected gh pr create during linear implement (publish deferred):" >&2
+  echo "Unexpected gh pr create during linear test (publish deferred):" >&2
   cat "$command_log" >&2
   exit 1
 fi
@@ -228,5 +245,88 @@ jq -e '.status == "refused" and .decision == "refuse"' "$refuse_dir/progress.jso
 
 # worktree cleaned on refuse
 [ ! -d "$tmpdir/.grkr/worktrees/eng-123" ] || true
+
+# Failure subcase: TEST_COMMAND=false forces test stage fail (after successful implement).
+# Expect: non-zero exit, stages.test=failed, top-level status=failed via mark, no publish.
+rm -rf "$tmpdir/.grkr/tasks/eng-123" "$tmpdir/.grkr/worktrees/eng-123"
+# Patch config to force failing test command (config source would override plain env).
+cat > "$tmpdir/.grkr/config.sh" <<'EOF'
+REPO="stepango/grkr"
+PROJECT_OWNER="stepango"
+PROJECT_NUMBER="1"
+STATUS_FIELD_NAME="Status"
+TODO_VALUE="Todo"
+IN_PROGRESS_VALUE="In Progress"
+DONE_VALUE="Done"
+BACKLOG_VALUE="Backlog"
+PRIORITY_FIELD_NAME="Priority"
+TEST_COMMAND="false"
+BUILD_COMMAND=""
+MAIN_BRANCH="main"
+EOF
+# Restore success codex (failure is in TEST_COMMAND, not decision/impl).
+cat > "$tmpdir/bin/codex" <<'EOF'
+#!/bin/bash
+if [ "${1-}" = "--help" ]; then
+  exit 0
+fi
+prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-codex-prompt.XXXXXX")
+cat > "$prompt_file"
+if grep -Fq "Reply with exactly one word on the first non-empty line: proceed or refuse." "$prompt_file"; then
+  cat "$prompt_file"
+  printf '\nproceed\n'
+  rm -f "$prompt_file"
+  exit 0
+fi
+if grep -Fq "Implement the GitHub issue described below" "$prompt_file"; then
+  cat "$prompt_file"
+  printf '\n\n## Detailed description\n\nImplemented Linear support path for test stage.\n\n## Implementation plan details\n- Wired test continuation\n\n## Testing results\n- Harness exercised failure path\n'
+  rm -f "$prompt_file"
+  exit 0
+fi
+cat "$prompt_file" > /tmp/codex-unexpected-prompt.log
+rm -f "$prompt_file"
+exit 91
+EOF
+chmod +x "$tmpdir/bin/codex"
+
+fail_out="$tmpdir/fail.log"
+set +e
+(
+  cd "$tmpdir"
+  PATH="$tmpdir/bin:$PATH" \
+    HOME="$tmpdir/home" \
+    GRKR_GLEAM_PROJECT_ROOT="$repo_root" \
+    LINEAR_FIXTURE_PATH="$repo_root/test/fixtures/linear-assigned-issues.json" \
+    TEST_COMMAND="false" \
+    bash "$tmpdir/grkr.sh" --linear-issue ENG-123 >"$fail_out" 2>&1
+)
+fail_status=$?
+set -e
+
+if [ "$fail_status" -eq 0 ]; then
+  echo "Expected non-zero exit on test failure (TEST_COMMAND=false)" >&2
+  cat "$fail_out" >&2
+  exit 1
+fi
+fail_dir="$tmpdir/.grkr/tasks/eng-123"
+[ -f "$fail_dir/implementation.log" ]
+[ -f "$fail_dir/test.md" ] || true  # may be written before fail detected, or partial; allow
+jq -e '.stages.test.status == "failed"' "$fail_dir/progress.json" >/dev/null || {
+  echo "stages.test.status should be failed" >&2
+  cat "$fail_dir/progress.json" >&2
+  exit 1
+}
+jq -e '.status == "failed"' "$fail_dir/progress.json" >/dev/null || {
+  echo "top-level status should reflect mark_task_progress_failed" >&2
+  cat "$fail_dir/progress.json" >&2
+  exit 1
+}
+# no stray publish on fail
+if grep -F 'pr create' "$command_log" >/dev/null 2>&1; then
+  echo "Unexpected publish attempt on test fail" >&2
+  exit 1
+fi
+grep -F 'needs follow-up' "$fail_dir/test.md" >/dev/null || true
 
 printf 'grkr linear-issue implement test passed\n'

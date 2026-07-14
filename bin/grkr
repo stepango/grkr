@@ -325,11 +325,43 @@ write_test_checkpoint_file() {
   local total_commands=$9
   local passed_commands=${10}
   local failed_commands=${11}
+  local header_line
+
+  header_line=$(printf 'Issue #%s: %s' "$issue" "$title")
+  write_test_checkpoint_with_header \
+    "$checkpoint_file" \
+    "$header_line" \
+    "$task_slug" \
+    "$commands_file" \
+    "$results_file" \
+    "$recommendation" \
+    "$overall_result" \
+    "$total_commands" \
+    "$passed_commands" \
+    "$failed_commands"
+}
+
+# Shared body writer for test checkpoint (thin reuse for GitHub + Linear).
+# GitHub callers use write_test_checkpoint_file (preserves "Issue #N: title" + gh behavior).
+# Linear calls this directly with "Linear issue ID: title" (no # on identifier).
+# All sections, marker, excerpts, risks, recommendation identical.
+# Extracted per design-linear-test-stage.md to avoid duplication while keeping GitHub ensure_test_checkpoint 100% unchanged.
+write_test_checkpoint_with_header() {
+  local checkpoint_file=$1
+  local header_line=$2
+  local task_slug=$3
+  local commands_file=$4
+  local results_file=$5
+  local recommendation=$6
+  local overall_result=$7
+  local total_commands=$8
+  local passed_commands=$9
+  local failed_commands=${10}
 
   {
     printf '%s\n\n' "$(checkpoint_marker test "$task_slug")"
     printf '## Test checkpoint\n\n'
-    printf 'Issue #%s: %s\n\n' "$issue" "$title"
+    printf '%s\n\n' "$header_line"
 
     printf '### Commands run\n\n'
     while IFS= read -r command; do

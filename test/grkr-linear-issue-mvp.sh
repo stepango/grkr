@@ -1,8 +1,8 @@
 #!/bin/bash
 # MVP smoke: grkr --linear-issue <identifier> loads Linear fixture context,
 # writes research+plan checkpoints, plans linear-comment-mutation, prepares worktree,
-# runs decision_gate (proceed), runs implement codex (dry-run In Progress planned).
-# No GitHub gh issue view. Test/PR/publish stages remain out of scope for this harness.
+# runs decision_gate (proceed), implement + test + publish/complete dry-run (STAGE=complete).
+# No GitHub gh issue view. gh pr create allowed for Linear publish; no-changes still completes.
 set -euo pipefail
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -49,6 +49,24 @@ case "\${1-} \${2-}" in
   'issue view')
     echo "UNEXPECTED gh issue view during linear-issue MVP" >> "$gh_log"
     exit 99
+    ;;
+  'pr list')
+    printf '%s\n' '[]'
+    exit 0
+    ;;
+  'pr create')
+    printf '%s\n' 'https://github.com/stepango/grkr/pull/999'
+    exit 0
+    ;;
+  'pr edit')
+    exit 0
+    ;;
+  'issue edit')
+    if echo "\$*" | grep -qE -- '--add-label|--remove-label'; then
+      echo "UNEXPECTED gh issue label edit on Linear path" >> "$gh_log"
+      exit 98
+    fi
+    exit 0
     ;;
   *) exit 0 ;;
 esac
@@ -110,6 +128,15 @@ case "\$1 \$2" in
     printf 'gitdir: %s/.git\n' "$tmpdir" > "\$dir/.git"
     exit 0
     ;;
+  'diff --cached')
+    # Quiet success = no staged changes → Linear publish no-changes path still completes
+    case "\${3-}" in
+      --quiet) exit 0 ;;
+      --name-only) exit 0 ;;
+    esac
+    exit 0
+    ;;
+  'add '*|'add -A'|'add --all') exit 0 ;;
   *) exec "$real_git" "\$@" ;;
 esac
 EOF
@@ -131,8 +158,13 @@ output_file="$tmpdir/output.log"
 )
 
 # logs also tee to ~/.grkr/logs; primary assertions on files + output
-grep -E '(Linear (worktree ready|implement stage complete|MVP complete) for ENG-123|STAGE=implement)' "$output_file" >/dev/null || {
+grep -E '(Linear (worktree ready|implement stage complete|publish \+ complete planned|MVP complete) for ENG-123|STAGE=(implement|test|complete))' "$output_file" >/dev/null || {
   echo "worktree/completion marker missing" >&2
+  cat "$output_file" >&2
+  exit 1
+}
+grep -F 'STAGE=complete' "$output_file" >/dev/null || {
+  echo "STAGE=complete marker missing (full Linear path should complete)" >&2
   cat "$output_file" >&2
   exit 1
 }
@@ -179,7 +211,7 @@ multiline_out="$tmpdir/multiline.log"
     LINEAR_FIXTURE_PATH="$repo_root/test/fixtures/linear-assigned-issues.json" \
     bash "$tmpdir/grkr.sh" --linear-issue ENG-456 >"$multiline_out" 2>&1
 )
-grep -E '(Linear (implement stage complete|worktree ready|MVP complete) for ENG-456|STAGE=implement)' "$multiline_out" >/dev/null || {
+grep -E '(Linear (implement stage complete|worktree ready|publish \+ complete planned|MVP complete) for ENG-456|STAGE=(implement|test|complete))' "$multiline_out" >/dev/null || {
   echo "multi-line completion marker missing" >&2
   cat "$multiline_out" >&2
   exit 1
@@ -189,7 +221,7 @@ ml_task_dir="$tmpdir/.grkr/tasks/eng-456"
 [ -f "$ml_task_dir/issue-context.json" ]
 [ -f "$ml_task_dir/research.md" ]
 [ -f "$ml_task_dir/implementation.log" ] || true
-grep -F 'STAGE=implement' "$multiline_out" >/dev/null || true
+grep -E 'STAGE=(implement|complete)' "$multiline_out" >/dev/null || true
 
 # Full multi-line description preserved in issue-context.json
 jq -e '

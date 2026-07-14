@@ -1,6 +1,6 @@
 # Gleam v2 Migration Status
 
-**Current implementation status (2026-07-14, post-land tip **`bfee58c`** = PR #98 Linear test-stage dry-run after PR #97 implement): PR #79 **MERGED** to `main` @ **78f4fb8**. GitHub picker/refusal/supervisor on **main**; Linear JobKey + spawn landed; research/plan + refuse + implement + test (dry-run: commands in worktree, test.md Linear header, planned mutations to "In Review", stages.test=done|failed) wired for `--linear-issue` on **main** tip **bfee58c** (**305** `gleam test`); **publish + complete** still deferred; live `GRKR_LINEAR_MUTATE` still optional; GitHub default; `gleam build` clean. (Module inventory truncated in header; see full table below.)**
+**Current implementation status (2026-07-14, post publish+complete): GitHub picker/refusal/supervisor on **main**; Linear research/plan + refuse + implement + test + publish+complete (dry-run) wired for `--linear-issue` (STAGE=complete; GitHub PR from linear-* branch + Linear Done state + completion comment planned; no live mutate); GitHub default; `gleam build` clean. (See full table + remaining below.)**
 
 The migration uses small kanban-driven slices (decomposition required because large parent cards repeatedly hit 90/90 max_iterations limit during complex impl; see e.g. blocked t_483bf2fb etc.). 
 
@@ -82,7 +82,7 @@ Verified **2026-06-22** @ d993152 (`gleam test`: **289 passed, 0 failures**; `gl
 | 12 | cleanup, retry, stale-job recovery | **done** | supervisor cleanup/reap phases, `worktree_cleanup`, `recovery` + active_jobs TTL per `.grkr/supervisor-cleanup-policy.md` §6 (spec/36) |
 
 **Still forward-looking (not blocking GitHub refusal-aware pipeline):**
-- Linear **publish + complete** still deferred after `--linear-issue` research/plan MVP (t_48db8096 / PR #93 @ **28e4794** lineage), refuse dry-run (t_503ca0f3 + t_e47417cb land t_18df994e / PR #95 @ **8aba009**), implement dry-run (PR #97 @ **d1c1240**), and test dry-run (PR #98 @ **bfee58c**: verification commands in worktree, test.md Linear header, planned mutations to "In Review", stages.test=done|failed). Live `GRKR_LINEAR_MUTATE` apply still optional follow-up. Supervisor Linear pick→schedule→spawn already landed (t_51747d23 @ ce61881; fixture e2e t_5254b489 / PR #92 @ 5782431). GitHub remains default `GRKR_ISSUE_PROVIDER`.
+- Linear publish + complete dry-run landed (this slice): after test, produces GitHub PR from linear-* branch + plans Linear Done + completion comment (dry-run dumps only). Live `GRKR_LINEAR_MUTATE` apply still optional follow-up. Supervisor Linear pick→schedule→spawn already landed. GitHub remains default `GRKR_ISSUE_PROVIDER`.
 - **PR #79 MERGED** to `main` @ 78f4fb8 (2026-07-10); Linear JobKey @ **ce61881**; MVP tip **28e4794** (PR #93); refuse tip **8aba009** (PR #95); implement tip **d1c1240** (PR #97); main tip **bfee58c** (PR #98 test-stage dry-run); ongoing e2e cron regression + kanban hygiene (process — not missing spec/39 core modules)
 
 **Completed cross-cutting slices (retained for traceability):** workflow/templates thinning (12cdfd1, t_c4ea323f, t_7cc455e3), comment worker landings (t_13a8a733, t_b3024409), cleanup audit (270→280 tests, audit-cleanup.md).

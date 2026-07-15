@@ -1,10 +1,10 @@
 ## 31. Recommended implementation order
 
-Status snapshot (Gleam v2 main tip **`e28d0c0`** post PR #104 guarded Linear live mutate; publish+complete dry-run @ **bd523a6** / PR #100; GitHub-default refusal-aware pipeline; historical counts e.g. **298** pre-MVP / **300** on Linear MVP tip / **304** on refuse tip / **305** on test-stage tip):
+Status snapshot (Gleam v2 main tip **`8d4b674`** post PR #107 Linear live-mutate nits; land PR #104 @ **e28d0c0**; FFI variables PR #106 @ **36f8f03**; publish+complete dry-run @ **bd523a6** / PR #100; GitHub-default refusal-aware pipeline; historical counts e.g. **298** pre-MVP / **300** on Linear MVP tip / **304** on refuse tip / **305** on test-stage tip / **316** on live-mutate nits tip):
 
 - Items **1 through 5** were the historical baseline (doctor, supervisor shell loop, sync-main, picker, research/plan checkpoints).
 - Items **6 through 12** are **implemented** in Gleam v2 with thin `bin/` delegates; see primary wiring below.
-- **Still forward-looking (not blocking GitHub core):** Linear refuse dry-run landed @ **8aba009** (t_503ca0f3 + t_e47417cb / PR #95); implement dry-run @ **d1c1240** (PR #97); test dry-run @ **bfee58c** (PR #98: worktree verify + test.md + planned "In Review" mutations); **publish+complete dry-run landed** @ **bd523a6** (PR #100); **guarded live `GRKR_LINEAR_MUTATE=1` apply landed** @ **e28d0c0** (PR #104; default OFF / dry-run); `GRKR_ISSUE_PROVIDER=linear` pick+schedule+spawn already lands (t_51747d23 @ ce61881); GitHub remains default; ongoing PR / e2e process polish.
+- **Still forward-looking (not blocking GitHub core):** Linear refuse dry-run landed @ **8aba009** (t_503ca0f3 + t_e47417cb / PR #95); implement dry-run @ **d1c1240** (PR #97); test dry-run @ **bfee58c** (PR #98: worktree verify + test.md + planned "In Review" mutations); **publish+complete dry-run landed** @ **bd523a6** (PR #100); **guarded live `GRKR_LINEAR_MUTATE=1` apply landed** @ **e28d0c0** (PR #104) + nits tip **8d4b674** (PR #107; default OFF / dry-run; stricter parse, soft skipped-no-token, stage-scoped keys); `GRKR_ISSUE_PROVIDER=linear` pick+schedule+spawn already lands (t_51747d23 @ ce61881); GitHub remains default; ongoing PR / e2e process polish.
 
 | # | Item | Status | Primary code / wiring |
 |---|------|--------|------------------------|

@@ -125,5 +125,56 @@ printf '%s\n' "$out2" | grep -q 'skipped-no-token' || {
 }
 # If impl chose not to (re)write no-token sidecar, prior may still exist; that's fine.
 
-echo "OK: apply matrix stub cases exercised (via GRKR_LINEAR_APPLY_CMD) + real skipped-already path + soft no-token resume"
+echo "== case: fail + STRICT unset/empty -> soft (helper returns 0)"
+printf 'q\nv\nk-fail-soft\n' > "$tmpdir/task/failsoft.linear-mutation.txt"
+export GRKR_LINEAR_APPLY_CMD="$STUB"
+export GRKR_APPLY_STUB_MODE=fail
+unset GRKR_LINEAR_MUTATE_STRICT
+unset GRKR_LINEAR_MUTATE
+rc=0
+maybe_apply_linear_mutation "$tmpdir/task/failsoft.linear-mutation.txt" || rc=$?
+test "$rc" -eq 0 || {
+  echo "FAILED: fail + STRICT unset should return 0, got rc=$rc" >&2
+  exit 1
+}
+grep -q 'status=failed' "$tmpdir/task/failsoft.linear-mutation.txt.linear-apply-result.txt" || {
+  echo "FAILED: expected status=failed sidecar" >&2
+  exit 1
+}
+
+echo "== case: fail + STRICT=1 -> hard (helper returns non-zero)"
+printf 'q\nv\nk-fail-hard\n' > "$tmpdir/task/failhard.linear-mutation.txt"
+export GRKR_LINEAR_APPLY_CMD="$STUB"
+export GRKR_APPLY_STUB_MODE=fail
+export GRKR_LINEAR_MUTATE=1
+export GRKR_LINEAR_MUTATE_STRICT=1
+rc=0
+maybe_apply_linear_mutation "$tmpdir/task/failhard.linear-mutation.txt" || rc=$?
+test "$rc" -ne 0 || {
+  echo "FAILED: fail + STRICT=1 should return non-zero, got rc=$rc" >&2
+  exit 1
+}
+grep -q 'status=failed' "$tmpdir/task/failhard.linear-mutation.txt.linear-apply-result.txt" || {
+  echo "FAILED: expected status=failed sidecar under STRICT" >&2
+  exit 1
+}
+
+echo "== case: refuse dump + fail + STRICT=1 -> still soft (refuse stays soft)"
+printf 'q\nv\nk-refuse-fail\n' > "$tmpdir/task/refusal.linear-mutation.txt"
+export GRKR_LINEAR_APPLY_CMD="$STUB"
+export GRKR_APPLY_STUB_MODE=fail
+export GRKR_LINEAR_MUTATE=1
+export GRKR_LINEAR_MUTATE_STRICT=1
+rc=0
+maybe_apply_linear_mutation "$tmpdir/task/refusal.linear-mutation.txt" || rc=$?
+test "$rc" -eq 0 || {
+  echo "FAILED: refusal.* + fail + STRICT=1 must stay soft (rc=0), got rc=$rc" >&2
+  exit 1
+}
+grep -q 'status=failed' "$tmpdir/task/refusal.linear-mutation.txt.linear-apply-result.txt" || {
+  echo "FAILED: expected status=failed sidecar for refuse under STRICT" >&2
+  exit 1
+}
+
+echo "OK: apply matrix stub cases exercised (via GRKR_LINEAR_APPLY_CMD) + real skipped-already path + soft no-token resume + STRICT matrix (unset/fail/refuse)"
 exit 0

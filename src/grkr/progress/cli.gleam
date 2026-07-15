@@ -1,4 +1,5 @@
 import gleam/io
+import gleam/string
 import grkr/progress/main
 import grkr/progress/linear_mutation
 
@@ -63,10 +64,10 @@ pub fn main() -> Nil {
     ["mutation-debug", issue_id, body, stage, task_slug] ->
       emit_debug(main.cli_format_mutation_debug(issue_id, body, stage, task_slug))
     ["linear-apply-mutation", path] ->
-      emit_apply_result(main.cli_apply_linear_mutation_from_path(path, env_get))
+      emit_apply_result(path, main.cli_apply_linear_mutation_from_path(path, env_get))
     ["linear-apply-mutation"] ->
-      // stdin mode: read all from stdin
-      emit_apply_result(main.cli_apply_linear_mutation_from_stdin(env_get))
+      // stdin mode: read all from stdin; treat as non-refuse for STRICT decision
+      emit_apply_result("-", main.cli_apply_linear_mutation_from_stdin(env_get))
     _ -> {
       io.println("Usage: gleam run -m grkr/progress/cli -- <command> [args...]")
       io.println("")
@@ -148,16 +149,22 @@ fn emit_debug(result: Result(String, String)) -> Nil {
   emit_result(result)
 }
 
-fn emit_apply_result(result: Result(String, String)) -> Nil {
-  case result {
-    Ok(line) -> {
-      io.println(line)
-      // apply helper returns 0 for soft-fail cases per design
-    }
-    Error(message) -> {
-      io.println("LINEAR_MUTATE=failed error=" <> message)
-      // still soft unless caller uses STRICT; exit 0 here
-    }
+fn emit_apply_result(dump_path: String, result: Result(String, String)) -> Nil {
+  let line = case result {
+    Ok(l) -> l
+    Error(message) -> "LINEAR_MUTATE=failed error=" <> message
+  }
+  io.println(line)
+
+  // STRICT=1 (literal) makes non-refuse failed applies exit non-zero.
+  // Refuse dumps (basename refusal.*) stay soft even under STRICT.
+  // All other outcomes (dry, skipped-*, applied) stay soft.
+  let strict = linear_mutation.should_strict_hard_fail(env_get)
+  let is_refuse = linear_mutation.dump_is_refuse_path(dump_path)
+  let is_failed = string.contains(line, "LINEAR_MUTATE=failed")
+  case strict && !is_refuse && is_failed {
+    True -> exit(1)
+    False -> Nil
   }
 }
 

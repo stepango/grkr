@@ -54,32 +54,9 @@ pub fn create_comment_mutation(
   )
 }
 
-pub fn update_state_mutation(
-  issue_id: LinearIssueId,
-  state_id: String,
-) -> MutationRequest {
-  let query =
-    "mutation ($issueId: String!, $stateId: String!) { issueUpdate(id: $issueId, input: {stateId: $stateId}) { issue { id state { id name } } success } }"
-
-  let variables_json =
-    "{\"issueId\":\""
-    <> escape_json_string(issue_id.value)
-    <> "\",\"stateId\":\""
-    <> escape_json_string(state_id)
-    <> "\"}"
-
-  let idempotency_key = "grkr-state-update-" <> issue_id.value
-
-  MutationRequest(
-    query: query,
-    variables_json: variables_json,
-    idempotency_key: idempotency_key,
-  )
-}
-
-/// Stage-scoped state mutation key: grkr-state-<stage>-<issueId>.
-/// Callers that know the stage (implement/test/refusal/complete) should use this
-/// so keys do not collide across stages for the same issue.
+/// Stage-scoped state mutation (preferred). Key: grkr-state-<stage>-<issueId>.
+/// Empty stage falls back to "update" segment (still scoped form, no parallel unscoped API).
+/// Production callers (via CLI 3-arg or plan_..._scoped) pass explicit stage.
 pub fn update_state_mutation_scoped(
   issue_id: LinearIssueId,
   state_id: String,
@@ -106,6 +83,16 @@ pub fn update_state_mutation_scoped(
     variables_json: variables_json,
     idempotency_key: idempotency_key,
   )
+}
+
+/// 2-arg form kept for CLI legacy ("linear-state-mutation <id> <sid>" without stage) and a few tests.
+/// Delegates to scoped with "update" fallback so it emits grkr-state-update-<id> (semantically the update stage).
+/// Prefer update_state_mutation_scoped (or 3-arg CLI) with explicit stage to avoid cross-stage key collisions.
+pub fn update_state_mutation(
+  issue_id: LinearIssueId,
+  state_id: String,
+) -> MutationRequest {
+  update_state_mutation_scoped(issue_id, state_id, "")
 }
 
 pub fn create_comment_with_pr_link(
@@ -153,8 +140,11 @@ pub fn check_token_status(
 }
 
 pub fn mutation_result_from_response(response: String) -> MutationResult {
-  let lower = string.lowercase(response)
-  case string.contains(lower, "\"errors\"") || string.contains(lower, "errors") {
+  let trimmed = string.trim(response)
+  let lower = string.lowercase(trimmed)
+
+  // Strict: top-level "errors" array JSON shape only (not bare word in messages).
+  case has_top_level_errors_array(trimmed, lower) {
     True -> {
       case is_idempotent_error(response) {
         True -> MutationSuccess("idempotent-duplicate")
@@ -162,49 +152,103 @@ pub fn mutation_result_from_response(response: String) -> MutationResult {
       }
     }
     False -> {
-      // Real Linear response shapes
-      case
-        string.contains(lower, "commentcreate")
-        || string.contains(lower, "\"comment\":")
-        || string.contains(lower, "comment")
-      {
-        True -> {
-          let cid = extract_simple_id(response, "comment")
+      // Comment success: require commentCreate section + id under it.
+      case extract_comment_id(trimmed, lower) {
+        Ok(cid) ->
           MutationSuccess(case cid {
             "" -> "created"
             c -> c
           })
-        }
-        False ->
-          case
-            string.contains(lower, "issueupdate")
-            || string.contains(lower, "\"success\"")
-            || string.contains(lower, "success")
-          {
+        Error(_) ->
+          case is_state_update_success(lower) {
             True -> MutationStateUpdateSuccess
-            False -> MutationSuccess("ok")
+            // Unrecognized shapes must not become false "applied"
+            False -> MutationFailed("unrecognized Linear mutation response")
           }
       }
     }
   }
 }
 
-fn extract_simple_id(response: String, kind: String) -> String {
-  // Very small best-effort extractor for "id": "xxx" near the kind in JSON response.
-  // Not a full parser; sufficient for sidecar + markers. Real id preferred over "created".
-  let lower = string.lowercase(response)
-  case string.contains(lower, "\"" <> kind <> "\"") {
-    False -> ""
+fn has_top_level_errors_array(resp: String, lower: String) -> Bool {
+  // JSON-ish top level errors array: "errors":[ or "errors": [  or starts-with {"errors"
+  string.contains(lower, "\"errors\":[")
+  || string.contains(lower, "\"errors\": [")
+  || string.contains(lower, "\"errors\" :[")
+  || string.contains(lower, "\"errors\" : [")
+  || string.starts_with(string.trim(resp), "{\"errors\"")
+  || string.contains(lower, "{\"errors\":[")
+}
+
+fn is_state_update_success(lower: String) -> Bool {
+  // Require issueUpdate section + explicit success:true (space tolerant).
+  case string.contains(lower, "issueupdate") {
+    True ->
+      string.contains(lower, "\"success\":true")
+      || string.contains(lower, "\"success\": true")
+      || string.contains(lower, "\"success\" :true")
+      || string.contains(lower, "\"success\" : true")
+    False -> False
+  }
+}
+
+fn extract_comment_id(resp: String, lower: String) -> Result(String, Nil) {
+  case string.contains(lower, "commentcreate") {
     True -> {
-      // Look for "id":"..." after the section heuristically
-      let parts = string.split(response, "\"id\":\"")
-      case parts {
-        [_, after, ..] -> {
-          case string.split(after, "\"") {
-            [id, ..] -> id
-            _ -> ""
+      let id = extract_id_after_section(resp, "commentCreate")
+      case id {
+        "" -> {
+          // fallback to simple near "comment" only after confirming shape
+          let cid = extract_first_quoted_id_after(resp, "\"comment\"")
+          case cid {
+            "" -> Ok("created")
+            c -> Ok(c)
           }
         }
+        c -> Ok(c)
+      }
+    }
+    False -> Error(Nil)
+  }
+}
+
+fn extract_id_after_section(response: String, section: String) -> String {
+  let lower = string.lowercase(response)
+  let sec_lower = string.lowercase(section)
+  case string.contains(lower, sec_lower) {
+    False -> ""
+    True -> {
+      // Take text after first occurrence of section and find first id value.
+      let parts = string.split(response, section)
+      case parts {
+        [_, after, ..] -> extract_first_quoted_id(after)
+        _ -> ""
+      }
+    }
+  }
+}
+
+fn extract_first_quoted_id(s: String) -> String {
+  let parts = string.split(s, "\"id\":\"")
+  case parts {
+    [_, after, ..] -> {
+      case string.split(after, "\"") {
+        [id, ..] -> id
+        _ -> ""
+      }
+    }
+    _ -> ""
+  }
+}
+
+fn extract_first_quoted_id_after(response: String, marker: String) -> String {
+  let lower = string.lowercase(response)
+  case string.contains(lower, string.lowercase(marker)) {
+    False -> ""
+    True -> {
+      let parts = string.split(response, marker)
+      case parts {
+        [_, after, ..] -> extract_first_quoted_id(after)
         _ -> ""
       }
     }
@@ -343,6 +387,18 @@ pub fn classify_apply_outcome(
         MutationFailed(e) -> #("failed", "error=" <> redact_for_marker(e))
       }
   }
+}
+
+/// Returns true only for terminal sidecar statuses that mean "already done, do not retry".
+/// - "applied" and "skipped-already" are terminal success.
+/// - "skipped-no-state-id" is terminal (no state id is stable for the run).
+/// Soft non-terminal (must allow resume):
+/// - "skipped-no-token" (token may appear later)
+/// - "failed" (transient or fixable)
+pub fn sidecar_indicates_already_done(prior: String) -> Bool {
+  string.contains(prior, "status=applied")
+  || string.contains(prior, "status=skipped-already")
+  || string.contains(prior, "status=skipped-no-state-id")
 }
 
 fn redact_for_marker(s: String) -> String {

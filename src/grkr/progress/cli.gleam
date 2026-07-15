@@ -33,7 +33,8 @@ pub fn main() -> Nil {
     ["linear-comment-mutation", issue_id, body, stage, task_slug] ->
       emit_mutation(main.cli_plan_linear_comment_mutation(issue_id, body, stage, task_slug))
     ["linear-state-mutation", issue_id, state_id] ->
-      emit_mutation(main.cli_plan_linear_state_mutation(issue_id, state_id))
+      // Legacy 2-arg CLI routes via scoped "update" (no unscoped key emitted).
+      emit_mutation(main.cli_plan_linear_state_mutation_scoped(issue_id, state_id, "update"))
     ["linear-state-mutation", issue_id, state_id, stage] ->
       emit_mutation(main.cli_plan_linear_state_mutation_scoped(issue_id, state_id, stage))
     ["plan-linear-refusal", issue_id, task_slug, reason_class, reasoning] ->

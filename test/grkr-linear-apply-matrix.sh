@@ -106,5 +106,24 @@ printf '%s\n' "$out" | grep -q 'skipped-already' || {
 grep -q 'status=applied' "$tmpdir/task/already.linear-mutation.txt.linear-apply-result.txt"
 # sidecar not overwritten on skip-already
 
-echo "OK: apply matrix stub cases exercised (via GRKR_LINEAR_APPLY_CMD) + real skipped-already path"
+echo "== case: skipped-no-token is soft (prior no-token sidecar must NOT cause skipped-already; resume must retry path)"
+# Prior sidecar from a no-token run (may linger even if current impl avoids writing).
+# With tightened terminal check, this must NOT short-circuit to skipped-already.
+# Next run with MUTATE=1 (no token in this env) must emit skipped-no-token again (soft).
+printf 'key=notok1 status=skipped-no-token\n' > "$tmpdir/task/notok.linear-mutation.txt.linear-apply-result.txt"
+printf 'q\nv\nk-notok-retry\n' > "$tmpdir/task/notok.linear-mutation.txt"
+unset GRKR_LINEAR_APPLY_CMD
+export GRKR_LINEAR_MUTATE=1
+out2=$(maybe_apply_linear_mutation "$tmpdir/task/notok.linear-mutation.txt" 2>&1 || true)
+printf '%s\n' "$out2" | grep -q 'skipped-already' && {
+  echo "FAILED: prior skipped-no-token sidecar must not cause skipped-already: $out2" >&2
+  exit 1
+}
+printf '%s\n' "$out2" | grep -q 'skipped-no-token' || {
+  echo "FAILED: expected soft skipped-no-token retry marker, got: $out2" >&2
+  exit 1
+}
+# If impl chose not to (re)write no-token sidecar, prior may still exist; that's fine.
+
+echo "OK: apply matrix stub cases exercised (via GRKR_LINEAR_APPLY_CMD) + real skipped-already path + soft no-token resume"
 exit 0

@@ -35,11 +35,3 @@ maybe_apply_linear_mutation() {
   fi
   return 0
 }
-
-# Convenience: apply both a comment dump and a state dump when present (used by refusal/test/complete)
-maybe_apply_linear_mutation_pair() {
-  local comment_dump="$1"
-  local state_dump="$2"
-  maybe_apply_linear_mutation "$comment_dump"
-  maybe_apply_linear_mutation "$state_dump"
-}

@@ -258,23 +258,56 @@ pub fn should_apply_live_test() {
 }
 
 pub fn mutation_result_from_response_test() {
-  // comment success shape
+  // comment success shape with id (after commentCreate)
   let comment_resp = "{\"data\":{\"commentCreate\":{\"comment\":{\"id\":\"cmt_123\"}}}}"
   case linear_mutation.mutation_result_from_response(comment_resp) {
     linear_mutation.MutationSuccess(id) -> id |> should.equal("cmt_123")
     _ -> should.fail()
   }
 
-  // state success
+  // state success with issueUpdate + success true (space variants)
   let state_resp = "{\"data\":{\"issueUpdate\":{\"success\":true}}}"
   case linear_mutation.mutation_result_from_response(state_resp) {
     linear_mutation.MutationStateUpdateSuccess -> True |> should.be_true()
     _ -> should.fail()
   }
 
-  // error shape
+  let state_resp2 = "{\"data\":{\"issueUpdate\":{\"success\": true }}}"
+  case linear_mutation.mutation_result_from_response(state_resp2) {
+    linear_mutation.MutationStateUpdateSuccess -> True |> should.be_true()
+    _ -> should.fail()
+  }
+
+  // error array at top -> failed
   let err_resp = "{\"errors\":[{\"message\":\"boom\"}]}"
   case linear_mutation.mutation_result_from_response(err_resp) {
+    linear_mutation.MutationFailed(_) -> True |> should.be_true()
+    _ -> should.fail()
+  }
+
+  // idempotent duplicate error -> success idempotent (even with errors array)
+  let dup_err = "{\"errors\":[{\"message\":\"Comment already exists (duplicate)\"}]}"
+  case linear_mutation.mutation_result_from_response(dup_err) {
+    linear_mutation.MutationSuccess(id) -> id |> should.equal("idempotent-duplicate")
+    _ -> should.fail()
+  }
+
+  // NEGATIVE: bare word "success"/"comment" without real shapes must NOT be success/applied
+  let bogus_success = "{\"data\":null, \"note\":\"this text mentions success but no shape\"}"
+  case linear_mutation.mutation_result_from_response(bogus_success) {
+    linear_mutation.MutationFailed(_) -> True |> should.be_true()
+    _ -> should.fail()
+  }
+
+  let bogus_comment = "some random text containing the word comment and success"
+  case linear_mutation.mutation_result_from_response(bogus_comment) {
+    linear_mutation.MutationFailed(_) -> True |> should.be_true()
+    _ -> should.fail()
+  }
+
+  // data null is not success shapes
+  let data_null = "{\"data\":null}"
+  case linear_mutation.mutation_result_from_response(data_null) {
     linear_mutation.MutationFailed(_) -> True |> should.be_true()
     _ -> should.fail()
   }
@@ -286,4 +319,28 @@ pub fn format_apply_sidecar_test() {
 
   linear_mutation.format_apply_sidecar("k2", "skipped-no-token", "")
   |> should.equal("key=k2 status=skipped-no-token")
+}
+
+pub fn sidecar_indicates_already_done_test() {
+  // terminal
+  linear_mutation.sidecar_indicates_already_done("key=k status=applied")
+  |> should.be_true()
+
+  linear_mutation.sidecar_indicates_already_done("key=k status=skipped-already")
+  |> should.be_true()
+
+  linear_mutation.sidecar_indicates_already_done("key=k status=skipped-no-state-id target=foo")
+  |> should.be_true()
+
+  // soft non-terminal: no-token must NOT block resume
+  linear_mutation.sidecar_indicates_already_done("key=k status=skipped-no-token")
+  |> should.be_false()
+
+  // failed is retryable
+  linear_mutation.sidecar_indicates_already_done("key=k status=failed error=boom")
+  |> should.be_false()
+
+  // broad old "skipped" substring alone is not enough
+  linear_mutation.sidecar_indicates_already_done("key=k status=skipped-no-token foo")
+  |> should.be_false()
 }

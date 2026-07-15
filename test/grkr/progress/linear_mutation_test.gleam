@@ -62,6 +62,24 @@ pub fn update_state_mutation_test() {
   |> should.equal("grkr-state-update-LIN-456")
 }
 
+pub fn update_state_mutation_scoped_test() {
+  let issue_id = linear_mutation.to_linear_issue_id("LIN-456")
+  let request =
+    linear_mutation.update_state_mutation_scoped(issue_id, "STATE-789", "implement")
+
+  string.contains(request.query, "issueUpdate")
+  |> should.be_true()
+
+  request.idempotency_key
+  |> should.equal("grkr-state-implement-LIN-456")
+
+  // default empty stage falls back to "update"
+  let req2 =
+    linear_mutation.update_state_mutation_scoped(issue_id, "S2", "")
+  req2.idempotency_key
+  |> should.equal("grkr-state-update-LIN-456")
+}
+
 pub fn create_comment_with_pr_link_test() {
   let issue_id = linear_mutation.to_linear_issue_id("LIN-789")
   let request =
@@ -204,4 +222,68 @@ pub fn extract_idempotency_key_test() {
 
   linear_mutation.extract_idempotency_key(request)
   |> should.equal("grkr-checkpoint-test-issue-1001-test")
+}
+
+pub fn parse_three_line_dump_test() {
+  let full = "mutation Foo {x}\n{\"a\":1}\nkey-xyz"
+  case linear_mutation.parse_three_line_dump(full) {
+    Ok(#(q, v, k)) -> {
+      q |> should.equal("mutation Foo {x}")
+      v |> should.equal("{\"a\":1}")
+      k |> should.equal("key-xyz")
+    }
+    Error(_) -> should.fail()
+  }
+
+  // name-only should error
+  let name_only = "TARGET_STATE=Done\nSTATE_MUTATION_PLANNED=0\n"
+  case linear_mutation.parse_three_line_dump(name_only) {
+    Error(e) -> string.contains(e, "name-only") |> should.be_true()
+    Ok(_) -> should.fail()
+  }
+}
+
+pub fn should_apply_live_test() {
+  linear_mutation.should_apply_live(fn(_) { "1" })
+  |> should.be_true()
+
+  linear_mutation.should_apply_live(fn(_) { "" })
+  |> should.be_false()
+
+  linear_mutation.should_apply_live(fn(_) { "0" })
+  |> should.be_false()
+
+  linear_mutation.should_apply_live(fn(_) { "true" })
+  |> should.be_false()
+}
+
+pub fn mutation_result_from_response_test() {
+  // comment success shape
+  let comment_resp = "{\"data\":{\"commentCreate\":{\"comment\":{\"id\":\"cmt_123\"}}}}"
+  case linear_mutation.mutation_result_from_response(comment_resp) {
+    linear_mutation.MutationSuccess(id) -> id |> should.equal("cmt_123")
+    _ -> should.fail()
+  }
+
+  // state success
+  let state_resp = "{\"data\":{\"issueUpdate\":{\"success\":true}}}"
+  case linear_mutation.mutation_result_from_response(state_resp) {
+    linear_mutation.MutationStateUpdateSuccess -> True |> should.be_true()
+    _ -> should.fail()
+  }
+
+  // error shape
+  let err_resp = "{\"errors\":[{\"message\":\"boom\"}]}"
+  case linear_mutation.mutation_result_from_response(err_resp) {
+    linear_mutation.MutationFailed(_) -> True |> should.be_true()
+    _ -> should.fail()
+  }
+}
+
+pub fn format_apply_sidecar_test() {
+  linear_mutation.format_apply_sidecar("k1", "applied", "comment_id=xyz")
+  |> should.equal("key=k1 status=applied comment_id=xyz")
+
+  linear_mutation.format_apply_sidecar("k2", "skipped-no-token", "")
+  |> should.equal("key=k2 status=skipped-no-token")
 }

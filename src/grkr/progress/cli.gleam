@@ -34,6 +34,8 @@ pub fn main() -> Nil {
       emit_mutation(main.cli_plan_linear_comment_mutation(issue_id, body, stage, task_slug))
     ["linear-state-mutation", issue_id, state_id] ->
       emit_mutation(main.cli_plan_linear_state_mutation(issue_id, state_id))
+    ["linear-state-mutation", issue_id, state_id, stage] ->
+      emit_mutation(main.cli_plan_linear_state_mutation_scoped(issue_id, state_id, stage))
     ["plan-linear-refusal", issue_id, task_slug, reason_class, reasoning] ->
       io.print(
         main.cli_plan_linear_refusal(
@@ -59,6 +61,11 @@ pub fn main() -> Nil {
     ["check-token"] -> emit_token_status()
     ["mutation-debug", issue_id, body, stage, task_slug] ->
       emit_debug(main.cli_format_mutation_debug(issue_id, body, stage, task_slug))
+    ["linear-apply-mutation", path] ->
+      emit_apply_result(main.cli_apply_linear_mutation_from_path(path, env_get))
+    ["linear-apply-mutation"] ->
+      // stdin mode: read all from stdin
+      emit_apply_result(main.cli_apply_linear_mutation_from_stdin(env_get))
     _ -> {
       io.println("Usage: gleam run -m grkr/progress/cli -- <command> [args...]")
       io.println("")
@@ -77,6 +84,8 @@ pub fn main() -> Nil {
       io.println("                                                                Plan refuse comment+Backlog mutations (dry-run)")
       io.println("  check-token                                                   Check Linear token availability")
       io.println("  mutation-debug <issue-id> <body> <stage> <task-slug>          Show mutation debug info")
+      io.println("  linear-apply-mutation <dump-file>                             Apply planned mutation (guarded by GRKR_LINEAR_MUTATE=1)")
+      io.println("  linear-apply-mutation                                         Same, reading dump from stdin")
       exit(2)
     }
   }
@@ -136,6 +145,19 @@ fn emit_token_status() -> Nil {
 
 fn emit_debug(result: Result(String, String)) -> Nil {
   emit_result(result)
+}
+
+fn emit_apply_result(result: Result(String, String)) -> Nil {
+  case result {
+    Ok(line) -> {
+      io.println(line)
+      // apply helper returns 0 for soft-fail cases per design
+    }
+    Error(message) -> {
+      io.println("LINEAR_MUTATE=failed error=" <> message)
+      // still soft unless caller uses STRICT; exit 0 here
+    }
+  }
 }
 
 @external(javascript, "../progress/cli_ffi.mjs", "argv")

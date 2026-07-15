@@ -115,6 +115,20 @@ pub fn run_refusal_linear(
         None -> Nil
       }
 
+      // Apply dumps via the guarded progress apply path (reuses cli_apply + apply_linear_mutation_dump).
+      // Honors GRKR_LINEAR_MUTATE=1 (or GRKR_LINEAR_APPLY_CMD for hermetic tests).
+      // Default (unset/0) remains dry-run identical; sidecars + markers produced when invoked.
+      // Single call per dump (comment always; state only when planned).
+      let _ = pmain.cli_apply_linear_mutation_from_path(mutation_path, env_getter)
+      case plan.state_mutation {
+        Some(_) -> {
+          let smp = task_dir <> "/refusal.linear-state-mutation.txt"
+          let _ = pmain.cli_apply_linear_mutation_from_path(smp, env_getter)
+          Nil
+        }
+        None -> Nil
+      }
+
       // Record idempotency key as comment_id until live mutate lands
       let comment_key = plan.comment_mutation.idempotency_key
       let _ =

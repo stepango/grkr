@@ -104,8 +104,10 @@ pub fn plan_linear_state_mutation(
   linear_issue_id: String,
   state_id: String,
 ) -> linear_mutation.MutationRequest {
+  // Legacy 2-arg plan routes to scoped "update" stage for key (kept for CLI compat).
+  // All production stage paths use plan_linear_state_mutation_scoped with explicit stage.
   let issue_id = linear_mutation.to_linear_issue_id(linear_issue_id)
-  linear_mutation.update_state_mutation(issue_id, state_id)
+  linear_mutation.update_state_mutation_scoped(issue_id, state_id, "update")
 }
 
 pub fn plan_linear_state_mutation_scoped(
@@ -273,7 +275,8 @@ pub fn cli_plan_linear_state_mutation(
   linear_issue_id: String,
   state_id: String,
 ) -> Result(linear_mutation.MutationRequest, String) {
-  Ok(plan_linear_state_mutation(linear_issue_id, state_id))
+  // 2-arg CLI helper delegates to scoped update stage (stage-scoped keys only).
+  Ok(plan_linear_state_mutation_scoped(linear_issue_id, state_id, "update"))
 }
 
 pub fn cli_plan_linear_state_mutation_scoped(
@@ -506,22 +509,21 @@ fn apply_with_gate(
       // 2. Check prior sidecar for idempotent skip
       case read_dump_file(sidecar_path) {
         Ok(prior) ->
-          case string.contains(prior, "status=applied") || string.contains(prior, "status=skipped") {
+          case linear_mutation.sidecar_indicates_already_done(prior) {
             True -> {
               let key = extract_key_or_unknown(content)
               let marker = "LINEAR_MUTATE=skipped-already key=" <> key
               Ok(marker)
             }
-            False -> do_apply_or_skip(dump_path, content, sidecar_path, env_get)
+            False -> do_apply_or_skip(content, sidecar_path, env_get)
           }
-        Error(_) -> do_apply_or_skip(dump_path, content, sidecar_path, env_get)
+        Error(_) -> do_apply_or_skip(content, sidecar_path, env_get)
       }
     }
   }
 }
 
 fn do_apply_or_skip(
-  _dump_path: String,
   content: String,
   sidecar_path: String,
   _env_get: fn(String) -> String,
@@ -541,11 +543,11 @@ fn do_apply_or_skip(
       Ok(marker)
     }
     Ok(#(query, vars_json, key)) -> {
-      // 3. Token?
+      // 3. Token?  (soft skip: do not write sidecar so a later token run retries cleanly)
       case issue_client.resolve_access_token() {
         Error(_) -> {
           let marker = "LINEAR_MUTATE=skipped-no-token key=" <> key
-          let _ = write_sidecar(sidecar_path, linear_mutation.format_apply_sidecar(key, "skipped-no-token", ""))
+          // Intentionally no sidecar write: skipped-no-token is soft/resume-safe.
           Ok(marker)
         }
         Ok(token) -> {

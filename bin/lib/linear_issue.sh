@@ -336,8 +336,6 @@ ensure_linear_refusal_checkpoint() {
         printf 'STATE_IDEMPOTENCY_KEY=%s\n' "$(printf '%s\n' "$state_mut" | tail -n1)" >> "$plan_file"
       fi
     fi
-    maybe_apply_linear_mutation "$mutation_comment_file"
-    maybe_apply_linear_mutation "$mutation_state_file"
   else
     printf '%s\n' "$plan_out" > "$plan_file"
     target_state=$(printf '%s\n' "$plan_out" | grep -E '^TARGET_STATE=' | head -1 | sed 's/^[^=]*=//')
@@ -359,8 +357,6 @@ ensure_linear_refusal_checkpoint() {
         printf '%s\n' "$plan_out" | grep -E '^STATE_IDEMPOTENCY_KEY=' | head -1 | sed 's/^[^=]*=//'
       } > "$mutation_state_file"
     fi
-    maybe_apply_linear_mutation "$mutation_comment_file"
-    maybe_apply_linear_mutation "$mutation_state_file"
   fi
 
   maybe_apply_linear_mutation "$mutation_comment_file"

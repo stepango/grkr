@@ -2,7 +2,7 @@
 
 AI-powered CLI that reads a GitHub issue and uses Codex to implement the changes.
 
-Current implementation status: see [docs/gleam-migration.md](./docs/gleam-migration.md) for v2 Gleam migration progress (github_picker/refusal/supervisor **GitHub** pick+schedule+spawn complete; Linear JobKey+spawn t_51747d23 @ **ce61881**; docs fixture e2e t_5254b489 / PR #92 @ **5782431**; `--linear-issue` research/plan MVP (t_48db8096 / PR #93 @ **28e4794** lineage) + multi-line KEY=val wire protocol; Linear refuse dry-run wire (t_503ca0f3 + t_e47417cb / PR #95 @ **8aba009** lineage); Linear implement dry-run (PR #97 @ **d1c1240** lineage) + test dry-run (PR #98) + publish+complete dry-run (PR this) on **main** lineage; GitHub PR from linear-* branch + Linear Done state + completion comment (dry-run) now wired after test success; GitHub remains default `GRKR_ISSUE_PROVIDER`).
+Current implementation status: see [docs/gleam-migration.md](./docs/gleam-migration.md) for v2 Gleam migration progress (github_picker/refusal/supervisor **GitHub** pick+schedule+spawn complete; Linear JobKey+spawn t_51747d23 @ **ce61881**; docs fixture e2e t_5254b489 / PR #92 @ **5782431**; `--linear-issue` research/plan MVP (t_48db8096 / PR #93 @ **28e4794** lineage) + multi-line KEY=val wire protocol; Linear refuse dry-run wire (t_503ca0f3 + t_e47417cb / PR #95 @ **8aba009** lineage); Linear implement dry-run (PR #97 @ **d1c1240** lineage) + test dry-run (PR #98) + publish+complete dry-run (PR #100 @ **bd523a6**) on **main** lineage; GitHub PR from linear-* branch + Linear Done state + completion comment (dry-run) now wired after test success; GitHub remains default `GRKR_ISSUE_PROVIDER`).
 
 ## Gleam v2 Migration Progress
 

@@ -464,7 +464,31 @@ pub fn cli_apply_linear_mutation_from_stdin(
 
 /// Core apply logic. Respects GRKR_LINEAR_MUTATE literal "1".
 /// Writes sidecar <dump>.linear-apply-result.txt on attempt or skip-with-reason.
+/// GRKR_LINEAR_APPLY_CMD (if set) short-circuits to the provided stub/cmd (hermetic tests);
+/// mirrors bin/lib/linear_mutate.sh behavior. Stub controls output/sidecars.
 fn apply_linear_mutation_dump(
+  dump_path: String,
+  content: String,
+  env_get: fn(String) -> String,
+) -> Result(String, String) {
+  let apply_cmd = env_get("GRKR_LINEAR_APPLY_CMD")
+  case string.trim(apply_cmd) {
+    "" -> apply_with_gate(dump_path, content, env_get)
+    cmd -> {
+      case run_apply_override(cmd, dump_path) {
+        Ok(out) -> {
+          case out {
+            "" -> Ok("LINEAR_MUTATE=dry-run key=" <> extract_key_or_unknown(content))
+            m -> Ok(m)
+          }
+        }
+        Error(_) -> Ok("LINEAR_MUTATE=dry-run key=" <> extract_key_or_unknown(content))
+      }
+    }
+  }
+}
+
+fn apply_with_gate(
   dump_path: String,
   content: String,
   env_get: fn(String) -> String,
@@ -590,3 +614,6 @@ fn read_dump_file(path: String) -> Result(String, String)
 
 @external(javascript, "../progress/cli_ffi.mjs", "writeFileSync")
 fn write_sidecar(path: String, content: String) -> Result(String, String)
+
+@external(javascript, "../progress/cli_ffi.mjs", "runApplyOverride")
+fn run_apply_override(cmd: String, dump_path: String) -> Result(String, String)

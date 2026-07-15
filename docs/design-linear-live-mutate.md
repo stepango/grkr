@@ -1,7 +1,7 @@
 # Design: Linear Live Mutate Apply Path (GRKR_LINEAR_MUTATE)
 
-**Status**: Design-only (plan agent). No product code edits.  
-**Reference tip**: origin/main @ **bd523a6** (PR #100 "Linear publish+complete dry-run").  
+**Status**: Implemented (STRICT hard-fail for non-refuse apply failures added; refuse remains soft; default soft).  
+**Reference tip**: origin/main @ **8526d74** (post nits @ 8d4b674 / PR #107).  
 **Prior design artifacts**: `docs/design-linear-publish-stage.md`, `docs/design-linear-test-stage.md`, `docs/design-linear-implement-stage.md`.  
 **Gap addressed**: All Linear mutation sites (research/plan/refuse/implement/test/publish+complete) perform plan + dry-run dump only. `GRKR_LINEAR_MUTATE=1` is a documented no-op. This slice designs the guarded live apply path (default remains dry-run/off) so that when enabled + token present, planned GraphQL executes after each dump. GitHub path untouched; forward-looking slice.  
 **Date**: 2026-07-14
@@ -181,7 +181,7 @@ Same pattern for every state mutation dump and the two complete dumps. Refusal p
 ### 5.5 Soft vs hard failure
 - Default: **soft-fail** for research/plan/implement/test/refuse mutations (log `LINEAR_MUTATE=failed ...`, write sidecar, continue workflow). A Linear outage must not brick GitHub PR publish.
 - Complete mutations: still gated behind successful publish; soft-fail is acceptable but a failed complete mutation after a successful publish should be loud (still non-fatal to the overall exit unless `GRKR_LINEAR_MUTATE_STRICT=1`).
-- Optional (can defer to follow-up): `GRKR_LINEAR_MUTATE_STRICT=1` turns selected apply failures into hard errors (non-zero from the apply helper). Refuse path remains soft by default even under strict.
+- `GRKR_LINEAR_MUTATE_STRICT=1` (literal) turns non-idempotent apply failures into hard errors (non-zero from apply helper / CLI). Refuse dumps (basename `refusal.*`) remain soft even under STRICT. When STRICT unset/empty/other: soft for everything (current default).
 
 ### 5.6 Redaction & secrets
 - Never log the token.
@@ -313,7 +313,7 @@ All markers must be grep-friendly and include the idempotency key. Full variable
 | Reuse which client stack | issue_provider (sync) for progress apply. | Already used by fetch; keeps the apply path sync and simple. Linear e2e stack remains separate. |
 | Name-only state | Never invent UUIDs; skip with clear marker. | Contractual; env `*_ID` is the only source of concrete ids. |
 | Local ledger format | Per-dump `*.linear-apply-result.txt` (simple); optional `.linear-apply-ledger.jsonl` later. | Matches existing dump style; easy for shell + tests. |
-| Strict mode scope | Optional, can be implemented in follow-up. Refuse remains soft even under strict. | Keeps first slice minimal. |
+| Strict mode scope | Implemented: `GRKR_LINEAR_MUTATE_STRICT=1` (literal) hard-fails non-refuse apply failures; refuse.* always soft; default soft when unset. | |
 
 ---
 

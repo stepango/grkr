@@ -1,3 +1,5 @@
+import gleam/list
+import gleam/result
 import gleam/string
 import grkr/progress/checkpoint_id
 import grkr/progress/checkpoint_stage
@@ -302,6 +304,34 @@ pub fn parse_three_line_dump(content: String) -> Result(#(String, String, String
 /// Literal gate: only "1" enables live apply. All other values (unset, "", "0", "true") stay dry-run.
 pub fn should_apply_live(env_get: fn(String) -> String) -> Bool {
   env_get("GRKR_LINEAR_MUTATE") == "1"
+}
+
+/// Literal gate: only "1" enables hard-fail on non-idempotent apply failures.
+/// Refuse paths are always soft (even under STRICT). Default (unset/anything != "1") is soft.
+pub fn should_strict_hard_fail(env_get: fn(String) -> String) -> Bool {
+  env_get("GRKR_LINEAR_MUTATE_STRICT") == "1"
+}
+
+/// Returns true if the dump's basename starts with "refusal." (e.g. refusal.linear-mutation.txt).
+/// Refuse apply failures remain soft even when STRICT=1.
+pub fn dump_is_refuse_path(path: String) -> Bool {
+  let base = last_path_segment(path)
+  string.starts_with(base, "refusal.")
+}
+
+fn last_path_segment(p: String) -> String {
+  // Support / and \ ; take the final segment or whole string if none.
+  let after_slash =
+    p
+    |> string.split("/")
+    |> list.reverse
+    |> list.first
+    |> result.unwrap(p)
+  after_slash
+  |> string.split("\\")
+  |> list.reverse
+  |> list.first
+  |> result.unwrap(after_slash)
 }
 
 /// Parse a three-line dump (query\nvariables_json\nkey) or name-only form.

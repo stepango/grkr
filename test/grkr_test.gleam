@@ -2,6 +2,7 @@ import grkr/issue_provider_test
 import grkr/linear/config_test
 import grkr/linear/e2e_test
 import grkr/linear/graphql_test
+import grkr/linear/variables_test
 import grkr/progress/checkpoint_id_test
 import grkr/progress/checkpoint_render_test
 import grkr/progress/checkpoint_stage_test
@@ -28,6 +29,7 @@ pub fn main() {
   config_test.main()
   e2e_test.main()
   graphql_test.main()
+  variables_test.main()
   checkpoint_id_test.main()
   checkpoint_render_test.main()
   checkpoint_stage_test.main()

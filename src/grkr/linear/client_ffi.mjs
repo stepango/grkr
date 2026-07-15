@@ -1,4 +1,5 @@
-import { Ok, Error, toList } from "../../gleam.mjs";
+import { Ok, Error, toList, Empty } from "../../gleam.mjs";
+import { to_list as dictToList } from "../../../gleam_stdlib/gleam/dict.mjs";
 import {
   GraphQLResponse,
   LinearArchiveResult,
@@ -11,6 +12,62 @@ import {
 
 const LINEAR_API_URL = "https://api.linear.app/graphql";
 
+/**
+ * Convert a Gleam Dict(String, String) (or plain object, or null) into a
+ * plain JS object suitable for JSON.stringify in GraphQL variables.
+ * Defensive: never throws on bad input; empty -> {}.
+ */
+export function variablesToObject(variables) {
+  if (variables == null) return {};
+  // Plain JS object (not a Gleam Dict which has "size" and "root")
+  if (
+    typeof variables === "object" &&
+    variables !== null &&
+    !("root" in variables) &&
+    !("size" in variables) &&
+    typeof variables.toArray !== "function"
+  ) {
+    return { ...variables };
+  }
+  // Legacy objects that expose toArray (e.g. old lists or custom)
+  if (typeof variables.toArray === "function") {
+    try {
+      return Object.fromEntries(variables.toArray());
+    } catch (_) {
+      return {};
+    }
+  }
+  // Gleam Dict via stdlib to_list -> walk Gleam List of [k, v]
+  try {
+    const list = dictToList(variables);
+    const out = {};
+    let cur = list;
+    while (cur && !(cur instanceof Empty)) {
+      const pair = cur.head;
+      if (pair != null) {
+        const k = pair[0];
+        const v = pair[1];
+        if (k != null) out[k] = v;
+      }
+      cur = cur.tail;
+    }
+    return out;
+  } catch (_) {
+    if (typeof variables === "object" && variables !== null) {
+      try {
+        return { ...variables };
+      } catch (_) {
+        return {};
+      }
+    }
+    return {};
+  }
+}
+
+export function variablesToJson(variables) {
+  return JSON.stringify(variablesToObject(variables));
+}
+
 export async function execute_graphql_request(token, query) {
   try {
     const response = await fetch(LINEAR_API_URL, {
@@ -21,7 +78,7 @@ export async function execute_graphql_request(token, query) {
       },
       body: JSON.stringify({
         query: query.query,
-        variables: Object.fromEntries(query.variables.toArray()),
+        variables: variablesToObject(query.variables),
       }),
     });
 

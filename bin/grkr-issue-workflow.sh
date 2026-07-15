@@ -113,7 +113,7 @@ generate_linear_implement_commit_message() { gleam_wf implement_stage commit-mes
 # Test stage thin delegates (to test_stage per spec/26 + t_d87d2215 / #18 spec item 9).
 # Minimal hooks only (e.g. run-tests); test command execution + test.md write + gh post + log cleanup stay in thin shell (bin/grkr) per slice pattern.
 # Mirrors implement_stage + decision_gate thin integration. Heavy runs (npm etc) delegated to shell.
-# Callsite wired in bin/grkr:ensure_test_checkpoint (after reuse checks).
+# Callsite wired in bin/grkr (via lib/github_issue.sh ensure_test_checkpoint after reuse checks).
 run_test_stage_hook() { gleam_wf test_stage run-tests 2>/dev/null || echo ""; }
 
 # Test completion marker thin delegate (added for t_6d2b458b / spec/26 item 9).

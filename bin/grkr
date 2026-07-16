@@ -402,48 +402,6 @@ summarize_text() {
       '
 }
 
-ensure_pr_body_limit() {
-  local pr_body_file=$1
-  local body=$2
-  local title=$3
-  local issue=$4
-  local url=$5
-  local body_length
-
-  body_length=$(wc -m < "$pr_body_file" | tr -d '[:space:]')
-  if [ "$body_length" -gt "$MAX_PR_BODY_CHARS" ]; then
-    write_compact_pr_body "$pr_body_file" "$body" "$title"
-  fi
-
-  if ! grep -Fq "Fixes #$issue" "$pr_body_file"; then
-    append_issue_footer "$pr_body_file" "$issue" "$url"
-  fi
-}
-
-extract_codex_pr_body() {
-  local codex_output_file=$1
-  local pr_body_file=$2
-  local body=$3
-  local title=$4
-  local issue=$5
-  local url=$6
-
-  # task_log_is_sharded + emit_task_log_stream now delegate to Gleam (t_ef6b855f wiring; persist already was)
-  if [ -s "$codex_output_file" ] || task_log_is_sharded "$codex_output_file"; then
-    emit_task_log_stream "$codex_output_file" | awk '
-      /^## / {found=1}
-      found {print}
-    ' > "$pr_body_file"
-    if [ -s "$pr_body_file" ]; then
-      ensure_pr_body_limit "$pr_body_file" "$body" "$title" "$issue" "$url"
-      return 0
-    fi
-  fi
-
-  write_default_pr_body "$pr_body_file" "$body" "$title"
-  ensure_pr_body_limit "$pr_body_file" "$body" "$title" "$issue" "$url"
-}
-
 run_codex_prompt() {
   local prompt_file=$1
   local output_file=$2
@@ -493,63 +451,6 @@ ensure_publishable_file_sizes() {
 
   echo "❌ Commit aborted due to file size limit."
   return 1
-}
-
-publish_issue_changes() {
-  local ISSUE=$1
-  local TITLE=$2
-  local URL=$3
-  local BODY=$4
-  local CODEX_OUTPUT_FILE=$5
-  local BRANCH=$6
-  local PR_BODY_FILE
-  local pr_list_json
-  local pr_number
-  local pr_create_output
-
-  echo "🔄 Auto-committing, pushing and creating PR..."
-  stage_relevant_issue_files
-  if git_in_issue_context diff --cached --quiet; then
-    echo "No changes for #$ISSUE"
-    return 0
-  fi
-
-  if ! check_file_line_limit; then
-    echo "❌ Commit aborted due to file size limit."
-    return 1
-  fi
-
-  # Use Gleam hook for conventional msg (per implement_stage + spec/25 + t_39ab1e08)
-  local commit_msg
-  commit_msg=$(generate_implement_commit_message "$ISSUE" "$TITLE")
-  git_in_issue_context commit -m "$commit_msg" 
-  git_in_issue_context push -u origin "$BRANCH"
-  BRANCH_URL="https://github.com/$REPO/tree/$BRANCH"
-  PR_BODY_FILE=$(mktemp "${TMPDIR:-/tmp}/grkr-pr-body.XXXXXX")
-  extract_codex_pr_body "$CODEX_OUTPUT_FILE" "$PR_BODY_FILE" "$BODY" "$TITLE" "$ISSUE" "$URL"
-  pr_list_json=$(gh pr list --head "$BRANCH" --json number,url 2>/dev/null || true)
-  pr_number=$(printf '%s' "$pr_list_json" | jq -r '.[0].number // empty')
-  if [ -n "$pr_number" ]; then
-    gh pr edit "$pr_number" --title "$TITLE" --body-file "$PR_BODY_FILE" >/dev/null
-    PR_URL=$(printf '%s' "$pr_list_json" | jq -r '.[0].url // empty')
-    echo "✅ PR updated: $PR_URL"
-  else
-    pr_create_output=$(gh pr create --base "${MAIN_BRANCH:-main}" --head "$BRANCH" --title "$TITLE" --body-file "$PR_BODY_FILE" 2>&1) || {
-      echo "$pr_create_output"
-      rm -f "$PR_BODY_FILE"
-      return 1
-    }
-    PR_URL=$(printf '%s\n' "$pr_create_output" | awk '/^https?:\/\// {url=$0} END {print url}')
-    if [ -z "$PR_URL" ]; then
-      echo "$pr_create_output"
-      rm -f "$PR_BODY_FILE"
-      return 1
-    fi
-    echo "✅ PR created: $PR_URL"
-  fi
-  gh issue edit "$ISSUE" --add-label "implemented" || true
-  gh issue edit "$ISSUE" --remove-label "todo" || true
-  rm -f "$PR_BODY_FILE"
 }
 
 post_completion_comment() {

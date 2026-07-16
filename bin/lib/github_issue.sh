@@ -1,15 +1,16 @@
 # bin/lib/github_issue.sh
 # GitHub-only orchestration extracted from process_issue in bin/grkr.
-# First slice: test checkpoint (ensure_test_checkpoint + write_test_checkpoint_file).
-# Purpose: GitHub-specific test checkpoint runner/writer (gh comment, "Issue #N: title" header,
-# resume from gh comments, worktree exec of verification commands, progress stages.test).
-# Later slices will extract publish, research/plan checkpoints, completion to same lib.
-# Mirrors bin/lib/linear_issue.sh thin-delegate pattern.
-# Functions assume ambient helpers (build_command_list, cleanup_test_result_logs,
-# write_test_checkpoint_with_header, run_test_stage_hook, fetch_issue_comments_json,
-# checkpoint_comment_*_from_json, update_task_progress_stage, mark_task_progress_failed,
-# etc.) are already defined in the sourcing shell (bin/grkr defines/sources them before/around
-# dispatch to process_issue; bash resolves names at call time). Do not duplicate shared logic.
+# Slice 1 (landed PR #112): test checkpoint (ensure_test_checkpoint + write_test_checkpoint_file).
+# Slice 3: publish helpers (publish_issue_changes + extract_codex_pr_body + ensure_pr_body_limit).
+# Purpose: GitHub-specific publish (stage/commit via Gleam hook/push, PR create-or-edit,
+# "Fixes #N" footer via append, label "implemented"/remove "todo", PR body from codex log or default).
+# Mirrors bin/lib/linear_issue.sh thin-delegate pattern (Linear uses its own extract_linear_* / ensure_linear_*).
+# Functions assume ambient helpers (stage_relevant_issue_files, git_in_issue_context,
+# check_file_line_limit, generate_implement_commit_message, emit_task_log_stream,
+# task_log_is_sharded, write_default_pr_body, write_compact_pr_body, append_issue_footer,
+# REPO, MAIN_BRANCH, MAX_PR_BODY_CHARS, BRANCH_URL, PR_URL globals, etc.) are already defined
+# in the sourcing shell (bin/grkr defines/sources them; bash resolves at call time).
+# Shared helpers (e.g. ensure_publishable_file_sizes) stay in bin/grkr.
 # GitHub remains default GRKR_ISSUE_PROVIDER. No changes to Linear paths or linear_issue.sh.
 
 write_test_checkpoint_file() {
@@ -148,4 +149,115 @@ ensure_test_checkpoint() {
   update_task_progress_stage "$progress_file" test "done" "$comment_id"
   cleanup_test_result_logs "$results_file"
   rm -f "$command_list_file" "$results_file"
+}
+
+# GitHub publish helpers (slice 3). Exact bodies moved from bin/grkr for thinning.
+# publish_issue_changes kept (call site in process_issue uses it for zero churn).
+# publish_github_issue_changes alias provided for design naming parity with linear_*.
+# External contract: stage, line-limit guard, Gleam commit msg, push, PR create/edit,
+# Fixes #N footer (via append_issue_footer on default/compact body), labels, exit codes.
+# Reuses shared (from grkr context): stage_relevant_issue_files, git_in_issue_context,
+# check_file_line_limit, generate_implement_commit_message, task log emit helpers,
+# PR body writers from grkr-templates.sh, gh CLI.
+publish_issue_changes() {
+  local ISSUE=$1
+  local TITLE=$2
+  local URL=$3
+  local BODY=$4
+  local CODEX_OUTPUT_FILE=$5
+  local BRANCH=$6
+  local PR_BODY_FILE
+  local pr_list_json
+  local pr_number
+  local pr_create_output
+
+  echo "🔄 Auto-committing, pushing and creating PR..."
+  stage_relevant_issue_files
+  if git_in_issue_context diff --cached --quiet; then
+    echo "No changes for #$ISSUE"
+    return 0
+  fi
+
+  if ! check_file_line_limit; then
+    echo "❌ Commit aborted due to file size limit."
+    return 1
+  fi
+
+  # Use Gleam hook for conventional msg (per implement_stage + spec/25 + t_39ab1e08)
+  local commit_msg
+  commit_msg=$(generate_implement_commit_message "$ISSUE" "$TITLE")
+  git_in_issue_context commit -m "$commit_msg" 
+  git_in_issue_context push -u origin "$BRANCH"
+  BRANCH_URL="https://github.com/$REPO/tree/$BRANCH"
+  PR_BODY_FILE=$(mktemp "${TMPDIR:-/tmp}/grkr-pr-body.XXXXXX")
+  extract_codex_pr_body "$CODEX_OUTPUT_FILE" "$PR_BODY_FILE" "$BODY" "$TITLE" "$ISSUE" "$URL"
+  pr_list_json=$(gh pr list --head "$BRANCH" --json number,url 2>/dev/null || true)
+  pr_number=$(printf '%s' "$pr_list_json" | jq -r '.[0].number // empty')
+  if [ -n "$pr_number" ]; then
+    gh pr edit "$pr_number" --title "$TITLE" --body-file "$PR_BODY_FILE" >/dev/null
+    PR_URL=$(printf '%s' "$pr_list_json" | jq -r '.[0].url // empty')
+    echo "✅ PR updated: $PR_URL"
+  else
+    pr_create_output=$(gh pr create --base "${MAIN_BRANCH:-main}" --head "$BRANCH" --title "$TITLE" --body-file "$PR_BODY_FILE" 2>&1) || {
+      echo "$pr_create_output"
+      rm -f "$PR_BODY_FILE"
+      return 1
+    }
+    PR_URL=$(printf '%s\n' "$pr_create_output" | awk '/^https?:\/\// {url=$0} END {print url}')
+    if [ -z "$PR_URL" ]; then
+      echo "$pr_create_output"
+      rm -f "$PR_BODY_FILE"
+      return 1
+    fi
+    echo "✅ PR created: $PR_URL"
+  fi
+  gh issue edit "$ISSUE" --add-label "implemented" || true
+  gh issue edit "$ISSUE" --remove-label "todo" || true
+  rm -f "$PR_BODY_FILE"
+}
+
+publish_github_issue_changes() {
+  publish_issue_changes "$@"
+}
+
+ensure_pr_body_limit() {
+  local pr_body_file=$1
+  local body=$2
+  local title=$3
+  local issue=$4
+  local url=$5
+  local body_length
+
+  body_length=$(wc -m < "$pr_body_file" | tr -d '[:space:]')
+  if [ "$body_length" -gt "$MAX_PR_BODY_CHARS" ]; then
+    write_compact_pr_body "$pr_body_file" "$body" "$title"
+  fi
+
+  if ! grep -Fq "Fixes #$issue" "$pr_body_file"; then
+    append_issue_footer "$pr_body_file" "$issue" "$url"
+  fi
+}
+
+extract_codex_pr_body() {
+  local codex_output_file=$1
+  local pr_body_file=$2
+  local body=$3
+  local title=$4
+  local issue=$5
+  local url=$6
+
+  # task_log_is_sharded + emit_task_log_stream now delegate to Gleam (t_ef6b855f wiring; persist already was)
+  if [ -s "$codex_output_file" ] || task_log_is_sharded "$codex_output_file"; then
+    emit_task_log_stream "$codex_output_file" | awk '
+      /^## / {found=1}
+      found {print}
+    ' > "$pr_body_file"
+    if [ -s "$pr_body_file" ]; then
+      ensure_pr_body_limit "$pr_body_file" "$body" "$title" "$issue" "$url"
+      return 0
+    fi
+  fi
+
+  write_default_pr_body "$pr_body_file" "$body" "$title"
+  ensure_pr_body_limit "$pr_body_file" "$body" "$title" "$issue" "$url"
 }

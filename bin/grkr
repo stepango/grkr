@@ -359,24 +359,6 @@ ensure_publishable_file_sizes() {
   return 1
 }
 
-post_completion_comment() {
-  local issue=$1
-  local title=$2
-  local branch_url=$3
-  local pr_url=$4
-
-  gh issue comment "$issue" --body "$(cat <<EOF
-## Completion summary
-
-Issue #$issue: $title
-
-- Recommendation: ready
-- Branch: $branch_url
-- PR: $pr_url
-EOF
-)" >/dev/null
-}
-
 process_issue() {
   local ISSUE=$1
   local decision

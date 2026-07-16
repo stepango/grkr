@@ -3,6 +3,7 @@
 # Slice 1 (landed PR #112): test checkpoint (ensure_test_checkpoint + write_test_checkpoint_file).
 # Slice 3 (landed PR #115): publish helpers (publish_issue_changes + extract_codex_pr_body + ensure_pr_body_limit).
 # Slice 4: research/plan ensure_checkpoint_stage + gh comment helpers (fetch_issue_comments_json, checkpoint_comment_id_from_json, checkpoint_comment_body_from_json).
+# Slice 5 (t_d328b158): completion surface (post_completion_comment).
 # Purpose: GitHub-specific publish (stage/commit via Gleam hook/push, PR create-or-edit,
 # "Fixes #N" footer via append, label "implemented"/remove "todo", PR body from codex log or default).
 # Mirrors bin/lib/linear_issue.sh thin-delegate pattern (Linear uses its own extract_linear_* / ensure_linear_*).
@@ -357,4 +358,30 @@ extract_codex_pr_body() {
 
   write_default_pr_body "$pr_body_file" "$body" "$title"
   ensure_pr_body_limit "$pr_body_file" "$body" "$title" "$issue" "$url"
+}
+
+# GitHub completion helper (slice 5). Moved from bin/grkr for thinning.
+# Posts gh issue completion summary body with branch + PR URLs.
+# Alias provided for design naming parity (post_github_completion_comment like publish_*).
+# Call site in process_issue remains `post_completion_comment` (zero churn).
+post_completion_comment() {
+  local issue=$1
+  local title=$2
+  local branch_url=$3
+  local pr_url=$4
+
+  gh issue comment "$issue" --body "$(cat <<EOF
+## Completion summary
+
+Issue #$issue: $title
+
+- Recommendation: ready
+- Branch: $branch_url
+- PR: $pr_url
+EOF
+)" >/dev/null
+}
+
+post_github_completion_comment() {
+  post_completion_comment "$@"
 }

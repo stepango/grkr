@@ -361,138 +361,46 @@ ensure_publishable_file_sizes() {
 
 process_issue() {
   local ISSUE=$1
-  local decision
-  local decision_output_file
-  local decision_prompt_file
-  local ISSUE_WORKTREE_DIR
-  local prompt_file
-  local PROJECT_ITEM_ID
-  local TASK_SLUG
-  local TASK_DIR
-  local PROGRESS_FILE
-  local codex_output_file
-  local refusal_result
-  local refusal_class
-  local refusal_comment_id
-  if [ "$VALIDATION_OK" -ne 1 ]; then
-    echo "⚠️ Validation failed; skipping issue #$ISSUE."
-    return 1
-  fi
-  echo "📋 Fetching issue #$ISSUE..."
-  ISSUE_JSON=$(gh issue view "$ISSUE" --comments --json title,body,url,number,projectItems,comments 2>&1)
-  if echo "$ISSUE_JSON" | grep -q "Could not resolve"; then
-    echo "❌ Issue #$ISSUE not found."
-    return 1
-  fi
-  TITLE=$(echo "$ISSUE_JSON" | jq -r '.title')
-  BODY=$(echo "$ISSUE_JSON" | jq -r '.body // "No description provided."')
-  URL=$(echo "$ISSUE_JSON" | jq -r '.url')
-  TASKS_DIR="$GRKR_ROOT/.grkr/tasks"
-  TASK_SLUG=$(task_slug_for_issue "$ISSUE" "$TITLE")
-  TASK_DIR="$TASKS_DIR/$TASK_SLUG"
-  PROGRESS_FILE="$TASK_DIR/progress.json"
-  echo "📝 Issue: $TITLE"
-  echo "🔗 $URL"
-  BRANCH="issue-$ISSUE"
-  CURRENT_ISSUE="$ISSUE"
-  ATTACH_ISSUE_LOGS=1
-  PROJECT_ITEM_ID=$(issue_project_item_id "$ISSUE" "$ISSUE_JSON")
-  mkdir -p "$TASK_DIR"
-  write_task_meta_env "$TASK_DIR" "$ISSUE" "$TASK_SLUG" "$BRANCH" "$URL" "$PROJECT_ITEM_ID"
-  write_issue_context_file "$TASK_DIR" "$ISSUE_JSON"
-  ensure_task_progress_file "$PROGRESS_FILE" "$ISSUE" "$PROJECT_ITEM_ID" "$TASK_SLUG" "$BRANCH"
+  GITHUB_IMPL_REFUSED=0
+  # 1. validate + fetch + task dir/progress bootstrap (lib helper)
+  bootstrap_github_issue_task "$ISSUE" || return 1
+  # 2. research/plan checkpoints (already in lib)
   ensure_checkpoint_stage research "$ISSUE" "$ISSUE_JSON" "$TASK_SLUG" "$TASK_DIR" "$TITLE" "$BODY" "$URL" "$PROGRESS_FILE" || return 1
   ensure_checkpoint_stage plan "$ISSUE" "$ISSUE_JSON" "$TASK_SLUG" "$TASK_DIR" "$TITLE" "$BODY" "$URL" "$PROGRESS_FILE" || return 1
-  ISSUE_WORKTREE_DIR=$(prepare_issue_worktree "$BRANCH" "$TASK_SLUG") || return 1
-  decision_prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-decision-prompt.XXXXXX")
-  decision_output_file=$(mktemp "${TMPDIR:-/tmp}/grkr-decision-output.XXXXXX")
-  write_decision_prompt_file "$decision_prompt_file" "$ISSUE" "$TITLE" "$URL" "$BODY" "$TASK_SLUG" "$ISSUE_WORKTREE_DIR"
-  # Wired to Gleam decision_gate (spec/22 implement-or-refuse + t_4e22c63f): thin shell runs codex to output file (orchestration); gate does extract, progress update, refuse path (calls refusal/flow for checkpoint/backlog/comment), prints "proceed"/"refuse" on stdout.
-  # Replaces prior inlined run_implementation_decision_gate + extract/update/handle_decision_refusal (now dupe removed; gate reuses Gleam decision + refusal/flow).
-  run_codex_prompt "$decision_prompt_file" "$decision_output_file" "decide whether to implement the issue" replace "$ISSUE_WORKTREE_DIR"
-  decision=$(run_decision_gate "$ISSUE" "$decision_output_file" "$PROGRESS_FILE" "$TASK_SLUG" "$ISSUE_WORKTREE_DIR" "$decision_prompt_file" || echo "")
-  decision=$(printf '%s' "$decision" | tr -d '\r\n' | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-  case "$decision" in
-    proceed|refuse)
-      IMPLEMENTATION_DECISION=$decision
-      ;;
-    *)
-      echo "❌ Decision gate for issue #$ISSUE returned an invalid result."
-      rm -f "$decision_prompt_file" "$decision_output_file"
-      return 1
-      ;;
-  esac
-  rm -f "$decision_prompt_file" "$decision_output_file"
-  if [ "$decision" != "proceed" ]; then
-    # Refusal side effects (checkpoint, backlog move, progress, comment post) already performed inside decision_gate CLI via refusal/flow.
-    if [ -n "${ISSUE_WORKTREE_DIR:-}" ]; then
-      cleanup_issue_worktree "$ISSUE_WORKTREE_DIR"
-      echo "🧹 Removed issue worktree: $ISSUE_WORKTREE_DIR"
-    fi
-    CURRENT_ISSUE_WORKTREE=""
-    ATTACH_ISSUE_LOGS=0
-    attach_issue_logs
+  # 3. prepare worktree + decision codex + decision_gate (lib helper)
+  run_github_decision_stage || return 1
+  # 4. refuse path cleanup (lib helper) OR proceed
+  if [ "${IMPLEMENTATION_DECISION:-}" != "proceed" ]; then
+    handle_github_decision_refuse
     return 0
   fi
-  move_issue_to_in_progress "$ISSUE" "$ISSUE_JSON" || return 1
-  CURRENT_ISSUE_WORKTREE="$ISSUE_WORKTREE_DIR"
-  prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-prompt.XXXXXX")
-  CURRENT_PROMPT_FILE="$prompt_file"
-  write_issue_prompt_file "$prompt_file" "$ISSUE" "$TITLE" "$URL" "$BODY" "$TASK_SLUG" "$ISSUE_WORKTREE_DIR"
-  codex_output_file="$TASK_DIR/implementation.log"
-  run_codex_prompt "$prompt_file" "$codex_output_file" "implement the issue" replace "$ISSUE_WORKTREE_DIR"
-  implementation_refusal=$(detect_implementation_refusal "$codex_output_file")
-  if [ -n "$implementation_refusal" ]; then
-    echo "⚠️ Implementation discovered blockers that require refusal."
-    echo "🔄 Converting implementation attempt to refusal for issue #$ISSUE."
-    implementation_refusal_class=$(normalize_refusal_class "$implementation_refusal")
-    implementation_refusal_reasoning=$(extract_refusal_reasoning "$implementation_refusal" "Implementation discovered that the issue is not ready for safe autonomous completion.")
-    mkdir -p "$TASK_DIR/codex"
-    cp "$codex_output_file" "$TASK_DIR/codex/implementation-before-refusal.log"
-    refusal_result=$(handle_implementation_refusal "$ISSUE" "$PROGRESS_FILE" "$implementation_refusal_class" "$implementation_refusal_reasoning") || {
-      CURRENT_ISSUE_WORKTREE=""
-      rm -f "$prompt_file"
-      CURRENT_PROMPT_FILE=""
-      return 1
-    }
-    refusal_class=$(printf '%s\n' "$refusal_result" | tail -n2 | head -n1)
-    refusal_comment_id=$(printf '%s\n' "$refusal_result" | tail -n1)
-    mark_task_progress_refused "$PROGRESS_FILE" "$refusal_class" "$refusal_comment_id"
-    if [ -n "${ISSUE_WORKTREE_DIR:-}" ]; then
-      cleanup_issue_worktree "$ISSUE_WORKTREE_DIR"
-      echo "🧹 Removed issue worktree: $ISSUE_WORKTREE_DIR"
-    fi
-    CURRENT_ISSUE_WORKTREE=""
-    rm -f "$prompt_file"
-    CURRENT_PROMPT_FILE=""
-    echo "⏸️ Refused implementation for issue #$ISSUE (converted during implementation)."
-    ATTACH_ISSUE_LOGS=0
-    attach_issue_logs
-    return 0
-  fi
-  ensure_publishable_file_sizes "$ISSUE" "$TITLE" "$TASK_SLUG" "$prompt_file" "$codex_output_file" || {
+  # 5. move in progress + implement codex + implementation-refusal path (lib helper)
+  run_github_implement_stage || {
     CURRENT_ISSUE_WORKTREE=""
     return 1
   }
+  if [ "${GITHUB_IMPL_REFUSED:-0}" = "1" ]; then
+    return 0
+  fi
+  # 6. ensure_publishable_file_sizes (shared; stays in grkr)
+  ensure_publishable_file_sizes "$ISSUE" "$TITLE" "$TASK_SLUG" "$CURRENT_PROMPT_FILE" "$TASK_DIR/implementation.log" || {
+    CURRENT_ISSUE_WORKTREE=""
+    return 1
+  }
+  # 7. ensure_test_checkpoint (lib)
   ensure_test_checkpoint "$ISSUE" "$ISSUE_JSON" "$TASK_SLUG" "$TASK_DIR" "$TITLE" "$PROGRESS_FILE" || {
     CURRENT_ISSUE_WORKTREE=""
     return 1
   }
-  if ! publish_issue_changes "$ISSUE" "$TITLE" "$URL" "$BODY" "$codex_output_file" "$BRANCH"; then
+  # 8. publish_issue_changes (lib)
+  if ! publish_issue_changes "$ISSUE" "$TITLE" "$URL" "$BODY" "$TASK_DIR/implementation.log" "$BRANCH"; then
     CURRENT_ISSUE_WORKTREE=""
     echo "⚠️ Issue #$ISSUE changes were not published."
     return 1
   fi
-  CURRENT_ISSUE_WORKTREE=""
-  mark_task_progress_complete "$PROGRESS_FILE" "$BRANCH_URL" "$PR_URL"
-  if ! move_issue_to_done "$ISSUE" "$ISSUE_JSON"; then
-    echo "⚠️ Issue #$ISSUE implementation succeeded, but the project status could not be moved to ${DONE_VALUE:-Done}."
-  fi
-  post_completion_comment "$ISSUE" "$TITLE" "$BRANCH_URL" "$PR_URL"
-  rm -f "$prompt_file"
-  CURRENT_PROMPT_FILE=""
-  ATTACH_ISSUE_LOGS=0
-  attach_issue_logs
+  # 9. mark complete + move done + post_completion (thin calls / small lib helper)
+  finalize_github_issue_complete
+  # 10. attach logs (via finalize)
 }
 
 if [ "$MODE" = "--project" ]; then

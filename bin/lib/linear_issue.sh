@@ -4,6 +4,12 @@
 # Plans checkpoints via progress/cli; when GRKR_LINEAR_MUTATE=1 + token, applies after each dump (guarded).
 # Default remains pure dry-run (identical logs/artifacts). GitHub PR from linear-*; Done + completion.
 # GitHub default + all GitHub paths untouched. Live mutate writes sidecars + §8 markers.
+#
+# process_linear_issue is now a thin sequencer (final slice 5). Stage bodies + decision/implement
+# orchestration live in linear_issue_stages.sh (slices 1-5). This file retains:
+# process_linear_issue (thin), load_linear_issue_assignments, write_linear_task_meta_env,
+# ensure_linear_task_progress_file, decode_shell_assignment_value, run_issue_provider_cli,
+# linear_issue_project_root + sourcing of mutate+stages. Zero behavior change.
 
 linear_issue_project_root() {
   printf '%s\n' "${GRKR_GLEAM_PROJECT_ROOT:-$(dirname "$SCRIPT_DIR")}"
@@ -20,6 +26,8 @@ fi
 # Slice 2: publish+complete (ensure_linear_publish_complete moved to stages).
 # Slice 3: refusal checkpoint (ensure_linear_refusal_checkpoint moved to stages).
 # Slice 4: research/plan checkpoint + implement_in_progress (ensure_linear_checkpoint_stage + ensure_linear_implement_in_progress moved to stages).
+# Slice 5: run_linear_decision_stage + handle_linear_decision_refuse + run_linear_implement_stage moved;
+# process_linear_issue reduced to thin sequencer (bootstrap + ensure_* + run_* + handle + finalize).
 # Must be after mutate so maybe_apply_linear_mutation is in scope at call time.
 # Ambient resolution mirrors github_issue.sh verticals; call sites in process_linear_issue unchanged.
 STAGES_LIB_CANDIDATE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/linear_issue_stages.sh"
@@ -202,15 +210,14 @@ ensure_linear_task_progress_file() {
   mv "$tmp_file" "$progress_file"
 }
 
-process_linear_issue() {
+# Bootstrap: identifier/validation check, load assignments, set BODY/TASKS_DIR/TASK_DIR/PROGRESS/BRANCH,
+# echo title/url/tags, mkdir + write meta + issue-context.json + ensure progress.
+# Exact body moved from process_linear_issue. Sets same globals so downstream stages
+# (ensure_*, run_linear_*) and shared code continue to work identically.
+# (load_linear_issue_assignments, write_linear_task_meta_env, ensure_linear_task_progress_file
+# and decode/run_provider stay in this file per preferred ownership.)
+bootstrap_linear_issue_task() {
   local IDENTIFIER=$1
-  local ISSUE_WORKTREE_DIR
-  local TASKS_DIR
-  local TASK_DIR
-  local PROGRESS_FILE
-  local BRANCH
-  local BODY
-
   if [ -z "$IDENTIFIER" ]; then
     echo "❌ --linear-issue requires a non-empty identifier (e.g. ENG-123)"
     return 1
@@ -262,7 +269,12 @@ process_linear_issue() {
     }' > "$TASK_DIR/issue-context.json"
 
   ensure_linear_task_progress_file "$PROGRESS_FILE" "$ISSUE_IDENTIFIER" "$TASK_SLUG" "$BRANCH"
+}
 
+process_linear_issue() {
+  local IDENTIFIER=$1
+  LINEAR_IMPL_REFUSED=0
+  bootstrap_linear_issue_task "$IDENTIFIER" || return 1
   # Use Linear internal UUID when available for GraphQL mutations; fall back to identifier.
   local mutation_issue_id=${ISSUE_ID:-$ISSUE_IDENTIFIER}
 
@@ -274,90 +286,20 @@ process_linear_issue() {
     "$ISSUE_IDENTIFIER" "$mutation_issue_id" "$TASK_SLUG" "$TASK_DIR" \
     "$ISSUE_TITLE" "$BODY" "$ISSUE_URL" "$PROGRESS_FILE" || return 1
 
-  ISSUE_WORKTREE_DIR=$(prepare_issue_worktree "$BRANCH" "$TASK_SLUG") || return 1
-  CURRENT_ISSUE_WORKTREE="$ISSUE_WORKTREE_DIR"
-  echo "🌿 Linear worktree ready: $ISSUE_WORKTREE_DIR"
-
-  # Ensure provider context for decision_gate + linear_flow (provider-aware).
-  GRKR_ISSUE_PROVIDER=linear
-  export GRKR_ISSUE_PROVIDER
-
-  # Decision gate (reuses existing provider-aware gate + linear_flow for refuse).
-  decision_prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-decision-prompt.XXXXXX")
-  decision_output_file=$(mktemp "${TMPDIR:-/tmp}/grkr-decision-output.XXXXXX")
-  write_decision_prompt_file "$decision_prompt_file" "$ISSUE_IDENTIFIER" "$ISSUE_TITLE" "$ISSUE_URL" "$BODY" "$TASK_SLUG" "$ISSUE_WORKTREE_DIR"
-  run_codex_prompt "$decision_prompt_file" "$decision_output_file" "decide whether to implement the issue" replace "$ISSUE_WORKTREE_DIR"
-  decision=$(run_decision_gate "$ISSUE_IDENTIFIER" "$decision_output_file" "$PROGRESS_FILE" "$TASK_SLUG" "$ISSUE_WORKTREE_DIR" "$decision_prompt_file" || echo "")
-  decision=$(printf '%s' "$decision" | tr -d '\r\n' | tr '[:upper:]' '[:lower:]' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-  case "$decision" in
-    proceed|refuse)
-      IMPLEMENTATION_DECISION=$decision
-      ;;
-    *)
-      echo "❌ Decision gate for Linear $ISSUE_IDENTIFIER returned an invalid result."
-      rm -f "$decision_prompt_file" "$decision_output_file"
-      return 1
-      ;;
-  esac
-  rm -f "$decision_prompt_file" "$decision_output_file"
-
-  if [ "$decision" != "proceed" ]; then
-    # Refusal side effects (checkpoint, planned Backlog mutation, progress refused) already performed
-    # inside decision_gate via linear_flow. Clean local worktree only.
-    if [ -n "${ISSUE_WORKTREE_DIR:-}" ]; then
-      cleanup_issue_worktree "$ISSUE_WORKTREE_DIR"
-      echo "🧹 Removed Linear worktree: $ISSUE_WORKTREE_DIR"
-    fi
-    CURRENT_ISSUE_WORKTREE=""
-    echo "⏸️ Refused Linear issue $ISSUE_IDENTIFIER at decision gate."
-    echo "TASK_DIR=$TASK_DIR"
+  run_linear_decision_stage || return 1
+  if [ "${IMPLEMENTATION_DECISION:-}" != "proceed" ]; then
+    handle_linear_decision_refuse
     return 0
   fi
 
-  # Proceed: plan In Progress state mutation (dry-run), then run implement codex.
-  # Use ISSUE_STATE_ID as a candidate if it represents the target; prefer explicit LINEAR_STATE_IMPLEMENTATION_ID.
-  local impl_state_id=${LINEAR_STATE_IMPLEMENTATION_ID:-${ISSUE_STATE_ID:-}}
-  ensure_linear_implement_in_progress \
-    "$ISSUE_IDENTIFIER" "$mutation_issue_id" "$TASK_SLUG" "$TASK_DIR" \
-    "$PROGRESS_FILE" "$impl_state_id"
-
-  # Implement codex (mirrors GitHub process_issue path; no gh, no test, no publish in this slice).
-  prompt_file=$(mktemp "${TMPDIR:-/tmp}/grkr-prompt.XXXXXX")
-  CURRENT_PROMPT_FILE="$prompt_file"
-  write_issue_prompt_file "$prompt_file" "$ISSUE_IDENTIFIER" "$ISSUE_TITLE" "$ISSUE_URL" "$BODY" "$TASK_SLUG" "$ISSUE_WORKTREE_DIR"
-  codex_output_file="$TASK_DIR/implementation.log"
-  run_codex_prompt "$prompt_file" "$codex_output_file" "implement the issue" replace "$ISSUE_WORKTREE_DIR"
-  implementation_refusal=$(detect_implementation_refusal "$codex_output_file")
-  if [ -n "$implementation_refusal" ]; then
-    echo "⚠️ Implementation discovered blockers that require refusal."
-    echo "🔄 Converting implementation attempt to refusal for Linear $ISSUE_IDENTIFIER."
-    implementation_refusal_class=$(normalize_refusal_class "$implementation_refusal")
-    implementation_refusal_reasoning=$(extract_refusal_reasoning "$implementation_refusal" "Implementation discovered that the Linear issue is not ready for safe autonomous completion.")
-    mkdir -p "$TASK_DIR/codex"
-    cp "$codex_output_file" "$TASK_DIR/codex/implementation-before-refusal.log"
-    # Reuse the already-Liner-aware refusal checkpoint helper (no dupe logic).
-    ensure_linear_refusal_checkpoint \
-      "$ISSUE_IDENTIFIER" "$mutation_issue_id" "$TASK_SLUG" "$TASK_DIR" \
-      "$PROGRESS_FILE" "$implementation_refusal_class" "$implementation_refusal_reasoning" "$impl_state_id" || {
-      CURRENT_ISSUE_WORKTREE=""
-      rm -f "$prompt_file"
-      CURRENT_PROMPT_FILE=""
-      return 1
-    }
-    if [ -n "${ISSUE_WORKTREE_DIR:-}" ]; then
-      cleanup_issue_worktree "$ISSUE_WORKTREE_DIR"
-      echo "🧹 Removed Linear worktree: $ISSUE_WORKTREE_DIR"
-    fi
+  run_linear_implement_stage || {
     CURRENT_ISSUE_WORKTREE=""
-    rm -f "$prompt_file"
-    CURRENT_PROMPT_FILE=""
-    echo "⏸️ Refused Linear issue $ISSUE_IDENTIFIER (converted during implementation)."
-    echo "TASK_DIR=$TASK_DIR"
+    return 1
+  }
+  if [ "${LINEAR_IMPL_REFUSED:-0}" = "1" ]; then
     return 0
   fi
 
-  # Success path: test stage (exec in worktree, test.md + In Review dry-run), then
-  # publish+complete (PR from linear-* + mark complete + Done/comment dry-run). GitHub path untouched.
   ensure_linear_test_checkpoint \
     "$ISSUE_IDENTIFIER" "$mutation_issue_id" "$TASK_SLUG" "$TASK_DIR" \
     "$ISSUE_TITLE" "$PROGRESS_FILE" || {
@@ -368,15 +310,16 @@ process_linear_issue() {
   echo "✅ Linear test stage complete for $ISSUE_IDENTIFIER (decision=proceed; test mutations planned; test.md written)."
   ensure_linear_publish_complete \
     "$ISSUE_IDENTIFIER" "$mutation_issue_id" "$TASK_SLUG" "$TASK_DIR" \
-    "$ISSUE_TITLE" "$ISSUE_URL" "$BODY" "$codex_output_file" "$BRANCH" \
-    "$PROGRESS_FILE" "$prompt_file" || {
+    "$ISSUE_TITLE" "$ISSUE_URL" "$BODY" "$TASK_DIR/implementation.log" "$BRANCH" \
+    "$PROGRESS_FILE" "$CURRENT_PROMPT_FILE" || {
       CURRENT_ISSUE_WORKTREE=""
-      rm -f "$prompt_file"
+      rm -f "$CURRENT_PROMPT_FILE"
       CURRENT_PROMPT_FILE=""
       return 1
   }
+  # finalize tail (clear state, rm prompt, echo complete markers)
   CURRENT_ISSUE_WORKTREE=""
-  rm -f "$prompt_file"
+  rm -f "$CURRENT_PROMPT_FILE"
   CURRENT_PROMPT_FILE=""
   echo "✅ Linear publish + complete planned for $ISSUE_IDENTIFIER"
   echo "STAGE=complete"

@@ -13,7 +13,9 @@
 # task_log_is_sharded, write_default_pr_body, write_compact_pr_body, append_issue_footer,
 # REPO, MAIN_BRANCH, MAX_PR_BODY_CHARS, BRANCH_URL, PR_URL globals, etc.) are already defined
 # in the sourcing shell (bin/grkr defines/sources them; bash resolves at call time).
-# Shared helpers (e.g. ensure_publishable_file_sizes, run_codex_prompt, attach_issue_logs) stay in bin/grkr.
+# Shared helpers: test-write cluster (write_test_checkpoint_with_header + build_command_list + cleanup_test_result_logs)
+# now lives in bin/lib/issue_shared.sh (sourced by grkr before provider libs). Remaining shared
+# (ensure_publishable_file_sizes, run_codex_prompt, attach_issue_logs, progress bridge) stay in bin/grkr for now.
 # GitHub remains default GRKR_ISSUE_PROVIDER. No changes to Linear paths or linear_issue.sh.
 
 # GitHub comment helpers for checkpoint reuse/restore/post (research/plan/test).

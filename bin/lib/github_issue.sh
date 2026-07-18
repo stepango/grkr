@@ -19,7 +19,7 @@
 # + progress bridge (run_progress_cli + checkpoint_marker) now live in
 # bin/lib/issue_shared.sh (sourced by grkr before provider libs).
 # attach_issue_logs now lives in issue_shared.sh (Slice 5).
-# Remaining launcher-only in bin/grkr: optional dead summarize_text (0 callers), process_issue surface (thin sequencer).
+# Remaining launcher-only in bin/grkr: process_issue surface (thin sequencer) + cleanup/trap.
 # GitHub remains default GRKR_ISSUE_PROVIDER. No changes to Linear paths or linear_issue.sh.
 
 # GitHub comment helpers for checkpoint reuse/restore/post (research/plan/test).

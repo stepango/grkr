@@ -5,6 +5,7 @@
 # Slice 2: line-limit + ensure_publishable_file_sizes
 #   (collect_file_line_limit_violations, check_file_line_limit,
 #   ensure_publishable_file_sizes).
+# Slice 3: run_codex_prompt (codex exec + persist_task_log_output bridge).
 #
 # Sourced by bin/grkr AFTER task_progress/refusal_paths and BEFORE
 # lib/linear_issue.sh (which sources stages) and lib/github_issue.sh.
@@ -12,7 +13,7 @@
 #
 # Ambient call-time deps (resolved in grkr / grkr-issue-workflow / templates
 # at call time; bash name resolution): git_in_issue_context,
-# stage_relevant_issue_files, run_codex_prompt (remains in bin/grkr),
+# stage_relevant_issue_files, persist_task_log_output (from grkr-issue-workflow.sh),
 # write_line_limit_fix_prompt (grkr-templates.sh), MAX_FILE_LINES,
 # CURRENT_ISSUE_WORKTREE. No re-exports; exact prior behavior.
 #
@@ -175,4 +176,23 @@ ensure_publishable_file_sizes() {
 
   echo "❌ Commit aborted due to file size limit."
   return 1
+}
+
+run_codex_prompt() {
+  local prompt_file=$1
+  local output_file=$2
+  local phase_label=$3
+  local mode=${4:-replace}
+  local workdir=${5:-$(pwd)}
+  local run_output_file
+
+  run_output_file=$(mktemp "${TMPDIR:-/tmp}/grkr-codex-output.XXXXXX")
+  echo "🚀 Running codex to $phase_label..."
+  echo "Prompt saved to $prompt_file for reference."
+  codex exec --full-auto --cd "$workdir" < "$prompt_file" >"$run_output_file" 2>&1
+  cat "$run_output_file"
+  echo ""
+
+  persist_task_log_output "$run_output_file" "$output_file" "$phase_label" "$mode"
+  echo "✅ codex has finished $phase_label."
 }

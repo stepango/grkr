@@ -15,8 +15,9 @@
 # in the sourcing shell (bin/grkr defines/sources them; bash resolves at call time).
 # Shared helpers: test-write cluster (write_test_checkpoint_with_header + build_command_list + cleanup_test_result_logs)
 # + line-limit helpers (collect_file_line_limit_violations, check_file_line_limit,
-# ensure_publishable_file_sizes) now live in bin/lib/issue_shared.sh (sourced by grkr before provider libs).
-# Remaining shared (run_codex_prompt, attach_issue_logs, progress bridge) stay in bin/grkr for now.
+# ensure_publishable_file_sizes) + run_codex_prompt (codex/exec + persist bridge)
+# now live in bin/lib/issue_shared.sh (sourced by grkr before provider libs).
+# Remaining shared (attach_issue_logs, progress bridge) stay in bin/grkr for now.
 # GitHub remains default GRKR_ISSUE_PROVIDER. No changes to Linear paths or linear_issue.sh.
 
 # GitHub comment helpers for checkpoint reuse/restore/post (research/plan/test).

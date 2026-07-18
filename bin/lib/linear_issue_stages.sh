@@ -47,7 +47,7 @@
 #
 # Ambient deps for new fns (Slice 5):
 #   prepare_issue_worktree, cleanup_issue_worktree, write_decision_prompt_file,
-#   write_issue_prompt_file, run_codex_prompt, run_decision_gate, detect_implementation_refusal,
+#   write_issue_prompt_file, run_codex_prompt (now in issue_shared.sh), run_decision_gate, detect_implementation_refusal,
 #   normalize_refusal_class, extract_refusal_reasoning, ensure_linear_implement_in_progress,
 #   ensure_linear_refusal_checkpoint. Globals: ISSUE_IDENTIFIER, ISSUE_ID, ISSUE_TITLE,
 #   ISSUE_URL, BODY, TASK_SLUG, TASK_DIR, PROGRESS_FILE, BRANCH, CURRENT_ISSUE_WORKTREE,

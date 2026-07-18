@@ -184,25 +184,6 @@ summarize_text() {
       '
 }
 
-run_codex_prompt() {
-  local prompt_file=$1
-  local output_file=$2
-  local phase_label=$3
-  local mode=${4:-replace}
-  local workdir=${5:-$(pwd)}
-  local run_output_file
-
-  run_output_file=$(mktemp "${TMPDIR:-/tmp}/grkr-codex-output.XXXXXX")
-  echo "🚀 Running codex to $phase_label..."
-  echo "Prompt saved to $prompt_file for reference."
-  codex exec --full-auto --cd "$workdir" < "$prompt_file" >"$run_output_file" 2>&1
-  cat "$run_output_file"
-  echo ""
-
-  persist_task_log_output "$run_output_file" "$output_file" "$phase_label" "$mode"
-  echo "✅ codex has finished $phase_label."
-}
-
 process_issue() {
   local ISSUE=$1
   GITHUB_IMPL_REFUSED=0

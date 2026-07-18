@@ -7,6 +7,7 @@
 #   ensure_publishable_file_sizes).
 # Slice 3: run_codex_prompt (codex exec + persist_task_log_output bridge).
 # Slice 4: run_progress_cli + checkpoint_marker (progress CLI bridge + marker fallback).
+# Slice 5: attach_issue_logs (GitHub finalize + refusal log attachment via gh issue comment).
 #
 # Sourced by bin/grkr AFTER task_progress/refusal_paths and BEFORE
 # lib/linear_issue.sh (which sources stages) and lib/github_issue.sh.
@@ -24,6 +25,11 @@
 # gleam.toml present under project root (or GRKR_GLEAM_PROJECT_ROOT override);
 # otherwise falls back to inline marker for "marker" subcommand or errors.
 # checkpoint_marker is a thin convenience over the marker path.
+#
+# attach_issue_logs (Slice 5): uses CURRENT_ISSUE and LOGFILE (ambient globals at
+# call time from bin/grkr and callers in github_issue.sh / refusal_paths.sh).
+# Posts a collapsed <details> execution log comment via `gh issue comment`.
+# Linear has no callers (no gh issue comments); safe to share here. gh CLI required.
 
 build_command_list() {
   local command_count=0
@@ -225,4 +231,19 @@ checkpoint_marker() {
   local task_slug=$2
 
   run_progress_cli marker "$stage" "$task_slug"
+}
+
+attach_issue_logs() {
+  local issue=${CURRENT_ISSUE:-}
+  local comment_file
+  [ -n "$issue" ] || return 0
+  [ -f "$LOGFILE" ] || return 0
+  comment_file=$(mktemp "${TMPDIR:-/tmp}/grkr-issue-log.XXXXXX") || return 0
+  {
+    printf '<details>\n<summary>Execution log</summary>\n\n```text\n'
+    cat "$LOGFILE"
+    printf '\n```\n</details>\n'
+  } > "$comment_file"
+  gh issue comment "$issue" --body-file "$comment_file" >/dev/null 2>&1 || true
+  rm -f "$comment_file"
 }

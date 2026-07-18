@@ -6,6 +6,7 @@
 #   (collect_file_line_limit_violations, check_file_line_limit,
 #   ensure_publishable_file_sizes).
 # Slice 3: run_codex_prompt (codex exec + persist_task_log_output bridge).
+# Slice 4: run_progress_cli + checkpoint_marker (progress CLI bridge + marker fallback).
 #
 # Sourced by bin/grkr AFTER task_progress/refusal_paths and BEFORE
 # lib/linear_issue.sh (which sources stages) and lib/github_issue.sh.
@@ -17,10 +18,12 @@
 # write_line_limit_fix_prompt (grkr-templates.sh), MAX_FILE_LINES,
 # CURRENT_ISSUE_WORKTREE. No re-exports; exact prior behavior.
 #
-# Call-time ambient resolution: functions like checkpoint_marker are defined
-# later in bin/grkr (or in scope at runtime); bash resolves names at call time,
-# identical to prior behavior when these lived inside grkr after sourcing.
-# No redefinition of checkpoint_marker here.
+# SCRIPT_DIR and optional GRKR_GLEAM_PROJECT_ROOT are ambient from the
+# caller (bin/grkr sets SCRIPT_DIR before sourcing issue_shared); bash resolves
+# at call time. run_progress_cli prefers gleam run -m grkr/progress/cli when
+# gleam.toml present under project root (or GRKR_GLEAM_PROJECT_ROOT override);
+# otherwise falls back to inline marker for "marker" subcommand or errors.
+# checkpoint_marker is a thin convenience over the marker path.
 
 build_command_list() {
   local command_count=0
@@ -195,4 +198,31 @@ run_codex_prompt() {
 
   persist_task_log_output "$run_output_file" "$output_file" "$phase_label" "$mode"
   echo "✅ codex has finished $phase_label."
+}
+
+run_progress_cli() {
+  local project_root
+  project_root=${GRKR_GLEAM_PROJECT_ROOT:-$(dirname "$SCRIPT_DIR")}
+
+  if [ -f "$project_root/gleam.toml" ]; then
+    (cd "$project_root" && gleam run -m grkr/progress/cli -- "$@")
+    return
+  fi
+
+  case "${1:-}" in
+    marker)
+      printf '<!-- grkr:checkpoint stage=%s task=%s version=1 -->' "$2" "$3"
+      ;;
+    *)
+      printf 'Missing Gleam project root for grkr progress CLI: %s\n' "$project_root" >&2
+      return 1
+      ;;
+  esac
+}
+
+checkpoint_marker() {
+  local stage=$1
+  local task_slug=$2
+
+  run_progress_cli marker "$stage" "$task_slug"
 }

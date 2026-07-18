@@ -84,21 +84,6 @@ case "$MODE" in
     ;;
 esac
 
-attach_issue_logs() {
-  local issue=${CURRENT_ISSUE:-}
-  local comment_file
-  [ -n "$issue" ] || return 0
-  [ -f "$LOGFILE" ] || return 0
-  comment_file=$(mktemp "${TMPDIR:-/tmp}/grkr-issue-log.XXXXXX") || return 0
-  {
-    printf '<details>\n<summary>Execution log</summary>\n\n```text\n'
-    cat "$LOGFILE"
-    printf '\n```\n</details>\n'
-  } > "$comment_file"
-  gh issue comment "$issue" --body-file "$comment_file" >/dev/null 2>&1 || true
-  rm -f "$comment_file"
-}
-
 cleanup_on_exit() {
   [ -n "${CURRENT_PROMPT_FILE:-}" ] && rm -f "$CURRENT_PROMPT_FILE" 2>/dev/null || true
   if [ "${ATTACH_ISSUE_LOGS:-0}" -eq 1 ]; then
@@ -136,26 +121,6 @@ if [ "$VALIDATION_OK" -eq 1 ]; then
     echo "⚠️ Working directory is not clean. Continuing with the existing changes in the worktree."
   fi
 fi
-
-summarize_text() {
-  local text=$1
-  local max_chars=$2
-
-  printf '%s' "$text" \
-    | tr '\n' ' ' \
-    | sed 's/[[:space:]]\+/ /g; s/^ //; s/ $//' \
-    | awk -v limit="$max_chars" '
-        {
-          if (length($0) <= limit) {
-            print $0
-          } else if (limit > 3) {
-            print substr($0, 1, limit - 3) "..."
-          } else {
-            print substr($0, 1, limit)
-          }
-        }
-      '
-}
 
 process_issue() {
   local ISSUE=$1

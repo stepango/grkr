@@ -1,11 +1,20 @@
 # bin/lib/issue_shared.sh
 # Neutral shared helpers for both GitHub and Linear issue paths.
-# First slice: test-write cluster (build_command_list, cleanup_test_result_logs,
+# Slice 1: test-write cluster (build_command_list, cleanup_test_result_logs,
 # write_test_checkpoint_with_header).
+# Slice 2: line-limit + ensure_publishable_file_sizes
+#   (collect_file_line_limit_violations, check_file_line_limit,
+#   ensure_publishable_file_sizes).
 #
 # Sourced by bin/grkr AFTER task_progress/refusal_paths and BEFORE
 # lib/linear_issue.sh (which sources stages) and lib/github_issue.sh.
 # This ordering ensures definitions exist when provider stages call them.
+#
+# Ambient call-time deps (resolved in grkr / grkr-issue-workflow / templates
+# at call time; bash name resolution): git_in_issue_context,
+# stage_relevant_issue_files, run_codex_prompt (remains in bin/grkr),
+# write_line_limit_fix_prompt (grkr-templates.sh), MAX_FILE_LINES,
+# CURRENT_ISSUE_WORKTREE. No re-exports; exact prior behavior.
 #
 # Call-time ambient resolution: functions like checkpoint_marker are defined
 # later in bin/grkr (or in scope at runtime); bash resolves names at call time,
@@ -107,4 +116,63 @@ write_test_checkpoint_with_header() {
     printf '### Recommendation\n\n'
     printf '%s\n' "$recommendation"
   } > "$checkpoint_file"
+}
+
+collect_file_line_limit_violations() {
+  local file
+  local line_count
+
+  while IFS= read -r -d '' file; do
+    [ -n "$file" ] || continue
+    line_count=$(git_in_issue_context show ":$file" | wc -l | tr -d '[:space:]')
+    if [ "$line_count" -gt "$MAX_FILE_LINES" ]; then
+      printf '%s\t%s\n' "$file" "$line_count"
+    fi
+  done < <(git_in_issue_context diff --cached --name-only --diff-filter=ACMR -z)
+}
+
+check_file_line_limit() {
+  local file
+  local line_count
+  local violations=0
+
+  while IFS="$(printf '\t')" read -r file line_count; do
+    [ -n "$file" ] || continue
+    echo "❌ $file has $line_count lines. Files must be $MAX_FILE_LINES lines or fewer."
+    violations=1
+  done < <(collect_file_line_limit_violations)
+
+  return $violations
+}
+
+ensure_publishable_file_sizes() {
+  local issue=$1
+  local title=$2
+  local task_slug=$3
+  local prompt_file=$4
+  local codex_output_file=$5
+  local violations
+
+  stage_relevant_issue_files
+  if git_in_issue_context diff --cached --quiet; then
+    return 0
+  fi
+
+  violations=$(collect_file_line_limit_violations)
+  if [ -z "$violations" ]; then
+    return 0
+  fi
+
+  check_file_line_limit
+  echo "🔧 Staged files exceed the $MAX_FILE_LINES-line limit. Asking codex to refactor before publish."
+  write_line_limit_fix_prompt "$prompt_file" "$issue" "$title" "$task_slug" "$violations"
+  run_codex_prompt "$prompt_file" "$codex_output_file" "remediate file line-limit violations" append "${CURRENT_ISSUE_WORKTREE:-$(pwd)}"
+
+  stage_relevant_issue_files
+  if check_file_line_limit; then
+    return 0
+  fi
+
+  echo "❌ Commit aborted due to file size limit."
+  return 1
 }

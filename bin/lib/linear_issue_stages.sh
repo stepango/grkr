@@ -20,8 +20,9 @@
 #   LINEAR_STATE_TEST_ID, etc.
 #
 # For Slice 2 (publish+complete):
-#   ensure_publishable_file_sizes, stage_relevant_issue_files, git_in_issue_context,
-#   check_file_line_limit, generate_linear_implement_commit_message,
+#   ensure_publishable_file_sizes, check_file_line_limit (now in issue_shared.sh),
+#   stage_relevant_issue_files, git_in_issue_context,
+#   generate_linear_implement_commit_message,
 #   extract_linear_codex_pr_body, mark_task_progress_complete, run_progress_cli,
 #   maybe_apply_linear_mutation (from linear_mutate.sh sourced first).
 #   Globals used: CURRENT_ISSUE_WORKTREE, REPO, MAIN_BRANCH, LINEAR_STATE_DONE_ID,
@@ -224,7 +225,8 @@ ensure_linear_test_checkpoint() {
 }
 
 # ensure_linear_publish_complete wires the publish + complete dry-run for Linear after test success.
-# Reuses shared: ensure_publishable_file_sizes (with remediation), stage_relevant, git_in_*, check_file_line_limit,
+# Reuses shared (issue_shared.sh): ensure_publishable_file_sizes (with remediation), check_file_line_limit,
+#   stage_relevant, git_in_*, 
 # generate_linear_implement_commit_message, extract_linear_codex_pr_body (no Fixes footer),
 # mark_task_progress_complete, run_progress_cli (for pr_summary/Done + comment).
 # GitHub label edits and gh issue comment are NEVER performed on Linear path.

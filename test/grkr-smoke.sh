@@ -198,10 +198,10 @@ output_file="$tmpdir/output.log"
   PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_GLEAM_PROJECT_ROOT="$repo_root" bash "$tmpdir/grkr.sh" --issue 1 >"$output_file" 2>&1
 )
 
-grep -F "✅ Startup validation passed." "$output_file" >/dev/null
-grep -F "🚀 Running codex to decide whether to implement the issue..." "$output_file" >/dev/null
-grep -F "🚀 Running codex to implement the issue..." "$output_file" >/dev/null
-grep -F "✅ codex has finished implement the issue." "$output_file" >/dev/null
+grep -F "✅ Startup validation passed (coding agent: codex)." "$output_file" >/dev/null
+grep -F "🚀 Running coding agent (codex) to decide whether to implement the issue..." "$output_file" >/dev/null
+grep -F "🚀 Running coding agent (codex) to implement the issue..." "$output_file" >/dev/null
+grep -F "✅ coding agent (codex) finished implement the issue." "$output_file" >/dev/null
 grep -F "✅ PR created: https://example.com/pr/1" "$output_file" >/dev/null
 grep -F "🌿 Created issue worktree for branch: issue-1" "$output_file" >/dev/null
 grep -F "🚧 Moved issue #1 to In Progress." "$output_file" >/dev/null
@@ -267,7 +267,7 @@ grep -F "## Test checkpoint" "$issue_comment_body" >/dev/null
 grep -F "## Completion summary" "$issue_comment_body" >/dev/null
 grep -F "Branch: https://github.com/stepango/grkr/tree/issue-1" "$issue_comment_body" >/dev/null
 grep -F "PR: https://example.com/pr/1" "$issue_comment_body" >/dev/null
-grep -F "🚀 Running codex to implement the issue..." "$issue_comment_body" >/dev/null
+grep -F "🚀 Running coding agent (codex) to implement the issue..." "$issue_comment_body" >/dev/null
 grep -F "✅ PR created: https://example.com/pr/1" "$issue_comment_body" >/dev/null
 grep -F "</details>" "$issue_comment_body" >/dev/null
 grep -F "Detailed description of the task" "$codex_prompt" >/dev/null

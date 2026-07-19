@@ -30,6 +30,25 @@ No changes to user-facing commands, config, or entrypoints (still `robot-main.sh
 
 ## Usage
 
+### Coding agent (Codex / Grok)
+
+Issue decision + implement (and line-limit remediation) go through one bridge (`run_codex_prompt` / `run_coding_agent_prompt`).
+
+```bash
+# Default
+GRKR_CODING_AGENT=codex
+
+# Swap to Grok Build CLI
+GRKR_CODING_AGENT=grok
+# optional: GROK_MODEL=grok-build GROK_MAX_TURNS=60 GROK_BIN=$HOME/.grok/bin/grok
+
+# Codex extras (now applied)
+CODEX_ARGS="-c model=$CODEX_MODEL"
+```
+
+Put these in `.grkr/config.sh` or the environment. Doctor validates only the selected agent. Design: [`docs/design-swappable-coding-agent.md`](docs/design-swappable-coding-agent.md).
+
+
 ```bash
 # Install globally
 npm install -g .

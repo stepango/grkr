@@ -5,7 +5,9 @@
 # Slice 2: line-limit + ensure_publishable_file_sizes
 #   (collect_file_line_limit_violations, check_file_line_limit,
 #   ensure_publishable_file_sizes).
-# Slice 3: run_codex_prompt (codex exec + persist_task_log_output bridge).
+# Slice 3: run_codex_prompt (coding-agent exec + persist_task_log_output bridge).
+#   Swappable backends via GRKR_CODING_AGENT=codex|grok (default codex).
+#   Alias: run_coding_agent_prompt → run_codex_prompt (stable call-site name).
 # Slice 4: run_progress_cli + checkpoint_marker (progress CLI bridge + marker fallback).
 # Slice 5: attach_issue_logs (GitHub finalize + refusal log attachment via gh issue comment).
 #
@@ -174,7 +176,7 @@ ensure_publishable_file_sizes() {
   fi
 
   check_file_line_limit
-  echo "🔧 Staged files exceed the $MAX_FILE_LINES-line limit. Asking codex to refactor before publish."
+  echo "🔧 Staged files exceed the $MAX_FILE_LINES-line limit. Asking coding agent to refactor before publish."
   write_line_limit_fix_prompt "$prompt_file" "$issue" "$title" "$task_slug" "$violations"
   run_codex_prompt "$prompt_file" "$codex_output_file" "remediate file line-limit violations" append "${CURRENT_ISSUE_WORKTREE:-$(pwd)}"
 
@@ -187,6 +189,71 @@ ensure_publishable_file_sizes() {
   return 1
 }
 
+# Resolve selected coding agent: GRKR_CODING_AGENT or CODING_AGENT, default codex.
+_grkr_coding_agent_name() {
+  local raw
+  raw="${GRKR_CODING_AGENT:-${CODING_AGENT:-codex}}"
+  printf '%s' "$raw" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]'
+}
+
+# Codex backend: CODEX_BIN (default codex) + optional CODEX_ARGS (spec/05).
+_grkr_run_codex_backend() {
+  local prompt_file=$1
+  local workdir=$2
+  local out_file=$3
+  local bin="${CODEX_BIN:-codex}"
+  local rc=0
+
+  # CODEX_ARGS is intentionally word-split (config: CODEX_ARGS="-c model=...").
+  # shellcheck disable=SC2086
+  if [ -n "${CODEX_ARGS:-}" ]; then
+    "$bin" exec --full-auto ${CODEX_ARGS} --cd "$workdir" <"$prompt_file" >"$out_file" 2>&1 || rc=$?
+  else
+    "$bin" exec --full-auto --cd "$workdir" <"$prompt_file" >"$out_file" 2>&1 || rc=$?
+  fi
+  return "$rc"
+}
+
+# Grok Build backend: GROK_BIN / ~/.grok/bin/grok, GROK_MODEL, GROK_MAX_TURNS, GROK_ARGS.
+_grkr_run_grok_backend() {
+  local prompt_file=$1
+  local workdir=$2
+  local out_file=$3
+  local bin="${GROK_BIN:-}"
+  local rc=0
+
+  export PATH="${HOME}/.grok/bin:${HOME}/.local/bin:${PATH}"
+  if [ -z "$bin" ]; then
+    if [ -x "${HOME}/.grok/bin/grok" ]; then
+      bin="${HOME}/.grok/bin/grok"
+    else
+      bin="grok"
+    fi
+  fi
+
+  # GROK_ARGS intentionally word-split for optional extras (e.g. --check).
+  # Flags mirror hermes grok_build_exec.sh headless implement path.
+  # shellcheck disable=SC2086
+  "$bin" \
+    --prompt-file "$prompt_file" \
+    --cwd "$workdir" \
+    -m "${GROK_MODEL:-grok-build}" \
+    --yolo \
+    --permission-mode bypassPermissions \
+    --max-turns "${GROK_MAX_TURNS:-60}" \
+    --output-format plain \
+    --no-memory \
+    ${GROK_ARGS:-} \
+    >"$out_file" 2>&1 || rc=$?
+  return "$rc"
+}
+
+# Stable name kept for call sites (GitHub + Linear stages). Prefer
+# run_coding_agent_prompt in new code; both are identical.
+run_coding_agent_prompt() {
+  run_codex_prompt "$@"
+}
+
 run_codex_prompt() {
   local prompt_file=$1
   local output_file=$2
@@ -194,16 +261,37 @@ run_codex_prompt() {
   local mode=${4:-replace}
   local workdir=${5:-$(pwd)}
   local run_output_file
+  local agent
+  local rc=0
 
-  run_output_file=$(mktemp "${TMPDIR:-/tmp}/grkr-codex-output.XXXXXX")
-  echo "🚀 Running codex to $phase_label..."
+  agent=$(_grkr_coding_agent_name)
+  run_output_file=$(mktemp "${TMPDIR:-/tmp}/grkr-agent-output.XXXXXX")
+  echo "🚀 Running coding agent ($agent) to $phase_label..."
   echo "Prompt saved to $prompt_file for reference."
-  codex exec --full-auto --cd "$workdir" < "$prompt_file" >"$run_output_file" 2>&1
+
+  case "$agent" in
+    codex)
+      _grkr_run_codex_backend "$prompt_file" "$workdir" "$run_output_file" || rc=$?
+      ;;
+    grok)
+      _grkr_run_grok_backend "$prompt_file" "$workdir" "$run_output_file" || rc=$?
+      ;;
+    *)
+      {
+        echo "❌ Unknown GRKR_CODING_AGENT='$agent' (supported: codex, grok)."
+        echo "   Set GRKR_CODING_AGENT=codex|grok in .grkr/config.sh or the environment."
+      } >&2
+      rm -f "$run_output_file"
+      return 2
+      ;;
+  esac
+
   cat "$run_output_file"
   echo ""
 
   persist_task_log_output "$run_output_file" "$output_file" "$phase_label" "$mode"
-  echo "✅ codex has finished $phase_label."
+  echo "✅ coding agent ($agent) finished $phase_label."
+  return "$rc"
 }
 
 run_progress_cli() {

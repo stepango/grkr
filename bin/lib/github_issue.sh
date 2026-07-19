@@ -5,6 +5,7 @@
 # Slice 4: research/plan ensure_checkpoint_stage + gh comment helpers (fetch_issue_comments_json, checkpoint_comment_id_from_json, checkpoint_comment_body_from_json).
 # Slice 5 (t_d328b158): completion surface (post_completion_comment).
 # Slice 6 (t_3619188b): thin process_issue orchestration. Bootstrap, decision stage, implement stage, decision-refuse cleanup, and finalize complete extracted here. process_issue in bin/grkr is now a clear thin sequencer of ensure_*/run_* + shared calls.
+# Slice 7 (this): PR body helpers thinned (ensure_pr_body_limit + extract_codex_pr_body) to Gleam progress/templates + cli; thin delegates via grkr-templates.sh. External signatures + behavior identical. github_issue.sh net thinner.
 # Purpose: GitHub-specific publish (stage/commit via Gleam hook/push, PR create-or-edit,
 # "Fixes #N" footer via append, label "implemented"/remove "todo", PR body from codex log or default).
 # Mirrors bin/lib/linear_issue.sh thin-delegate pattern (Linear uses its own extract_linear_* / ensure_linear_*).
@@ -331,16 +332,12 @@ ensure_pr_body_limit() {
   local title=$3
   local issue=$4
   local url=$5
-  local body_length
-
-  body_length=$(wc -m < "$pr_body_file" | tr -d '[:space:]')
-  if [ "$body_length" -gt "$MAX_PR_BODY_CHARS" ]; then
-    write_compact_pr_body "$pr_body_file" "$body" "$title"
-  fi
-
-  if ! grep -Fq "Fixes #$issue" "$pr_body_file"; then
-    append_issue_footer "$pr_body_file" "$issue" "$url"
-  fi
+  # url accepted for sig compat (unused by footer render, per prior).
+  # Write via temp file so trailing newlines from Gleam are not stripped by $(...).
+  local tmp_out
+  tmp_out=$(mktemp "${TMPDIR:-/tmp}/grkr-pr-ensure.XXXXXX")
+  ensure_github_pr_body "$pr_body_file" "$body" "$title" "$issue" "${MAX_PR_BODY_CHARS:-60000}" > "$tmp_out"
+  mv "$tmp_out" "$pr_body_file"
 }
 
 extract_codex_pr_body() {
@@ -351,12 +348,13 @@ extract_codex_pr_body() {
   local issue=$5
   local url=$6
 
-  # task_log_is_sharded + emit_task_log_stream now delegate to Gleam (t_ef6b855f wiring; persist already was)
+  # task_log_is_sharded + emit_task_log_stream delegate to Gleam (unchanged); select + ensure now Gleam too (path I/O)
   if [ -s "$codex_output_file" ] || task_log_is_sharded "$codex_output_file"; then
-    emit_task_log_stream "$codex_output_file" | awk '
-      /^## / {found=1}
-      found {print}
-    ' > "$pr_body_file"
+    local tmp_log
+    tmp_log=$(mktemp "${TMPDIR:-/tmp}/grkr-codex-pr-body.XXXXXX")
+    emit_task_log_stream "$codex_output_file" > "$tmp_log"
+    select_codex_pr_section "$tmp_log" > "$pr_body_file"
+    rm -f "$tmp_log"
     if [ -s "$pr_body_file" ]; then
       ensure_pr_body_limit "$pr_body_file" "$body" "$title" "$issue" "$url"
       return 0

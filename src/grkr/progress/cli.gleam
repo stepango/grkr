@@ -1,4 +1,6 @@
+import gleam/int
 import gleam/io
+import gleam/result
 import gleam/string
 import grkr/progress/main
 import grkr/progress/linear_mutation
@@ -30,6 +32,22 @@ pub fn main() -> Nil {
       io.print(main.cli_render_compact_pr_body(short_body, short_title))
     ["render-issue-footer", issue] ->
       io.print(main.cli_render_issue_footer(issue))
+    ["select-codex-pr-section", path] ->
+      emit_result(read_file(path) |> result.map(main.cli_select_codex_pr_section))
+    ["ensure-github-pr-body", pr_body_path, body, title, issue, max_str] -> {
+      let max = case int.parse(max_str) {
+        Ok(n) -> n
+        Error(_) -> 60000
+      }
+      case read_file(pr_body_path) {
+        Ok(curr) ->
+          io.print(main.cli_ensure_github_pr_body(curr, body, title, issue, max))
+        Error(msg) -> {
+          io.println("progress cli error: " <> msg)
+          exit(1)
+        }
+      }
+    }
     ["linear-state", stage] -> emit_linear_state(stage)
     ["linear-comment-mutation", issue_id, body, stage, task_slug] ->
       emit_mutation(main.cli_plan_linear_comment_mutation(issue_id, body, stage, task_slug))
@@ -77,6 +95,10 @@ pub fn main() -> Nil {
       io.println("  render-checkpoint-with-pr <stage> <task-slug> <body> <pr-url> Render checkpoint with PR")
       io.println("  render-refusal <task-slug> <reason-class> <reasoning>         Render refusal checkpoint")
       io.println("  render-pr-summary <task-slug> <pr-url> <branch-url>           Render PR summary")
+      io.println("")
+      io.println("GitHub PR body helpers (internal; path-based for large bodies):")
+      io.println("  select-codex-pr-section <codex-log-file>                      Extract ## section (first heading to end)")
+      io.println("  ensure-github-pr-body <pr-body-file> <body> <title> <issue> <max>  Size limit + exactly one Fixes #N")
       io.println("")
       io.println("Linear integration commands:")
       io.println("  linear-state <stage>                                          Show Linear state for stage")
@@ -167,6 +189,9 @@ fn emit_apply_result(dump_path: String, result: Result(String, String)) -> Nil {
     False -> Nil
   }
 }
+
+@external(javascript, "../progress/cli_ffi.mjs", "readFileSync")
+fn read_file(path: String) -> Result(String, String)
 
 @external(javascript, "../progress/cli_ffi.mjs", "argv")
 fn argv() -> List(String)

@@ -444,6 +444,20 @@ pub fn cli_render_issue_footer(issue: String) -> String {
   templates.render_issue_footer(issue)
 }
 
+pub fn cli_select_codex_pr_section(content: String) -> String {
+  templates.select_codex_heading_section(content)
+}
+
+pub fn cli_ensure_github_pr_body(
+  content: String,
+  issue_body: String,
+  title: String,
+  issue: String,
+  max_chars: Int,
+) -> String {
+  templates.ensure_github_pr_body(content, issue_body, title, issue, max_chars)
+}
+
 /// Apply entry for CLI: reads dump from path, applies if gate allows, writes sidecar next to it.
 /// Always returns Ok(marker line) for soft exit 0; caller prints it.
 pub fn cli_apply_linear_mutation_from_path(

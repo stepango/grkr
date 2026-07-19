@@ -64,6 +64,19 @@ append_issue_footer() {
   gleam_tpl render-issue-footer "$issue" >> "$pr_body_file"
 }
 
+# Thin GitHub PR body helpers (new for slice: delegate ensure limit + codex section select to Gleam).
+# Path-based I/O for large content. preserve exact wc-m limit, Fixes-once, awk section, sharded emit in caller.
+select_codex_pr_section() {
+  local input_file=$1
+  gleam_tpl select-codex-pr-section "$input_file"
+}
+
+ensure_github_pr_body() {
+  local pr_body_file=$1
+  shift
+  gleam_tpl ensure-github-pr-body "$pr_body_file" "$@"
+}
+
 # Linear PR body helpers (thin; reuse default/compact renders, NEVER append "Fixes #N").
 # Called only from Linear publish path. Appends "Linear: <identifier>" + url marker.
 # Mirrors extract_codex_pr_body + ensure_pr_body_limit structure but omits GitHub footer.

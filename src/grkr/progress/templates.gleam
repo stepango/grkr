@@ -1,3 +1,5 @@
+import gleam/string
+
 import grkr/progress/checkpoint_id
 import grkr/progress/checkpoint_stage
 
@@ -173,4 +175,47 @@ pub fn render_issue_footer(issue: String) -> String {
   "\nFixes #"
   <> issue
   <> "\n"
+}
+
+/// Selects the first section of Codex output starting at a line beginning with "## " (inclusive) through end.
+/// Returns empty string if no such heading line is present.
+/// Matches the awk '/^## / {found=1} found {print}' behavior used for PR body extraction.
+pub fn select_codex_heading_section(content: String) -> String {
+  let lines = string.split(content, "\n")
+  case drop_until_heading(lines) {
+    [] -> ""
+    selected -> string.join(selected, "\n")
+  }
+}
+
+fn drop_until_heading(lines: List(String)) -> List(String) {
+  case lines {
+    [] -> []
+    [first, ..rest] ->
+      case string.starts_with(first, "## ") {
+        True -> lines
+        False -> drop_until_heading(rest)
+      }
+  }
+}
+
+/// Applies GitHub PR body size limit + single "Fixes #N" footer logic.
+/// If char length of content > max_chars (using string.length for repo consistency), replaces with compact render.
+/// Then, if the (possibly replaced) body does not contain "Fixes #<issue>", appends render_issue_footer.
+/// Preserves exact external behavior for >60k compact + exactly one Fixes footer (dedup if already present).
+pub fn ensure_github_pr_body(
+  content: String,
+  issue_body: String,
+  title: String,
+  issue: String,
+  max_chars: Int,
+) -> String {
+  let limited = case string.length(content) > max_chars {
+    True -> render_compact_pr_body(issue_body, title)
+    False -> content
+  }
+  case string.contains(limited, "Fixes #" <> issue) {
+    True -> limited
+    False -> limited <> render_issue_footer(issue)
+  }
 }

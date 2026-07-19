@@ -357,3 +357,58 @@ pub fn format_linear_refusal_plan_test() {
   string.contains(formatted, "commentCreate")
   |> should.be_true()
 }
+
+pub fn select_codex_pr_section_test() {
+  // no heading -> empty (caller will default)
+  progress.cli_select_codex_pr_section("some plain text\nno headings")
+  |> should.equal("")
+
+  // starts with heading -> all
+  let starts = "## Detailed\nfoo\n\n## Plan\nbar"
+  progress.cli_select_codex_pr_section(starts)
+  |> should.equal(starts)
+
+  // heading in middle -> from first ## onward
+  let mid = "intro text\n\n## Detailed description of the task\ncontent here\n## more"
+  let expected = "## Detailed description of the task\ncontent here\n## more"
+  progress.cli_select_codex_pr_section(mid)
+  |> should.equal(expected)
+
+  // subheading ### not matched (only ^## )
+  progress.cli_select_codex_pr_section("text\n### sub\n## Real")
+  |> should.equal("## Real")
+}
+
+pub fn ensure_github_pr_body_test() {
+  let body = "issue body text"
+  let title = "Issue title"
+  let issue = "42"
+  let max = 10
+
+  // oversized -> compact + footer (compact render is short)
+  let long = "0123456789ABCDEF"  // >10
+  let ensured = progress.cli_ensure_github_pr_body(long, body, title, issue, max)
+  string.contains(ensured, "exceeded GitHub's PR body size limit")
+  |> should.be_true()
+  string.contains(ensured, "Fixes #42")
+  |> should.be_true()
+  // footer appears once
+  string.contains(ensured, "Fixes #42\nFixes")
+  |> should.be_false()
+
+  // normal short, no fixes -> append footer once
+  let short = "## Detailed\nok"
+  let with_footer = progress.cli_ensure_github_pr_body(short, body, title, issue, 1000)
+  string.contains(with_footer, "Fixes #42")
+  |> should.be_true()
+  string.ends_with(with_footer, "Fixes #42\n")
+  |> should.be_true()
+
+  // already contains Fixes -> no duplicate footer appended
+  let has_fixes = "## Detailed\nFixes #42\nmore"
+  let kept = progress.cli_ensure_github_pr_body(has_fixes, body, title, issue, 1000)
+  string.contains(kept, "Fixes #42\nFixes")
+  |> should.be_false()
+  string.contains(kept, "more")
+  |> should.be_true()
+}

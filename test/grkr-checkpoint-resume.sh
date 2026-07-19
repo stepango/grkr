@@ -191,7 +191,7 @@ output_file="$tmpdir/output.log"
 
 grep -F "♻️ Reusing research checkpoint for issue #1 from comment 1111." "$output_file" >/dev/null
 grep -F "♻️ Reusing plan checkpoint for issue #1 from comment 1112." "$output_file" >/dev/null
-grep -F "🚀 Running codex to decide whether to implement the issue..." "$output_file" >/dev/null
+grep -F "🚀 Running coding agent (codex) to decide whether to implement the issue..." "$output_file" >/dev/null
 grep -F "📝 Posting test checkpoint for issue #1..." "$output_file" >/dev/null
 grep -F "✅ Moved issue #1 to Done." "$output_file" >/dev/null
 if grep -Fq "<!-- grkr:checkpoint stage=research task=issue-1-test-issue version=1 -->" "$issue_comment_body"; then

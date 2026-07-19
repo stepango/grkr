@@ -124,5 +124,5 @@ pub fn default_config_template(
     <> project_owner
     <> "\"\nPROJECT_NUMBER=\""
     <> project_number
-    <> "\"\nSTATUS_FIELD_NAME=\"Status\"\nTODO_VALUE=\"Todo\"\nIN_PROGRESS_VALUE=\"In Progress\"\nDONE_VALUE=\"Done\"\nBACKLOG_VALUE=\"Backlog\"\nPRIORITY_FIELD_NAME=\"Priority\"\nTEST_COMMAND=\"npm test\"\nBUILD_COMMAND=\"\"\nLOOP_INTERVAL_SECS=\"20\"\n"
+    <> "\"\nSTATUS_FIELD_NAME=\"Status\"\nTODO_VALUE=\"Todo\"\nIN_PROGRESS_VALUE=\"In Progress\"\nDONE_VALUE=\"Done\"\nBACKLOG_VALUE=\"Backlog\"\nPRIORITY_FIELD_NAME=\"Priority\"\nTEST_COMMAND=\"npm test\"\nBUILD_COMMAND=\"\"\nLOOP_INTERVAL_SECS=\"20\"\n\n# Coding agent backend: codex (default) or grok. Issue decision/implement use this.\nGRKR_CODING_AGENT=\"codex\"\n# CODEX_BIN=\"codex\"\n# CODEX_MODEL=\"gpt-5-codex\"\n# CODEX_ARGS=\"-c model=$CODEX_MODEL\"\n# GROK_BIN=\"\"\n# GROK_MODEL=\"grok-build\"\n# GROK_MAX_TURNS=\"60\"\n# GROK_ARGS=\"\"\n"
 }

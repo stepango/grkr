@@ -151,9 +151,9 @@ output_file="$tmpdir/output.log"
   PATH="$tmpdir/bin:$PATH" HOME="$tmpdir/home" GRKR_GLEAM_PROJECT_ROOT="$repo_root" bash "$tmpdir/grkr.sh" --issue 2 >"$output_file" 2>&1
 )
 
-grep -F "✅ Startup validation passed." "$output_file" >/dev/null
-grep -F "🚀 Running codex to decide whether to implement the issue..." "$output_file" >/dev/null
-grep -F "🚀 Running codex to implement the issue..." "$output_file" >/dev/null
+grep -F "✅ Startup validation passed (coding agent: codex)." "$output_file" >/dev/null
+grep -F "🚀 Running coding agent (codex) to decide whether to implement the issue..." "$output_file" >/dev/null
+grep -F "🚀 Running coding agent (codex) to implement the issue..." "$output_file" >/dev/null
 grep -F "⚠️ Implementation discovered blockers that require refusal." "$output_file" >/dev/null
 grep -F "🔄 Converting implementation attempt to refusal for issue #2." "$output_file" >/dev/null
 grep -F "📝 Posting refusal checkpoint for issue #2..." "$output_file" >/dev/null

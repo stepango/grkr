@@ -7,12 +7,14 @@ set -euo pipefail
 unset GLEAM_ENV 2>/dev/null || true
 unset GRKR_ROOT GRKR_CONFIG_FILE GRKR_ACTIVE_JOBS_PATH GRKR_MAX_TICKS \
   GRKR_FAIL_PHASES GRKR_GLEAM_PROJECT_ROOT GRKR_ISSUE_PROVIDER \
+  GRKR_CODING_AGENT CODING_AGENT CODEX_BIN CODEX_ARGS GROK_BIN GROK_MODEL GROK_ARGS GROK_MAX_TURNS \
   GITHUB_FIXTURE_PATH BOT_LOGIN 2>/dev/null || true
 
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 cd "$repo_root"
 
 bash scripts/sync-spec.sh
+bash test/grkr-coding-agent-swap.sh
 bash test/grkr-init.sh
 bash test/grkr-installed-layout.sh
 bash test/grkr-smoke.sh

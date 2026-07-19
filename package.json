@@ -1,7 +1,7 @@
 {
   "name": "grkr",
   "version": "0.1.0",
-  "description": "AI-powered CLI that reads a GitHub issue and uses Codex to implement the changes.",
+  "description": "AI-powered CLI that reads a GitHub/Linear issue and uses a swappable coding agent (Codex or Grok) to implement the changes.",
   "bin": {
     "grkr": "bin/grkr",
     "doctor.sh": "bin/doctor.sh",

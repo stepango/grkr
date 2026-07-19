@@ -96,19 +96,103 @@ pub fn validate_gh_auth() -> Bool {
 }
 
 pub fn validate_codex() -> Bool {
-  case tool_on_path("codex") {
-    False -> {
-      fail("codex is required but not installed.")
-      False
-    }
-    True ->
-      case executable("codex", ["--help"], "") {
-        ExecResult(0, _, _) -> True
-        _ -> {
-          fail("codex is installed but not runnable.")
+  validate_named_tool("codex", "codex is required but not installed.")
+}
+
+pub fn validate_grok() -> Bool {
+  case tool_on_path("grok") {
+    True -> validate_named_tool("grok", "grok is required but not installed.")
+    False ->
+      case path_exists(home_dir() <> "/.grok/bin/grok") {
+        True ->
+          case executable(home_dir() <> "/.grok/bin/grok", ["--help"], "") {
+            ExecResult(0, _, _) -> True
+            _ -> {
+              fail("grok is installed at ~/.grok/bin/grok but not runnable.")
+              False
+            }
+          }
+        False -> {
+          fail(
+            "grok is required (GRKR_CODING_AGENT=grok) but not installed. Install Grok Build CLI or set GROK_BIN.",
+          )
           False
         }
       }
+  }
+}
+
+/// Selected coding agent from env, then config.sh. Default: codex.
+pub fn coding_agent_name() -> String {
+  case string.lowercase(string.trim(get_env("GRKR_CODING_AGENT"))) {
+    "" ->
+      case string.lowercase(string.trim(get_env("CODING_AGENT"))) {
+        "" -> coding_agent_from_config()
+        other -> other
+      }
+    agent -> agent
+  }
+}
+
+fn coding_agent_from_config() -> String {
+  let path = config_file_path()
+  case path_exists(path) {
+    False -> "codex"
+    True ->
+      case read_text(path) {
+        Error(_) -> "codex"
+        Ok(content) -> {
+          let assignments = config_parse.parse_config_assignments(content)
+          case config_parse.config_get(assignments, "GRKR_CODING_AGENT") {
+            Some(v) -> string.lowercase(string.trim(v))
+            None ->
+              case config_parse.config_get(assignments, "CODING_AGENT") {
+                Some(v) -> string.lowercase(string.trim(v))
+                None -> "codex"
+              }
+          }
+        }
+      }
+  }
+}
+
+fn home_dir() -> String {
+  case get_env("HOME") {
+    "" -> "."
+    h -> h
+  }
+}
+
+fn validate_named_tool(tool: String, missing_msg: String) -> Bool {
+  case tool_on_path(tool) {
+    False -> {
+      fail(missing_msg)
+      False
+    }
+    True ->
+      case executable(tool, ["--help"], "") {
+        ExecResult(0, _, _) -> True
+        _ -> {
+          fail(tool <> " is installed but not runnable.")
+          False
+        }
+      }
+  }
+}
+
+/// Validate only the configured coding agent (codex default, or grok).
+pub fn validate_coding_agent() -> Bool {
+  case coding_agent_name() {
+    "codex" -> validate_codex()
+    "grok" -> validate_grok()
+    other -> {
+      fail(
+        "Unknown GRKR_CODING_AGENT="
+          <> other
+          <> " (supported: codex, grok).",
+      )
+      False
+    }
   }
 }
 
@@ -213,7 +297,7 @@ pub fn validate_grkr_dir() -> Bool {
 pub fn run_validate() -> Int {
   let tools_ok = validate_tools()
   let gh_ok = validate_gh_auth()
-  let codex_ok = validate_codex()
+  let agent_ok = validate_coding_agent()
 
   let config_path = config_file_path()
   let config_ok = case path_exists(config_path) {
@@ -230,10 +314,14 @@ pub fn run_validate() -> Int {
 
   let grkr_ok = validate_grkr_dir()
 
-  let all_ok = tools_ok && gh_ok && codex_ok && config_ok && grkr_ok
+  let all_ok = tools_ok && gh_ok && agent_ok && config_ok && grkr_ok
   case all_ok {
     True -> {
-      console_log("✅ Startup validation passed.")
+      console_log(
+        "✅ Startup validation passed (coding agent: "
+          <> coding_agent_name()
+          <> ").",
+      )
       0
     }
     False -> 1

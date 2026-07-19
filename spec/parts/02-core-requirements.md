@@ -15,7 +15,11 @@ Implementation must use:
 - `mktemp`
 - `find`
 - standard POSIX utilities
-- `codex` CLI
+- a **swappable coding agent CLI** selected by `GRKR_CODING_AGENT`:
+  - `codex` (default) — OpenAI Codex CLI
+  - `grok` — xAI Grok Build CLI
+
+Doctor validates only the configured agent. Issue decision/implement (and line-limit remediation) run through a single shell bridge (`run_codex_prompt` / `run_coding_agent_prompt` in `bin/lib/issue_shared.sh`).
 
 ### 2.2 Main loop
 

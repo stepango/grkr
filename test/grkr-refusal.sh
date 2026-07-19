@@ -149,13 +149,13 @@ output_file="$tmpdir/output.log"
 )
 
 grep -F "✅ Startup validation passed (coding agent: codex)." "$output_file" >/dev/null
-grep -F "🚀 Running coding agent (codex) to decide whether to implement the issue..." "$output_file" >/dev/null
+grep -F "🚀 Running coding agent (codex/decision) to decide whether to implement the issue..." "$output_file" >/dev/null
 grep -F "📝 Posting refusal checkpoint for issue #1..." "$output_file" >/dev/null
 grep -F "📥 Moved issue #1 to Backlog." "$output_file" >/dev/null
 grep -F "⏸️ Refused implementation for issue #1." "$output_file" >/dev/null
 grep -F "🧹 Removed issue worktree:" "$output_file" >/dev/null
 
-if grep -Fq "🚀 Running coding agent (codex) to implement the issue..." "$output_file"; then
+if grep -Fq "🚀 Running coding agent (codex/implement) to implement the issue..." "$output_file"; then
   echo "implementation stage unexpectedly ran" >&2
   exit 1
 fi

@@ -154,7 +154,7 @@ task_dir="$tmpdir/.grkr/tasks/issue-1-test-issue"
 grep -F "has 1001 lines" "$output_file" >/dev/null
 grep -F "Files must be 1000 lines or fewer." "$output_file" >/dev/null
 grep -F "Asking coding agent to refactor before publish." "$output_file" >/dev/null
-grep -F "✅ coding agent (codex) finished remediate file line-limit violations." "$output_file" >/dev/null
+grep -F "✅ coding agent (codex/remediate) finished remediate file line-limit violations." "$output_file" >/dev/null
 grep -F "✅ PR created: https://example.com/pr/1" "$output_file" >/dev/null
 ! grep -F "Commit aborted due to file size limit." "$output_file" >/dev/null
 grep -F "No file may exceed 1000 lines." "$codex_prompt_log" >/dev/null

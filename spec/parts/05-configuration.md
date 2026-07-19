@@ -43,6 +43,10 @@ BOT_GIT_EMAIL="robot@example.com"
 
 # Coding agent backend (issue decision/implement + line-limit remediation)
 GRKR_CODING_AGENT="codex"   # or "grok"
+# Optional per-step overrides (else fall back to GRKR_CODING_AGENT):
+# GRKR_AGENT_DECISION="grok"
+# GRKR_AGENT_IMPLEMENT="codex"
+# GRKR_AGENT_REMEDIATE="grok"
 CODEX_BIN="codex"
 CODEX_MODEL="gpt-5-codex"
 CODEX_ARGS="-c model=$CODEX_MODEL"

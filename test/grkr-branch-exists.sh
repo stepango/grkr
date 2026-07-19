@@ -110,5 +110,5 @@ output_file="$tmpdir/output.log"
 )
 
 grep -F "Branch issue-1 already exists locally. Reusing it in an issue worktree..." "$output_file" >/dev/null
-grep -F "🚀 Running coding agent (codex) to decide whether to implement the issue..." "$output_file" >/dev/null
+grep -F "🚀 Running coding agent (codex/decision) to decide whether to implement the issue..." "$output_file" >/dev/null
 grep -F "✅ PR updated: https://example.com/pr/7" "$output_file" >/dev/null

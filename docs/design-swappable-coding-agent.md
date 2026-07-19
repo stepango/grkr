@@ -64,3 +64,23 @@ ${GROK_BIN:-grok|~/.grok/bin/grok} \
 - `gleam build` + `gleam test`
 - `npm test` / regression shells (smoke, refusal, impl-to-refusal, line-limit, checkpoint-resume, branch-exists)
 - Manual: `GRKR_CODING_AGENT=grok grkr --issue N` with Grok installed
+
+
+## Per-step overrides (slice 2)
+
+| Env | Step |
+|-----|------|
+| `GRKR_AGENT_DECISION` | decision gate |
+| `GRKR_AGENT_IMPLEMENT` | implement |
+| `GRKR_AGENT_REMEDIATE` | line-limit remediation |
+
+Falls back to `GRKR_CODING_AGENT` then `codex`.
+
+## Eval matrix
+
+```bash
+scripts/coding-agent-eval-matrix.sh            # mock + live (probed)
+scripts/coding-agent-eval-matrix.sh --mock-only
+```
+
+Reports under `docs/eval-results/coding-agent-matrix-latest.md`.

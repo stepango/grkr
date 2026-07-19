@@ -35,15 +35,25 @@ No changes to user-facing commands, config, or entrypoints (still `robot-main.sh
 Issue decision + implement (and line-limit remediation) go through one bridge (`run_codex_prompt` / `run_coding_agent_prompt`).
 
 ```bash
-# Default
-GRKR_CODING_AGENT=codex
+# Default / global
+GRKR_CODING_AGENT=codex   # or grok
 
-# Swap to Grok Build CLI
-GRKR_CODING_AGENT=grok
-# optional: GROK_MODEL=grok-build GROK_MAX_TURNS=60 GROK_BIN=$HOME/.grok/bin/grok
+# Per-step mix (overrides global)
+GRKR_AGENT_DECISION=grok
+GRKR_AGENT_IMPLEMENT=codex
+GRKR_AGENT_REMEDIATE=grok
 
-# Codex extras (now applied)
+# Backend knobs
 CODEX_ARGS="-c model=$CODEX_MODEL"
+GROK_MODEL=grok-build
+GROK_MAX_TURNS=60
+```
+
+Quality matrix (fixtures across decision/implement/remediate):
+
+```bash
+scripts/coding-agent-eval-matrix.sh
+# report: docs/eval-results/coding-agent-matrix-latest.md
 ```
 
 Put these in `.grkr/config.sh` or the environment. Doctor validates only the selected agent. Design: [`docs/design-swappable-coding-agent.md`](docs/design-swappable-coding-agent.md).

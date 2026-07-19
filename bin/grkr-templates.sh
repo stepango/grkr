@@ -77,6 +77,11 @@ ensure_github_pr_body() {
   gleam_tpl ensure-github-pr-body "$pr_body_file" "$@"
 }
 
+render_github_completion_summary() {
+  local issue=$1 title=$2 branch_url=$3 pr_url=$4
+  gleam_tpl render-github-completion-summary "$issue" "$title" "$branch_url" "$pr_url"
+}
+
 # Linear PR body helpers (thin; reuse default/compact renders, NEVER append "Fixes #N").
 # Called only from Linear publish path. Appends "Linear: <identifier>" + url marker.
 # Mirrors extract_codex_pr_body + ensure_pr_body_limit structure but omits GitHub footer.

@@ -412,3 +412,30 @@ pub fn ensure_github_pr_body_test() {
   string.contains(kept, "more")
   |> should.be_true()
 }
+
+pub fn cli_render_github_completion_summary_test() {
+  let result =
+    progress.cli_render_github_completion_summary(
+      "123",
+      "Polish GitHub completion surface",
+      "https://github.com/stepango/grkr/tree/issue-123",
+      "https://github.com/stepango/grkr/pull/147",
+    )
+
+  let expected =
+    "## Completion summary\n\nIssue #123: Polish GitHub completion surface\n\n- Recommendation: ready\n- Branch: https://github.com/stepango/grkr/tree/issue-123\n- PR: https://github.com/stepango/grkr/pull/147\n"
+
+  result
+  |> should.equal(expected)
+}
+
+pub fn cli_render_github_completion_summary_empty_urls_test() {
+  let result =
+    progress.cli_render_github_completion_summary("99", "Edge case", "", "")
+
+  let expected =
+    "## Completion summary\n\nIssue #99: Edge case\n\n- Recommendation: ready\n- Branch: \n- PR: \n"
+
+  result
+  |> should.equal(expected)
+}

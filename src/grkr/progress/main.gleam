@@ -458,6 +458,15 @@ pub fn cli_ensure_github_pr_body(
   templates.ensure_github_pr_body(content, issue_body, title, issue, max_chars)
 }
 
+pub fn cli_render_github_completion_summary(
+  issue: String,
+  title: String,
+  branch_url: String,
+  pr_url: String,
+) -> String {
+  templates.render_github_completion_summary(issue, title, branch_url, pr_url)
+}
+
 /// Apply entry for CLI: reads dump from path, applies if gate allows, writes sidecar next to it.
 /// Always returns Ok(marker line) for soft exit 0; caller prints it.
 pub fn cli_apply_linear_mutation_from_path(

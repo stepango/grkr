@@ -76,4 +76,13 @@ if [ "$token_status" != "Token unavailable" ]; then
   exit 1
 fi
 
+completion=$(gleam run -m grkr/progress/cli -- render-github-completion-summary 77 "Test title" "https://ex/tree/b" "https://ex/pr/9")
+case "$completion" in
+  *'## Completion summary'*'Issue #77: Test title'*'Recommendation: ready'*'Branch: https://ex/tree/b'*'PR: https://ex/pr/9'*) ;;
+  *)
+    printf 'render-github-completion-summary missing expected content\n%s\n' "$completion" >&2
+    exit 1
+    ;;
+esac
+
 printf 'grkr progress cli test passed\n'

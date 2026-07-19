@@ -219,3 +219,20 @@ pub fn ensure_github_pr_body(
     False -> limited <> render_issue_footer(issue)
   }
 }
+
+pub fn render_github_completion_summary(
+  issue: String,
+  title: String,
+  branch_url: String,
+  pr_url: String,
+) -> String {
+  "## Completion summary\n\nIssue #"
+  <> issue
+  <> ": "
+  <> title
+  <> "\n\n- Recommendation: ready\n- Branch: "
+  <> branch_url
+  <> "\n- PR: "
+  <> pr_url
+  <> "\n"
+}

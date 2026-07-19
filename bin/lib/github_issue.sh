@@ -6,6 +6,7 @@
 # Slice 5 (t_d328b158): completion surface (post_completion_comment).
 # Slice 6 (t_3619188b): thin process_issue orchestration. Bootstrap, decision stage, implement stage, decision-refuse cleanup, and finalize complete extracted here. process_issue in bin/grkr is now a clear thin sequencer of ensure_*/run_* + shared calls.
 # Slice 7 (this): PR body helpers thinned (ensure_pr_body_limit + extract_codex_pr_body) to Gleam progress/templates + cli; thin delegates via grkr-templates.sh. External signatures + behavior identical. github_issue.sh net thinner.
+# Slice 8: completion summary render (post_completion_comment body) moved to Gleam progress/templates + cli + thin delegate; post_completion_comment is now thin shell wrapper (gh comment preserved, exact body via render). External contract identical.
 # Purpose: GitHub-specific publish (stage/commit via Gleam hook/push, PR create-or-edit,
 # "Fixes #N" footer via append, label "implemented"/remove "todo", PR body from codex log or default).
 # Mirrors bin/lib/linear_issue.sh thin-delegate pattern (Linear uses its own extract_linear_* / ensure_linear_*).
@@ -367,6 +368,8 @@ extract_codex_pr_body() {
 
 # GitHub completion helper (slice 5). Moved from bin/grkr for thinning.
 # Posts gh issue completion summary body with branch + PR URLs.
+# Slice 8: pure summary render moved to Gleam (render_github_completion_summary);
+# this shell function is now a thin delegate (preserves exact signature/contract).
 # Alias provided for design naming parity (post_github_completion_comment like publish_*).
 # Call site in process_issue remains `post_completion_comment` (zero churn).
 post_completion_comment() {
@@ -374,17 +377,13 @@ post_completion_comment() {
   local title=$2
   local branch_url=$3
   local pr_url=$4
+  local summary_file
 
-  gh issue comment "$issue" --body "$(cat <<EOF
-## Completion summary
-
-Issue #$issue: $title
-
-- Recommendation: ready
-- Branch: $branch_url
-- PR: $pr_url
-EOF
-)" >/dev/null
+  # Use temp file to preserve trailing newline from Gleam render (matches original heredoc).
+  summary_file=$(mktemp "${TMPDIR:-/tmp}/grkr-completion.XXXXXX")
+  render_github_completion_summary "$issue" "$title" "$branch_url" "$pr_url" > "$summary_file"
+  gh issue comment "$issue" --body-file "$summary_file" >/dev/null
+  rm -f "$summary_file"
 }
 
 post_github_completion_comment() {

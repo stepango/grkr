@@ -48,6 +48,8 @@ pub fn main() -> Nil {
         }
       }
     }
+    ["render-github-completion-summary", issue, title, branch_url, pr_url] ->
+      io.print(main.cli_render_github_completion_summary(issue, title, branch_url, pr_url))
     ["linear-state", stage] -> emit_linear_state(stage)
     ["linear-comment-mutation", issue_id, body, stage, task_slug] ->
       emit_mutation(main.cli_plan_linear_comment_mutation(issue_id, body, stage, task_slug))
@@ -99,6 +101,7 @@ pub fn main() -> Nil {
       io.println("GitHub PR body helpers (internal; path-based for large bodies):")
       io.println("  select-codex-pr-section <codex-log-file>                      Extract ## section (first heading to end)")
       io.println("  ensure-github-pr-body <pr-body-file> <body> <title> <issue> <max>  Size limit + exactly one Fixes #N")
+      io.println("  render-github-completion-summary <issue> <title> <branch-url> <pr-url>  Completion summary body")
       io.println("")
       io.println("Linear integration commands:")
       io.println("  linear-state <stage>                                          Show Linear state for stage")

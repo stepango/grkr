@@ -199,9 +199,9 @@ output_file="$tmpdir/output.log"
 )
 
 grep -F "✅ Startup validation passed (coding agent: codex)." "$output_file" >/dev/null
-grep -F "🚀 Running coding agent (codex) to decide whether to implement the issue..." "$output_file" >/dev/null
-grep -F "🚀 Running coding agent (codex) to implement the issue..." "$output_file" >/dev/null
-grep -F "✅ coding agent (codex) finished implement the issue." "$output_file" >/dev/null
+grep -F "🚀 Running coding agent (codex/decision) to decide whether to implement the issue..." "$output_file" >/dev/null
+grep -F "🚀 Running coding agent (codex/implement) to implement the issue..." "$output_file" >/dev/null
+grep -F "✅ coding agent (codex/implement) finished implement the issue." "$output_file" >/dev/null
 grep -F "✅ PR created: https://example.com/pr/1" "$output_file" >/dev/null
 grep -F "🌿 Created issue worktree for branch: issue-1" "$output_file" >/dev/null
 grep -F "🚧 Moved issue #1 to In Progress." "$output_file" >/dev/null
@@ -267,7 +267,7 @@ grep -F "## Test checkpoint" "$issue_comment_body" >/dev/null
 grep -F "## Completion summary" "$issue_comment_body" >/dev/null
 grep -F "Branch: https://github.com/stepango/grkr/tree/issue-1" "$issue_comment_body" >/dev/null
 grep -F "PR: https://example.com/pr/1" "$issue_comment_body" >/dev/null
-grep -F "🚀 Running coding agent (codex) to implement the issue..." "$issue_comment_body" >/dev/null
+grep -F "🚀 Running coding agent (codex/implement) to implement the issue..." "$issue_comment_body" >/dev/null
 grep -F "✅ PR created: https://example.com/pr/1" "$issue_comment_body" >/dev/null
 grep -F "</details>" "$issue_comment_body" >/dev/null
 grep -F "Detailed description of the task" "$codex_prompt" >/dev/null

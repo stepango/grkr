@@ -170,7 +170,7 @@ Slices are independent where possible; PR body slice has dedicated test coverage
 ## 6. LOC risk plan (files ≥600)
 
 - `src/grkr/supervisor/phases.gleam` (688): Approaching limit. Propose parallel hygiene slice (not mixed into first GitHub product extract): split by concern (e.g. `phases/sync.gleam`, `phases/scan_comment.gleam`, `phases/pick_schedule.gleam`, `phases/reap.gleam`, `phases/cleanup.gleam`, keep thin dispatcher in phases.gleam). Do before any growth. Include in follow-up card titles.
-- `src/grkr/progress/main.gleam` (621): Similar hygiene watch; split linear vs generic render if it grows.
+- `src/grkr/progress/main.gleam` (was 621/644): hygiene split landed (this PR): 63 thin facade + checkpoint_plan/linear_plan/templates_cli/linear_apply (all <<250); see gleam-migration update.
 - `bin/lib/linear_issue_stages.sh` (727): Explicitly out of scope for GitHub work. If any unavoidable shared touch forces growth, extract first per prior rules (neutral before provider). GitHub slices must not touch it.
 - `bin/lib/github_issue.sh` (545): Target remains well under 500 after slices; split internal large fns (e.g. ensure_test_checkpoint) if a slice would push it near 600.
 - Rule (AGENTS + priors): extract/split before landing any change that would exceed ~950. Prefer concern-split modules over monoliths.

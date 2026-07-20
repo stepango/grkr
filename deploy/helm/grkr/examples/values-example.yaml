@@ -1,0 +1,39 @@
+# Example values for a real install (do not commit secrets).
+#
+#   helm upgrade --install grkr ./deploy/helm/grkr -f deploy/helm/grkr/examples/values-example.yaml \
+#     --set github.token=$GH_TOKEN \
+#     --set image.repository=ghcr.io/stepango/grkr \
+#     --set image.tag=latest
+
+repo:
+  name: stepango/grkr
+  mainBranch: main
+
+github:
+  projectNumber: "1"
+  projectOwner: stepango
+  botLogin: ""
+  # token: set via --set github.token=... or existingSecret
+
+codingAgent:
+  default: codex
+  agentsVolume:
+    enabled: true
+    hostPath: /opt/coding-agents   # node-local binaries: codex, grok
+
+config:
+  loopIntervalSecs: "30"
+  issueProvider: github
+  testCommand: "npm test"
+
+persistence:
+  enabled: true
+  size: 40Gi
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: "4"
+    memory: 8Gi

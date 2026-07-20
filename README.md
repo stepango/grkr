@@ -86,6 +86,30 @@ worker-refuse-issue.sh --help
 worker-resolve-pr.sh --help
 ```
 
+## Deploy (Docker + Helm)
+
+Run the supervisor as a container against any GitHub repo/project:
+
+```bash
+# Compose (easiest)
+export GH_TOKEN=ghp_...
+export REPO=owner/name
+export PROJECT_NUMBER=1
+# optional: mkdir -p coding-agents && ln -s "$(which codex)" coding-agents/codex
+docker compose up --build
+
+# Helm
+helm upgrade --install grkr ./deploy/helm/grkr \
+  --set image.repository=ghcr.io/YOU/grkr --set image.tag=0.1.0 \
+  --set repo.name=owner/name \
+  --set github.projectNumber=1 \
+  --set github.existingSecret=grkr-secrets
+```
+
+Full guide: [`docs/deploy-docker-helm.md`](docs/deploy-docker-helm.md)  
+Chart values example: `deploy/helm/grkr/examples/values-example.yaml`  
+Image entrypoint supports `supervisor` (default), `doctor`, `issue <n>`, `linear-issue <id>`, `shell`.
+
 ## PR Conflict Resolution
 
 The `worker-resolve-pr.sh` script implements automated PR conflict resolution using Gleam:

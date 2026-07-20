@@ -1,0 +1,148 @@
+# Default values for grkr.
+# Keep secrets out of git — use existingSecret or --set-file / sealed-secrets / ESO.
+
+replicaCount: 1
+
+image:
+  repository: grkr
+  tag: local
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# Target repo the supervisor operates on
+repo:
+  # required: owner/name
+  name: ""
+  # optional clone override (https URL). When empty, entrypoint builds from repo.name + token
+  url: ""
+  mainBranch: main
+
+github:
+  # GitHub Project v2 number (required)
+  projectNumber: ""
+  projectOwner: ""
+  botLogin: ""
+  # Prefer existingSecret (keys: GH_TOKEN). Or set token via --set github.token=...
+  token: ""
+  existingSecret: ""
+  existingSecretKey: GH_TOKEN
+
+linear:
+  enabled: false
+  accessToken: ""
+  clientId: ""
+  clientSecret: ""
+  existingSecret: ""
+  # keys inside existingSecret when set
+  accessTokenKey: GRKR_LINEAR_ACCESS_TOKEN
+  clientIdKey: LINEAR_CLIENT_ID
+  clientSecretKey: LINEAR_CLIENT_SECRET
+  mutate: false
+
+codingAgent:
+  # codex | grok
+  default: codex
+  decision: ""
+  implement: ""
+  remediate: ""
+  # Optional XAI key for grok (or existingSecret key XAI_API_KEY)
+  xaiApiKey: ""
+  # Mount host path or PVC with codex/grok binaries at /opt/coding-agents
+  agentsVolume:
+    enabled: false
+    # hostPath example for bare-metal/k3s; leave empty to use emptyDir
+    hostPath: ""
+    # existing PVC name alternative to hostPath
+    existingClaim: ""
+
+config:
+  loopIntervalSecs: "20"
+  issueProvider: github
+  testCommand: "npm test"
+  buildCommand: ""
+  statusFieldName: Status
+  todoValue: Todo
+  inProgressValue: "In Progress"
+  doneValue: Done
+  backlogValue: Backlog
+  priorityFieldName: Priority
+  botGitName: grkr-bot
+  botGitEmail: grkr-bot@users.noreply.github.com
+  # Extra env (string map) merged into the container
+  extraEnv: {}
+
+# Persist git checkout + .grkr state (required for real runs)
+persistence:
+  enabled: true
+  storageClass: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 20Gi
+  # existingClaim: ""
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "2"
+    memory: 4Gi
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  fsGroup: 10001
+  runAsUser: 10001
+  runAsGroup: 10001
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+  readOnlyRootFilesystem: false
+
+# Command override (default: supervisor via image ENTRYPOINT/CMD)
+command: []
+args: []
+
+livenessProbe:
+  enabled: false
+  # Supervisor is a long loop without HTTP. Opt-in exec probe:
+  exec:
+    command: ["bash", "-lc", "test -d /workspace/.grkr"]
+  initialDelaySeconds: 60
+  periodSeconds: 60
+  timeoutSeconds: 5
+  failureThreshold: 5
+
+readinessProbe:
+  enabled: false
+  exec:
+    command: ["bash", "-lc", "test -f /workspace/.grkr/config.sh"]
+  initialDelaySeconds: 30
+  periodSeconds: 30
+
+# Optional ConfigMap mount that becomes .grkr/config.sh (skips env generation)
+configFile:
+  create: false
+  # raw contents of config.sh when create=true
+  contents: ""
+  # or existing configmap name + key
+  existingConfigMap: ""
+  existingConfigMapKey: config.sh

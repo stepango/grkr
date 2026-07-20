@@ -1,0 +1,62 @@
+# Easy local / single-node deploy for grkr supervisor.
+# Usage:
+#   export GH_TOKEN=ghp_...
+#   export REPO=owner/name
+#   export PROJECT_NUMBER=1
+#   docker compose up --build
+#
+# Optional coding agents: place binaries in ./coding-agents/{codex,grok}
+# or set GRKR_CODING_AGENT + install inside a derived image.
+
+services:
+  grkr:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ${GRKR_IMAGE:-grkr:local}
+    container_name: grkr
+    restart: unless-stopped
+    environment:
+      REPO: ${REPO:?set REPO=owner/name}
+      PROJECT_OWNER: ${PROJECT_OWNER:-}
+      PROJECT_NUMBER: ${PROJECT_NUMBER:?set PROJECT_NUMBER}
+      GH_TOKEN: ${GH_TOKEN:?set GH_TOKEN}
+      GITHUB_TOKEN: ${GH_TOKEN}
+      MAIN_BRANCH: ${MAIN_BRANCH:-main}
+      LOOP_INTERVAL_SECS: ${LOOP_INTERVAL_SECS:-20}
+      BOT_LOGIN: ${BOT_LOGIN:-}
+      BOT_GIT_NAME: ${BOT_GIT_NAME:-grkr-bot}
+      BOT_GIT_EMAIL: ${BOT_GIT_EMAIL:-grkr-bot@users.noreply.github.com}
+      GRKR_CODING_AGENT: ${GRKR_CODING_AGENT:-codex}
+      GRKR_AGENT_DECISION: ${GRKR_AGENT_DECISION:-}
+      GRKR_AGENT_IMPLEMENT: ${GRKR_AGENT_IMPLEMENT:-}
+      GRKR_AGENT_REMEDIATE: ${GRKR_AGENT_REMEDIATE:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      GRKR_LINEAR_ACCESS_TOKEN: ${GRKR_LINEAR_ACCESS_TOKEN:-}
+      LINEAR_CLIENT_ID: ${LINEAR_CLIENT_ID:-}
+      LINEAR_CLIENT_SECRET: ${LINEAR_CLIENT_SECRET:-}
+      GRKR_ISSUE_PROVIDER: ${GRKR_ISSUE_PROVIDER:-github}
+      GRKR_LINEAR_MUTATE: ${GRKR_LINEAR_MUTATE:-0}
+      TEST_COMMAND: ${TEST_COMMAND:-npm test}
+      BUILD_COMMAND: ${BUILD_COMMAND:-}
+      STATUS_FIELD_NAME: ${STATUS_FIELD_NAME:-Status}
+      TODO_VALUE: ${TODO_VALUE:-Todo}
+      IN_PROGRESS_VALUE: ${IN_PROGRESS_VALUE:-In Progress}
+      DONE_VALUE: ${DONE_VALUE:-Done}
+      BACKLOG_VALUE: ${BACKLOG_VALUE:-Backlog}
+      PRIORITY_FIELD_NAME: ${PRIORITY_FIELD_NAME:-Priority}
+    volumes:
+      # Durable supervisor state + target repo checkout
+      - grkr-workspace:/workspace
+      # Optional host coding-agent binaries
+      - ${CODING_AGENTS_DIR:-./coding-agents}:/opt/coding-agents:ro
+    mem_limit: 4g
+    cpus: 2.0
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+volumes:
+  grkr-workspace:

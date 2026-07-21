@@ -1,0 +1,17 @@
+apiVersion: v2
+name: grkr
+description: Deploy the grkr AI issue supervisor (GitHub Projects / Linear → coding agent → PR)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+keywords:
+  - grkr
+  - github
+  - linear
+  - coding-agent
+  - automation
+home: https://github.com/stepango/grkr
+sources:
+  - https://github.com/stepango/grkr
+maintainers:
+  - name: stepango

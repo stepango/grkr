@@ -1,0 +1,4 @@
+# Keep empty dir so compose volume mount succeeds before you add agent binaries.
+# Place executable CLIs here:
+#   ./coding-agents/codex
+#   ./coding-agents/grok

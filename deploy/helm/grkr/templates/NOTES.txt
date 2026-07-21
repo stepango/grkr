@@ -1,0 +1,29 @@
+1. Build / push the image (if not already in your registry):
+
+   docker build -t {{ .Values.image.repository }}:{{ .Values.image.tag }} .
+   docker push {{ .Values.image.repository }}:{{ .Values.image.tag }}
+
+2. Release: {{ .Release.Name }}  namespace: {{ .Release.Namespace }}
+
+   Supervisor target repo: {{ .Values.repo.name | default "<unset>" }}
+   GitHub project #:       {{ .Values.github.projectNumber | default "<unset>" }}
+   Coding agent:           {{ .Values.codingAgent.default }}
+
+3. Useful commands:
+
+   kubectl -n {{ .Release.Namespace }} logs -f deploy/{{ include "grkr.fullname" . }}
+   kubectl -n {{ .Release.Namespace }} exec -it deploy/{{ include "grkr.fullname" . }} -- doctor
+   kubectl -n {{ .Release.Namespace }} exec -it deploy/{{ include "grkr.fullname" . }} -- issue 1
+
+4. Secrets:
+
+   Prefer an existing secret with key GH_TOKEN:
+     --set github.existingSecret=my-gh-secret
+
+   Or one-shot (not for production gitops):
+     --set github.token=$GH_TOKEN
+
+5. Coding agents (codex / grok) are not baked into the image by default.
+   Mount binaries via codingAgent.agentsVolume.hostPath or a PVC at /opt/coding-agents.
+
+Docs: docs/deploy-docker-helm.md

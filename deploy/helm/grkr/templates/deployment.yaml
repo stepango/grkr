@@ -1,0 +1,241 @@
+{{- if not .Values.repo.name }}
+{{- fail "repo.name is required (owner/name)" }}
+{{- end }}
+{{- if and (not .Values.github.projectNumber) (not .Values.configFile.create) (not .Values.configFile.existingConfigMap) }}
+{{- fail "github.projectNumber is required (or provide configFile)" }}
+{{- end }}
+{{- if and (not .Values.github.existingSecret) (not .Values.github.token) }}
+{{- fail "github.token or github.existingSecret is required" }}
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "grkr.fullname" . }}
+  labels:
+    {{- include "grkr.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "grkr.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "grkr.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "grkr.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: grkr
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- if .Values.command }}
+          command:
+            {{- toYaml .Values.command | nindent 12 }}
+          {{- end }}
+          {{- if .Values.args }}
+          args:
+            {{- toYaml .Values.args | nindent 12 }}
+          {{- else }}
+          args: ["supervisor"]
+          {{- end }}
+          env:
+            - name: GRKR_HOME
+              value: /opt/grkr
+            - name: GRKR_GLEAM_PROJECT_ROOT
+              value: /opt/grkr
+            - name: GRKR_ROOT
+              value: /workspace
+            - name: REPO
+              value: {{ .Values.repo.name | quote }}
+            - name: MAIN_BRANCH
+              value: {{ .Values.repo.mainBranch | quote }}
+            {{- if .Values.repo.url }}
+            - name: TARGET_REPO_URL
+              value: {{ .Values.repo.url | quote }}
+            {{- end }}
+            - name: PROJECT_NUMBER
+              value: {{ .Values.github.projectNumber | quote }}
+            {{- if .Values.github.projectOwner }}
+            - name: PROJECT_OWNER
+              value: {{ .Values.github.projectOwner | quote }}
+            {{- end }}
+            {{- if .Values.github.botLogin }}
+            - name: BOT_LOGIN
+              value: {{ .Values.github.botLogin | quote }}
+            {{- end }}
+            - name: LOOP_INTERVAL_SECS
+              value: {{ .Values.config.loopIntervalSecs | quote }}
+            - name: GRKR_ISSUE_PROVIDER
+              value: {{ .Values.config.issueProvider | quote }}
+            - name: TEST_COMMAND
+              value: {{ .Values.config.testCommand | quote }}
+            - name: BUILD_COMMAND
+              value: {{ .Values.config.buildCommand | quote }}
+            - name: STATUS_FIELD_NAME
+              value: {{ .Values.config.statusFieldName | quote }}
+            - name: TODO_VALUE
+              value: {{ .Values.config.todoValue | quote }}
+            - name: IN_PROGRESS_VALUE
+              value: {{ .Values.config.inProgressValue | quote }}
+            - name: DONE_VALUE
+              value: {{ .Values.config.doneValue | quote }}
+            - name: BACKLOG_VALUE
+              value: {{ .Values.config.backlogValue | quote }}
+            - name: PRIORITY_FIELD_NAME
+              value: {{ .Values.config.priorityFieldName | quote }}
+            - name: BOT_GIT_NAME
+              value: {{ .Values.config.botGitName | quote }}
+            - name: BOT_GIT_EMAIL
+              value: {{ .Values.config.botGitEmail | quote }}
+            - name: GRKR_CODING_AGENT
+              value: {{ .Values.codingAgent.default | quote }}
+            {{- if .Values.codingAgent.decision }}
+            - name: GRKR_AGENT_DECISION
+              value: {{ .Values.codingAgent.decision | quote }}
+            {{- end }}
+            {{- if .Values.codingAgent.implement }}
+            - name: GRKR_AGENT_IMPLEMENT
+              value: {{ .Values.codingAgent.implement | quote }}
+            {{- end }}
+            {{- if .Values.codingAgent.remediate }}
+            - name: GRKR_AGENT_REMEDIATE
+              value: {{ .Values.codingAgent.remediate | quote }}
+            {{- end }}
+            {{- if .Values.linear.enabled }}
+            - name: GRKR_LINEAR_MUTATE
+              value: {{ ternary "1" "0" .Values.linear.mutate | quote }}
+            {{- end }}
+            - name: GH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "grkr.secretName" . }}
+                  key: {{ .Values.github.existingSecretKey | default "GH_TOKEN" }}
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "grkr.secretName" . }}
+                  key: {{ .Values.github.existingSecretKey | default "GH_TOKEN" }}
+            {{- if or .Values.codingAgent.xaiApiKey .Values.github.existingSecret }}
+            - name: XAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ if .Values.github.existingSecret }}{{ .Values.github.existingSecret }}{{ else }}{{ include "grkr.fullname" . }}{{ end }}
+                  key: XAI_API_KEY
+                  optional: true
+            {{- end }}
+            {{- if or .Values.linear.accessToken .Values.linear.existingSecret }}
+            - name: GRKR_LINEAR_ACCESS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.linear.existingSecret | default (include "grkr.secretName" .) }}
+                  key: {{ .Values.linear.accessTokenKey }}
+                  optional: true
+            {{- end }}
+            {{- if or .Values.linear.clientId .Values.linear.existingSecret }}
+            - name: LINEAR_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.linear.existingSecret | default (include "grkr.secretName" .) }}
+                  key: {{ .Values.linear.clientIdKey }}
+                  optional: true
+            - name: LINEAR_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.linear.existingSecret | default (include "grkr.secretName" .) }}
+                  key: {{ .Values.linear.clientSecretKey }}
+                  optional: true
+            {{- end }}
+            {{- range $k, $v := .Values.config.extraEnv }}
+            - name: {{ $k }}
+              value: {{ $v | quote }}
+            {{- end }}
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            {{- if or .Values.configFile.create .Values.configFile.existingConfigMap }}
+            - name: config-file
+              mountPath: /workspace/.grkr/config.sh
+              subPath: config.sh
+            {{- end }}
+            {{- if .Values.codingAgent.agentsVolume.enabled }}
+            - name: coding-agents
+              mountPath: /opt/coding-agents
+              readOnly: true
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            exec:
+              {{- toYaml .Values.livenessProbe.exec | nindent 14 }}
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+          {{- end }}
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            exec:
+              {{- toYaml .Values.readinessProbe.exec | nindent 14 }}
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          {{- end }}
+      volumes:
+        - name: workspace
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.persistence.existingClaim | default (printf "%s-workspace" (include "grkr.fullname" .)) }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- if or .Values.configFile.create .Values.configFile.existingConfigMap }}
+        - name: config-file
+          configMap:
+            name: {{ .Values.configFile.existingConfigMap | default (printf "%s-config" (include "grkr.fullname" .)) }}
+            items:
+              - key: {{ .Values.configFile.existingConfigMapKey | default "config.sh" }}
+                path: config.sh
+        {{- end }}
+        {{- if .Values.codingAgent.agentsVolume.enabled }}
+        - name: coding-agents
+          {{- if .Values.codingAgent.agentsVolume.existingClaim }}
+          persistentVolumeClaim:
+            claimName: {{ .Values.codingAgent.agentsVolume.existingClaim }}
+          {{- else if .Values.codingAgent.agentsVolume.hostPath }}
+          hostPath:
+            path: {{ .Values.codingAgent.agentsVolume.hostPath | quote }}
+            type: Directory
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

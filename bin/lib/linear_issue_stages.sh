@@ -1,12 +1,13 @@
 # bin/lib/linear_issue_stages.sh
 # Facade for Linear stage bodies (docs/design-linear-issue-stages-split.md).
 #
-# Stages-split slice 1–3: ensure_linear_refusal_checkpoint lives in sibling
-# linear_issue_stages_refusal.sh; ensure_linear_test_checkpoint lives in sibling
-# linear_issue_stages_test.sh; ensure_linear_publish_complete lives in sibling
-# linear_issue_stages_publish.sh (all sourced below). Remaining stage bodies still
-# defined in this file until later slices move them:
-#   - ensure_linear_checkpoint_stage + ensure_linear_implement_in_progress (→ stages_research_plan.sh)
+# Stages-split slice 1–4: ensure_linear_refusal_checkpoint lives in sibling
+# linear_issue_stages_refusal.sh; ensure_linear_checkpoint_stage +
+# ensure_linear_implement_in_progress live in sibling
+# linear_issue_stages_research_plan.sh; ensure_linear_test_checkpoint lives in
+# sibling linear_issue_stages_test.sh; ensure_linear_publish_complete lives in
+# sibling linear_issue_stages_publish.sh (all sourced below). Remaining stage
+# bodies still defined in this file until slice 5 moves them:
 #   - run_linear_decision_stage + handle_linear_decision_refuse + run_linear_implement_stage
 #     (→ stages_implement.sh; then this file becomes source-only)
 #
@@ -42,7 +43,8 @@
 #   maybe_apply_linear_mutation (from linear_mutate.sh, must be sourced first).
 #   No GitHub / gh project APIs.
 #
-# For research/plan checkpoint + implement_in_progress:
+# For research/plan checkpoint + implement_in_progress (sibling
+# linear_issue_stages_research_plan.sh):
 #   write_research_checkpoint_file, write_plan_checkpoint_file (templates),
 #   run_progress_cli (linear-comment-mutation, linear-state, linear-state-mutation),
 #   update_task_progress_stage, maybe_apply_linear_mutation (from linear_mutate.sh,
@@ -77,6 +79,17 @@ else
   return 1 2>/dev/null || exit 1
 fi
 
+# Source Linear research/plan + implement_in_progress (stages-split slice 4). Fail closed
+# if missing so tests that copy lib/ cannot silently omit the sibling. Sourced before
+# remaining implement bodies in this file (design: refusal + research_plan before implement).
+RESEARCH_PLAN_LIB_CANDIDATE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/linear_issue_stages_research_plan.sh"
+if [ -f "$RESEARCH_PLAN_LIB_CANDIDATE" ]; then
+  . "$RESEARCH_PLAN_LIB_CANDIDATE"
+else
+  echo "❌ missing Linear stages research_plan module: $RESEARCH_PLAN_LIB_CANDIDATE" >&2
+  return 1 2>/dev/null || exit 1
+fi
+
 # Source Linear test stage body (stages-split slice 2). Fail closed if missing
 # so tests that copy lib/ cannot silently omit the sibling.
 TEST_LIB_CANDIDATE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/linear_issue_stages_test.sh"
@@ -96,116 +109,6 @@ else
   echo "❌ missing Linear stages publish module: $PUBLISH_LIB_CANDIDATE" >&2
   return 1 2>/dev/null || exit 1
 fi
-
-# Write research/plan checkpoint files and plan Linear comment mutations via progress CLI.
-# MVP does not require live Linear mutation success: mutation plan is always logged.
-# Optional GRKR_LINEAR_MUTATE=1 applies live (soft-fail default). Dumps + sidecars written; default OFF.
-ensure_linear_checkpoint_stage() {
-  local stage=$1
-  local identifier=$2
-  local linear_issue_id=$3
-  local task_slug=$4
-  local task_dir=$5
-  local title=$6
-  local body=$7
-  local url=$8
-  local progress_file=$9
-  local checkpoint_file
-  local mutation_out
-  local idempotency_key
-
-  checkpoint_file="$task_dir/$stage.md"
-
-  if [ -f "$checkpoint_file" ]; then
-    echo "♻️ Reusing local $stage checkpoint for Linear $identifier."
-    update_task_progress_stage "$progress_file" "$stage" "done" ""
-    return 0
-  fi
-
-  case "$stage" in
-    research)
-      write_research_checkpoint_file "$checkpoint_file" "$identifier" "$title" "$body" "$url" "$task_slug"
-      ;;
-    plan)
-      write_plan_checkpoint_file "$checkpoint_file" "$identifier" "$title" "$task_slug"
-      ;;
-    *)
-      echo "❌ Unsupported Linear checkpoint stage: $stage"
-      return 1
-      ;;
-  esac
-
-  echo "📝 Planned Linear $stage checkpoint mutation for $identifier..."
-  mutation_out=$(run_progress_cli linear-comment-mutation \
-    "$linear_issue_id" \
-    "$(cat "$checkpoint_file")" \
-    "$stage" \
-    "$task_slug" 2>/dev/null) || mutation_out=""
-
-  if [ -n "$mutation_out" ]; then
-    idempotency_key=$(printf '%s\n' "$mutation_out" | tail -n1)
-    printf '%s\n' "$mutation_out" > "$task_dir/$stage.linear-mutation.txt"
-    maybe_apply_linear_mutation "$task_dir/$stage.linear-mutation.txt"
-    echo "🔑 $stage mutation idempotency_key=$idempotency_key (set GRKR_LINEAR_MUTATE=1 to apply)"
-  else
-    echo "⚠️ progress CLI linear-comment-mutation planning failed for $stage; local checkpoint kept."
-  fi
-
-  update_task_progress_stage "$progress_file" "$stage" "done" "${idempotency_key:-}"
-}
-
-# Plan Linear "In Progress" state mutation (dry-run) for implement stage.
-# Writes implement.linear-state-mutation.txt (when state id available) + logs.
-# Updates progress implement_or_refuse to done (parity after proceed decision).
-# GRKR_LINEAR_MUTATE=1 applies via maybe_apply (guarded).
-ensure_linear_implement_in_progress() {
-  local identifier=$1
-  local linear_issue_id=$2
-  local task_slug=$3
-  local task_dir=$4
-  local progress_file=$5
-  local state_id=${6:-}
-  local target_state
-  local mutation_out
-  local idempotency_key
-  local mutation_file
-
-  mutation_file="$task_dir/implement.linear-state-mutation.txt"
-
-  if [ -z "$identifier" ] || [ -z "$task_slug" ] || [ -z "$progress_file" ]; then
-    echo "❌ ensure_linear_implement_in_progress requires identifier, task_slug, progress_file" >&2
-    return 1
-  fi
-
-  target_state=$(run_progress_cli linear-state implementation 2>/dev/null || echo "In Progress")
-
-  echo "📝 Planning Linear implement In Progress mutation for $identifier (target=$target_state)..."
-
-  if [ -n "$state_id" ]; then
-    mutation_out=$(run_progress_cli linear-state-mutation "$linear_issue_id" "$state_id" implement 2>/dev/null) || mutation_out=""
-  else
-    mutation_out=""
-  fi
-
-  if [ -n "$mutation_out" ]; then
-    idempotency_key=$(printf '%s\n' "$mutation_out" | tail -n1)
-    printf '%s\n' "$mutation_out" > "$mutation_file"
-    maybe_apply_linear_mutation "$mutation_file"
-    echo "🔑 implement state mutation idempotency_key=$idempotency_key"
-  else
-    # Name-only record for dry-run when no concrete state id is known
-    {
-      printf 'TARGET_STATE=%s\n' "$target_state"
-      printf 'STATE_MUTATION_PLANNED=0\n'
-    } > "$mutation_file"
-    maybe_apply_linear_mutation "$mutation_file"
-    echo "🔑 implement state target=$target_state (no state id provided; set GRKR_LINEAR_MUTATE=1 when live apply lands)"
-  fi
-
-  # Mark implement_or_refuse done (decision gate already set decision=proceed)
-  update_task_progress_stage "$progress_file" "implement_or_refuse" "done" "${idempotency_key:-}"
-  echo "✅ Linear implement In Progress mutation planned for $identifier (worktree left for subsequent stages)."
-}
 
 # --- Slice 5: thin process_linear_issue orchestration (final Linear shell slice per design §8) ---
 # Bootstrap stays in linear_issue.sh (uses load/meta/progress seed kept there).

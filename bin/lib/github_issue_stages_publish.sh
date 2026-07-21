@@ -4,7 +4,8 @@
 # extract_codex_pr_body + post_completion_comment + post_github_completion_comment alias
 # extracted from github_issue.sh into this sibling module. github_issue.sh is the facade
 # that sources this file after github_issue_stages_research_plan.sh then
-# github_issue_stages_test.sh. bin/grkr still sources only github_issue.sh.
+# github_issue_stages_implement.sh then github_issue_stages_test.sh.
+# bin/grkr still sources only github_issue.sh.
 #
 # Ambient deps resolved at call time (from bin/grkr or tests sourcing github_issue.sh):
 #   stage_relevant_issue_files, git_in_issue_context, check_file_line_limit,
@@ -13,7 +14,7 @@
 #   (templates / issue_shared / implement_stage), render_github_completion_summary,
 #   REPO, MAIN_BRANCH, MAX_PR_BODY_CHARS, BRANCH_URL, PR_URL (set inside publish),
 #   gh, jq, awk.
-# finalize_github_issue_complete (still in facade until slice 4) calls
+# finalize_github_issue_complete (implement sibling, slice 4) calls
 # post_completion_comment ambiently (facade sources publish before process_issue runs).
 # Zero behavior change. Stable function names. No Linear / issue_shared dump.
 # No new flags. No checkpoint-json Gleam extract.

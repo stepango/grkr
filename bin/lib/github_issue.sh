@@ -1,124 +1,41 @@
 # bin/lib/github_issue.sh
-# GitHub-only orchestration extracted from process_issue in bin/grkr.
-# Slice 1 (landed PR #112): test checkpoint (ensure_test_checkpoint + write_test_checkpoint_file).
-# Slice 3 (landed PR #115): publish helpers (publish_issue_changes + extract_codex_pr_body + ensure_pr_body_limit).
-# Slice 4: research/plan ensure_checkpoint_stage + gh comment helpers (fetch_issue_comments_json, checkpoint_comment_id_from_json, checkpoint_comment_body_from_json).
-# Slice 5 (t_d328b158): completion surface (post_completion_comment).
-# Slice 6 (t_3619188b): thin process_issue orchestration. Bootstrap, decision stage, implement stage, decision-refuse cleanup, and finalize complete extracted here. process_issue in bin/grkr is now a clear thin sequencer of ensure_*/run_* + shared calls.
-# Slice 7 (this): PR body helpers thinned (ensure_pr_body_limit + extract_codex_pr_body) to Gleam progress/templates + cli; thin delegates via grkr-templates.sh. External signatures + behavior identical. github_issue.sh net thinner.
-# Slice 8: completion summary render (post_completion_comment body) moved to Gleam progress/templates + cli + thin delegate; post_completion_comment is now thin shell wrapper (gh comment preserved, exact body via render). External contract identical.
-# Purpose: GitHub-specific publish (stage/commit via Gleam hook/push, PR create-or-edit,
-# "Fixes #N" footer via append, label "implemented"/remove "todo", PR body from codex log or default).
-# Mirrors bin/lib/linear_issue.sh thin-delegate pattern (Linear uses its own extract_linear_* / ensure_linear_*).
-# Functions assume ambient helpers (stage_relevant_issue_files, git_in_issue_context,
-# check_file_line_limit, generate_implement_commit_message, emit_task_log_stream,
-# task_log_is_sharded, write_default_pr_body, write_compact_pr_body, append_issue_footer,
-# REPO, MAIN_BRANCH, MAX_PR_BODY_CHARS, BRANCH_URL, PR_URL globals, etc.) are already defined
-# in the sourcing shell (bin/grkr defines/sources them; bash resolves at call time).
-# Shared helpers: test-write cluster (write_test_checkpoint_with_header + build_command_list + cleanup_test_result_logs)
-# + line-limit helpers (collect_file_line_limit_violations, check_file_line_limit,
-# ensure_publishable_file_sizes) + run_codex_prompt (codex/exec + persist bridge)
-# + progress bridge (run_progress_cli + checkpoint_marker) now live in
-# bin/lib/issue_shared.sh (sourced by grkr before provider libs).
-# attach_issue_logs now lives in issue_shared.sh (Slice 5).
-# Remaining launcher-only in bin/grkr: process_issue surface (thin sequencer) + cleanup/trap.
-# GitHub remains default GRKR_ISSUE_PROVIDER. No changes to Linear paths or linear_issue.sh.
+# Facade for GitHub stage bodies (docs/design-github-issue-stages-split.md).
+#
+# Stages-split slice 1 (this): research/plan cluster extracted to
+# github_issue_stages_research_plan.sh (fetch_issue_comments_json +
+# checkpoint_comment_* + ensure_checkpoint_stage). This file sources that sibling
+# (fail-closed) and temporarily retains remaining stage bodies until later slices:
+#   - test: write_test_checkpoint_file + ensure_test_checkpoint (slice 2)
+#   - publish: publish_issue_changes + alias + ensure_pr_body_limit +
+#     extract_codex_pr_body + post_completion_comment + alias (slice 3)
+#   - implement: bootstrap_github_issue_task + run_github_decision_stage +
+#     handle_github_decision_refuse + run_github_implement_stage +
+#     finalize_github_issue_complete (slice 4 → facade source-only)
+#
+# bin/grkr still sources only this facade path. process_issue stays thin sequencer
+# in bin/grkr. Public function names stable; ambient call-time resolution unchanged.
+#
+# Historical process_issue thinning (design-github-process-issue-thinning.md) moved
+# stage bodies out of bin/grkr into this file (slices #112–#121 → tip a3d9702).
+# Gleam thins: PR body helpers #147, completion summary #152.
+# This facade begins the next LOC-hygiene pass (concern modules + thin entry),
+# mirroring linear_issue_stages.sh stages-split (complete @ cb6b1b5 / #177).
+#
+# Ambient deps resolved at call time from sourcing context (bin/grkr or direct test
+# sourcing after issue_shared + templates) — see each sibling header / remaining bodies.
+# Shared helpers stay in issue_shared.sh (frozen — no GitHub stage dump).
+# Linear paths untouched. GRKR_ISSUE_PROVIDER default GitHub. No new flags.
+# No checkpoint-json Gleam extract in this work.
 
-# GitHub comment helpers for checkpoint reuse/restore/post (research/plan/test).
-# These are gh-specific (not used by Linear path). Moved here for thinning.
-# Resolved at call time from sourcing context (checkpoint_marker, update_task_progress_stage ambient).
-fetch_issue_comments_json() {
-  local issue=$1
-  local comments_json
-
-  comments_json=$(gh issue view "$issue" --comments --json comments 2>/dev/null || true)
-  [ -n "$comments_json" ] || comments_json='{"comments":[]}'
-  printf '%s\n' "$comments_json"
-}
-
-checkpoint_comment_id_from_json() {
-  local issue_json=$1
-  local stage=$2
-  local task_slug=$3
-  local marker
-
-  marker=$(checkpoint_marker "$stage" "$task_slug")
-  printf '%s' "$issue_json" | jq -r --arg marker "$marker" '
-    ((.comments // []) | if type == "array" then . else [] end
-      | map(select((.body // "") | contains($marker)))
-      | last
-      | .id) // empty
-  '
-}
-
-checkpoint_comment_body_from_json() {
-  local issue_json=$1
-  local stage=$2
-  local task_slug=$3
-  local marker
-
-  marker=$(checkpoint_marker "$stage" "$task_slug")
-  printf '%s' "$issue_json" | jq -r --arg marker "$marker" '
-    ((.comments // []) | if type == "array" then . else [] end
-      | map(select((.body // "") | contains($marker)))
-      | last
-      | .body) // empty
-  '
-}
-
-ensure_checkpoint_stage() {
-  local stage=$1
-  local issue=$2
-  local issue_json=$3
-  local task_slug=$4
-  local task_dir=$5
-  local title=$6
-  local body=$7
-  local url=$8
-  local progress_file=$9
-  local checkpoint_file
-  local comment_id
-  local comment_body
-  local refreshed_comments_json
-
-  checkpoint_file="$task_dir/$stage.md"
-  comment_id=$(checkpoint_comment_id_from_json "$issue_json" "$stage" "$task_slug")
-
-  if [ -f "$checkpoint_file" ] && [ -n "$comment_id" ]; then
-    echo "♻️ Reusing $stage checkpoint for issue #$issue from comment $comment_id."
-    update_task_progress_stage "$progress_file" "$stage" "done" "$comment_id"
-    return 0
-  fi
-
-  if [ -n "$comment_id" ] && [ ! -f "$checkpoint_file" ]; then
-    comment_body=$(checkpoint_comment_body_from_json "$issue_json" "$stage" "$task_slug")
-    if [ -n "$comment_body" ]; then
-      printf '%s\n' "$comment_body" > "$checkpoint_file"
-      echo "♻️ Restored $stage checkpoint for issue #$issue from comment $comment_id."
-      update_task_progress_stage "$progress_file" "$stage" "done" "$comment_id"
-      return 0
-    fi
-  fi
-
-  case "$stage" in
-    research)
-      write_research_checkpoint_file "$checkpoint_file" "$issue" "$title" "$body" "$url" "$task_slug"
-      ;;
-    plan)
-      write_plan_checkpoint_file "$checkpoint_file" "$issue" "$title" "$task_slug"
-      ;;
-    *)
-      echo "❌ Unsupported checkpoint stage: $stage"
-      return 1
-      ;;
-  esac
-
-  echo "📝 Posting $stage checkpoint for issue #$issue..."
-  gh issue comment "$issue" --body-file "$checkpoint_file" >/dev/null
-  refreshed_comments_json=$(fetch_issue_comments_json "$issue")
-  comment_id=$(checkpoint_comment_id_from_json "$refreshed_comments_json" "$stage" "$task_slug")
-  update_task_progress_stage "$progress_file" "$stage" "done" "$comment_id"
-}
+# Source GitHub research/plan stage body (stages-split slice 1). Fail closed if missing
+# so tests that copy lib/ cannot silently omit the sibling.
+RESEARCH_PLAN_LIB_CANDIDATE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/github_issue_stages_research_plan.sh"
+if [ -f "$RESEARCH_PLAN_LIB_CANDIDATE" ]; then
+  . "$RESEARCH_PLAN_LIB_CANDIDATE"
+else
+  echo "❌ missing GitHub stages research_plan module: $RESEARCH_PLAN_LIB_CANDIDATE" >&2
+  return 1 2>/dev/null || exit 1
+fi
 
 write_test_checkpoint_file() {
   local checkpoint_file=$1

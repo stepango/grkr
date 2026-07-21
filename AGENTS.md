@@ -26,7 +26,7 @@ Hermes Kanban workers and coding crons must **not** implement Gleam/product code
   --cwd /Users/claw/work/grkr-v2-cron \
   --prompt-file /tmp/grkr-grok-prompt.txt \
   --mode full \
-  --model grok-build \
+  --model grok-4.5 \
   --max-turns 60 \
   --log /tmp/grkr-grok-last.log
 ```

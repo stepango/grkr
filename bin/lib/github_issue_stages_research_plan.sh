@@ -9,8 +9,8 @@
 #   checkpoint_marker (issue_shared), update_task_progress_stage,
 #   write_research_checkpoint_file, write_plan_checkpoint_file (templates),
 #   gh, jq.
-# ensure_test_checkpoint (later stages-split slice) will call the comment helpers
-# ambiently once that body moves to github_issue_stages_test.sh.
+# ensure_test_checkpoint (stages-split slice 2 in github_issue_stages_test.sh)
+# calls the comment helpers ambiently (facade sources research_plan then test).
 # Zero behavior change. Stable function names. No Linear / issue_shared dump.
 # No new flags. No checkpoint-json Gleam extract.
 

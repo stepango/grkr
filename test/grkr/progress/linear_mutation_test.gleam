@@ -3,6 +3,10 @@ import gleeunit
 import gleeunit/should
 import grkr/progress/checkpoint_stage
 import grkr/progress/linear_mutation
+import grkr/progress/linear_mutation_types.{
+  MutationFailed, MutationNeedsToken, MutationRequest, MutationStateUpdateSuccess,
+  MutationSuccess, TokenAvailable, TokenUnavailable,
+}
 
 pub fn main() {
   gleeunit.main()
@@ -103,37 +107,37 @@ pub fn check_token_status_test() {
   let status = linear_mutation.check_token_status(mock_token_getter)
 
   status
-  |> should.equal(linear_mutation.TokenAvailable)
+  |> should.equal(TokenAvailable)
 
   let empty_token_getter = fn() { Ok("") }
   let empty_status = linear_mutation.check_token_status(empty_token_getter)
 
   empty_status
-  |> should.equal(linear_mutation.TokenUnavailable)
+  |> should.equal(TokenUnavailable)
 
   let error_token_getter = fn() { Error(Nil) }
   let error_status = linear_mutation.check_token_status(error_token_getter)
 
   error_status
-  |> should.equal(linear_mutation.TokenUnavailable)
+  |> should.equal(TokenUnavailable)
 }
 
 pub fn safe_unavailable_token_result_test() {
   let result =
     linear_mutation.safe_unavailable_token_result(
-      linear_mutation.TokenAvailable,
+      TokenAvailable,
     )
 
   result
-  |> should.equal(linear_mutation.MutationNeedsToken)
+  |> should.equal(MutationNeedsToken)
 
   let unavailable_result =
     linear_mutation.safe_unavailable_token_result(
-      linear_mutation.TokenUnavailable,
+      TokenUnavailable,
     )
 
   unavailable_result
-  |> should.equal(linear_mutation.MutationFailed(
+  |> should.equal(MutationFailed(
     "Linear access token not available",
   ))
 }
@@ -153,19 +157,19 @@ pub fn is_idempotent_error_test() {
 }
 
 pub fn should_retry_mutation_test() {
-  let retry_result = linear_mutation.MutationFailed("Network timeout")
+  let retry_result = MutationFailed("Network timeout")
   let should_retry = linear_mutation.should_retry_mutation(retry_result)
 
   should_retry
   |> should.be_true()
 
-  let no_retry_result = linear_mutation.MutationFailed("Duplicate comment")
+  let no_retry_result = MutationFailed("Duplicate comment")
   let should_not_retry = linear_mutation.should_retry_mutation(no_retry_result)
 
   should_not_retry
   |> should.be_false()
 
-  let success_result = linear_mutation.MutationSuccess("comment-123")
+  let success_result = MutationSuccess("comment-123")
   let should_not_retry_success =
     linear_mutation.should_retry_mutation(success_result)
 
@@ -185,7 +189,7 @@ pub fn build_error_context_test() {
 
 pub fn format_mutation_for_logging_redacts_variables_test() {
   let request =
-    linear_mutation.MutationRequest(
+    MutationRequest(
       query: "mutation SecretMutation",
       variables_json: "{\"body\":\"token=secret-value\"}",
       idempotency_key: "grkr-checkpoint-test-issue-1",
@@ -261,54 +265,54 @@ pub fn mutation_result_from_response_test() {
   // comment success shape with id (after commentCreate)
   let comment_resp = "{\"data\":{\"commentCreate\":{\"comment\":{\"id\":\"cmt_123\"}}}}"
   case linear_mutation.mutation_result_from_response(comment_resp) {
-    linear_mutation.MutationSuccess(id) -> id |> should.equal("cmt_123")
+    MutationSuccess(id) -> id |> should.equal("cmt_123")
     _ -> should.fail()
   }
 
   // state success with issueUpdate + success true (space variants)
   let state_resp = "{\"data\":{\"issueUpdate\":{\"success\":true}}}"
   case linear_mutation.mutation_result_from_response(state_resp) {
-    linear_mutation.MutationStateUpdateSuccess -> True |> should.be_true()
+    MutationStateUpdateSuccess -> True |> should.be_true()
     _ -> should.fail()
   }
 
   let state_resp2 = "{\"data\":{\"issueUpdate\":{\"success\": true }}}"
   case linear_mutation.mutation_result_from_response(state_resp2) {
-    linear_mutation.MutationStateUpdateSuccess -> True |> should.be_true()
+    MutationStateUpdateSuccess -> True |> should.be_true()
     _ -> should.fail()
   }
 
   // error array at top -> failed
   let err_resp = "{\"errors\":[{\"message\":\"boom\"}]}"
   case linear_mutation.mutation_result_from_response(err_resp) {
-    linear_mutation.MutationFailed(_) -> True |> should.be_true()
+    MutationFailed(_) -> True |> should.be_true()
     _ -> should.fail()
   }
 
   // idempotent duplicate error -> success idempotent (even with errors array)
   let dup_err = "{\"errors\":[{\"message\":\"Comment already exists (duplicate)\"}]}"
   case linear_mutation.mutation_result_from_response(dup_err) {
-    linear_mutation.MutationSuccess(id) -> id |> should.equal("idempotent-duplicate")
+    MutationSuccess(id) -> id |> should.equal("idempotent-duplicate")
     _ -> should.fail()
   }
 
   // NEGATIVE: bare word "success"/"comment" without real shapes must NOT be success/applied
   let bogus_success = "{\"data\":null, \"note\":\"this text mentions success but no shape\"}"
   case linear_mutation.mutation_result_from_response(bogus_success) {
-    linear_mutation.MutationFailed(_) -> True |> should.be_true()
+    MutationFailed(_) -> True |> should.be_true()
     _ -> should.fail()
   }
 
   let bogus_comment = "some random text containing the word comment and success"
   case linear_mutation.mutation_result_from_response(bogus_comment) {
-    linear_mutation.MutationFailed(_) -> True |> should.be_true()
+    MutationFailed(_) -> True |> should.be_true()
     _ -> should.fail()
   }
 
   // data null is not success shapes
   let data_null = "{\"data\":null}"
   case linear_mutation.mutation_result_from_response(data_null) {
-    linear_mutation.MutationFailed(_) -> True |> should.be_true()
+    MutationFailed(_) -> True |> should.be_true()
     _ -> should.fail()
   }
 }

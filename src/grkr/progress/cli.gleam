@@ -2,8 +2,9 @@ import gleam/int
 import gleam/io
 import gleam/result
 import gleam/string
-import grkr/progress/main
 import grkr/progress/linear_mutation
+import grkr/progress/linear_mutation_types
+import grkr/progress/main
 
 pub fn main() -> Nil {
   case argv() {
@@ -164,9 +165,9 @@ fn emit_token_status() -> Nil {
     }
   })
   case status {
-    linear_mutation.TokenAvailable -> io.println("Token available")
-    linear_mutation.TokenUnavailable -> io.println("Token unavailable")
-    linear_mutation.TokenInvalid -> io.println("Token invalid")
+    linear_mutation_types.TokenAvailable -> io.println("Token available")
+    linear_mutation_types.TokenUnavailable -> io.println("Token unavailable")
+    linear_mutation_types.TokenInvalid -> io.println("Token invalid")
   }
 }
 

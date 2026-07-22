@@ -1,19 +1,24 @@
 # bin/lib/issue_shared.sh
-# Neutral shared helpers for both GitHub and Linear issue paths.
-# Slice 1: test-write cluster (build_command_list, cleanup_test_result_logs,
-# write_test_checkpoint_with_header).
-# Slice 2: line-limit + ensure_publishable_file_sizes
-#   (collect_file_line_limit_violations, check_file_line_limit,
-#   ensure_publishable_file_sizes).
-# Slice 3: run_codex_prompt (coding-agent exec + persist_task_log_output bridge).
-#   Swappable backends via GRKR_CODING_AGENT=codex|grok (default codex).
-#   Alias: run_coding_agent_prompt → run_codex_prompt (stable call-site name).
-# Slice 4: run_progress_cli + checkpoint_marker (progress CLI bridge + marker fallback).
-# Slice 5: attach_issue_logs (GitHub finalize + refusal log attachment via gh issue comment).
+# Stable facade path for neutral shared helpers (GitHub + Linear issue paths).
+# bin/grkr sources only this file (BEFORE lib/linear_issue.sh and lib/github_issue.sh).
 #
-# Sourced by bin/grkr AFTER task_progress/refusal_paths and BEFORE
-# lib/linear_issue.sh (which sources stages) and lib/github_issue.sh.
-# This ordering ensures definitions exist when provider stages call them.
+# Concern-split slice 1 (docs/design-issue-shared-concern-split.md):
+#   attach_issue_logs → issue_shared_attach.sh (sourced below; fail-closed).
+# Historical "Slice 1–5" labels from shared-helpers extract (#136–#144 /
+# design-grkr-shared-helpers-extract.md) are historical extract-into-shared order;
+# do not confuse them with concern-split slice numbers in the design above.
+#
+# Remaining bodies STILL in this facade until later concern-split slices:
+#   - test-write cluster: build_command_list, cleanup_test_result_logs,
+#     write_test_checkpoint_with_header
+#   - line-limit cluster: collect_file_line_limit_violations, check_file_line_limit,
+#     ensure_publishable_file_sizes
+#   - coding-agent bridge: _grkr_coding_*, backends, run_coding_agent_prompt,
+#     run_codex_prompt (GRKR_CODING_AGENT=codex|grok default codex)
+#   - progress: run_progress_cli + checkpoint_marker
+#
+# Future facade source order (design §4; only attach sourced this slice):
+#   coding_agent → progress → test_write → line_limit → attach
 #
 # Ambient call-time deps (resolved in grkr / grkr-issue-workflow / templates
 # at call time; bash name resolution): git_in_issue_context,
@@ -27,11 +32,16 @@
 # gleam.toml present under project root (or GRKR_GLEAM_PROJECT_ROOT override);
 # otherwise falls back to inline marker for "marker" subcommand or errors.
 # checkpoint_marker is a thin convenience over the marker path.
-#
-# attach_issue_logs (Slice 5): uses CURRENT_ISSUE and LOGFILE (ambient globals at
-# call time from bin/grkr and callers in github_issue.sh / refusal_paths.sh).
-# Posts a collapsed <details> execution log comment via `gh issue comment`.
-# Linear has no callers (no gh issue comments); safe to share here. gh CLI required.
+
+# Source attach sibling (concern-split slice 1). Fail closed if missing so tests
+# that copy lib/ cannot silently omit the sibling.
+ATTACH_LIB_CANDIDATE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/issue_shared_attach.sh"
+if [ -f "$ATTACH_LIB_CANDIDATE" ]; then
+  . "$ATTACH_LIB_CANDIDATE"
+else
+  echo "❌ missing issue_shared attach module: $ATTACH_LIB_CANDIDATE" >&2
+  return 1 2>/dev/null || exit 1
+fi
 
 build_command_list() {
   local command_count=0
@@ -369,19 +379,4 @@ checkpoint_marker() {
   local task_slug=$2
 
   run_progress_cli marker "$stage" "$task_slug"
-}
-
-attach_issue_logs() {
-  local issue=${CURRENT_ISSUE:-}
-  local comment_file
-  [ -n "$issue" ] || return 0
-  [ -f "$LOGFILE" ] || return 0
-  comment_file=$(mktemp "${TMPDIR:-/tmp}/grkr-issue-log.XXXXXX") || return 0
-  {
-    printf '<details>\n<summary>Execution log</summary>\n\n```text\n'
-    cat "$LOGFILE"
-    printf '\n```\n</details>\n'
-  } > "$comment_file"
-  gh issue comment "$issue" --body-file "$comment_file" >/dev/null 2>&1 || true
-  rm -f "$comment_file"
 }

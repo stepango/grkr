@@ -2,8 +2,9 @@
 # Stable facade path for neutral shared helpers (GitHub + Linear issue paths).
 # bin/grkr sources only this file (BEFORE lib/linear_issue.sh and lib/github_issue.sh).
 #
-# Concern-split slice 1 (docs/design-issue-shared-concern-split.md):
+# Concern-split slice 1+2 (docs/design-issue-shared-concern-split.md):
 #   attach_issue_logs → issue_shared_attach.sh (sourced below; fail-closed).
+#   run_progress_cli + checkpoint_marker → issue_shared_progress.sh (sourced below; fail-closed).
 # Historical "Slice 1–5" labels from shared-helpers extract (#136–#144 /
 # design-grkr-shared-helpers-extract.md) are historical extract-into-shared order;
 # do not confuse them with concern-split slice numbers in the design above.
@@ -15,9 +16,8 @@
 #     ensure_publishable_file_sizes
 #   - coding-agent bridge: _grkr_coding_*, backends, run_coding_agent_prompt,
 #     run_codex_prompt (GRKR_CODING_AGENT=codex|grok default codex)
-#   - progress: run_progress_cli + checkpoint_marker
 #
-# Future facade source order (design §4; only attach sourced this slice):
+# Future facade source order (design §4; progress + attach already extracted):
 #   coding_agent → progress → test_write → line_limit → attach
 #
 # Ambient call-time deps (resolved in grkr / grkr-issue-workflow / templates
@@ -26,12 +26,8 @@
 # write_line_limit_fix_prompt (grkr-templates.sh), MAX_FILE_LINES,
 # CURRENT_ISSUE_WORKTREE. No re-exports; exact prior behavior.
 #
-# SCRIPT_DIR and optional GRKR_GLEAM_PROJECT_ROOT are ambient from the
-# caller (bin/grkr sets SCRIPT_DIR before sourcing issue_shared); bash resolves
-# at call time. run_progress_cli prefers gleam run -m grkr/progress/cli when
-# gleam.toml present under project root (or GRKR_GLEAM_PROJECT_ROOT override);
-# otherwise falls back to inline marker for "marker" subcommand or errors.
-# checkpoint_marker is a thin convenience over the marker path.
+# Progress CLI ambient deps (SCRIPT_DIR / optional GRKR_GLEAM_PROJECT_ROOT) live
+# in issue_shared_progress.sh header; remaining clusters keep call-time deps above.
 
 # Source attach sibling (concern-split slice 1). Fail closed if missing so tests
 # that copy lib/ cannot silently omit the sibling.
@@ -40,6 +36,15 @@ if [ -f "$ATTACH_LIB_CANDIDATE" ]; then
   . "$ATTACH_LIB_CANDIDATE"
 else
   echo "❌ missing issue_shared attach module: $ATTACH_LIB_CANDIDATE" >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+# Source progress sibling (concern-split slice 2). Fail closed if missing.
+PROGRESS_LIB_CANDIDATE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/issue_shared_progress.sh"
+if [ -f "$PROGRESS_LIB_CANDIDATE" ]; then
+  . "$PROGRESS_LIB_CANDIDATE"
+else
+  echo "❌ missing issue_shared progress module: $PROGRESS_LIB_CANDIDATE" >&2
   return 1 2>/dev/null || exit 1
 fi
 
@@ -352,31 +357,4 @@ run_codex_prompt() {
   persist_task_log_output "$run_output_file" "$output_file" "$phase_label" "$mode"
   echo "✅ coding agent ($agent/$step) finished $phase_label."
   return "$rc"
-}
-
-run_progress_cli() {
-  local project_root
-  project_root=${GRKR_GLEAM_PROJECT_ROOT:-$(dirname "$SCRIPT_DIR")}
-
-  if [ -f "$project_root/gleam.toml" ]; then
-    (cd "$project_root" && gleam run -m grkr/progress/cli -- "$@")
-    return
-  fi
-
-  case "${1:-}" in
-    marker)
-      printf '<!-- grkr:checkpoint stage=%s task=%s version=1 -->' "$2" "$3"
-      ;;
-    *)
-      printf 'Missing Gleam project root for grkr progress CLI: %s\n' "$project_root" >&2
-      return 1
-      ;;
-  esac
-}
-
-checkpoint_marker() {
-  local stage=$1
-  local task_slug=$2
-
-  run_progress_cli marker "$stage" "$task_slug"
 }

@@ -2,9 +2,11 @@
 # Stable facade path for neutral shared helpers (GitHub + Linear issue paths).
 # bin/grkr sources only this file (BEFORE lib/linear_issue.sh and lib/github_issue.sh).
 #
-# Concern-split slice 1+2 (docs/design-issue-shared-concern-split.md):
+# Concern-split slices 1–3 (docs/design-issue-shared-concern-split.md):
 #   attach_issue_logs → issue_shared_attach.sh (sourced below; fail-closed).
 #   run_progress_cli + checkpoint_marker → issue_shared_progress.sh (sourced below; fail-closed).
+#   collect_file_line_limit_violations + check_file_line_limit +
+#     ensure_publishable_file_sizes → issue_shared_line_limit.sh (sourced below; fail-closed).
 # Historical "Slice 1–5" labels from shared-helpers extract (#136–#144 /
 # design-grkr-shared-helpers-extract.md) are historical extract-into-shared order;
 # do not confuse them with concern-split slice numbers in the design above.
@@ -12,12 +14,12 @@
 # Remaining bodies STILL in this facade until later concern-split slices:
 #   - test-write cluster: build_command_list, cleanup_test_result_logs,
 #     write_test_checkpoint_with_header
-#   - line-limit cluster: collect_file_line_limit_violations, check_file_line_limit,
-#     ensure_publishable_file_sizes
 #   - coding-agent bridge: _grkr_coding_*, backends, run_coding_agent_prompt,
 #     run_codex_prompt (GRKR_CODING_AGENT=codex|grok default codex)
 #
-# Future facade source order (design §4; progress + attach already extracted):
+# Current facade source order (slices 1–3 landed; coding_agent still in-file):
+#   attach → progress → line_limit
+# Future full order (design §4):
 #   coding_agent → progress → test_write → line_limit → attach
 #
 # Ambient call-time deps (resolved in grkr / grkr-issue-workflow / templates
@@ -27,7 +29,8 @@
 # CURRENT_ISSUE_WORKTREE. No re-exports; exact prior behavior.
 #
 # Progress CLI ambient deps (SCRIPT_DIR / optional GRKR_GLEAM_PROJECT_ROOT) live
-# in issue_shared_progress.sh header; remaining clusters keep call-time deps above.
+# in issue_shared_progress.sh header; line-limit ambient deps live in
+# issue_shared_line_limit.sh header; remaining clusters keep call-time deps above.
 
 # Source attach sibling (concern-split slice 1). Fail closed if missing so tests
 # that copy lib/ cannot silently omit the sibling.
@@ -45,6 +48,17 @@ if [ -f "$PROGRESS_LIB_CANDIDATE" ]; then
   . "$PROGRESS_LIB_CANDIDATE"
 else
   echo "❌ missing issue_shared progress module: $PROGRESS_LIB_CANDIDATE" >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+# Source line_limit sibling (concern-split slice 3). Fail closed if missing.
+# coding_agent still in-file so ambient run_codex_prompt works at call time for
+# ensure_publishable_file_sizes (slice 5 will extract coding_agent).
+LINE_LIMIT_LIB_CANDIDATE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/issue_shared_line_limit.sh"
+if [ -f "$LINE_LIMIT_LIB_CANDIDATE" ]; then
+  . "$LINE_LIMIT_LIB_CANDIDATE"
+else
+  echo "❌ missing issue_shared line_limit module: $LINE_LIMIT_LIB_CANDIDATE" >&2
   return 1 2>/dev/null || exit 1
 fi
 
@@ -143,65 +157,6 @@ write_test_checkpoint_with_header() {
     printf '### Recommendation\n\n'
     printf '%s\n' "$recommendation"
   } > "$checkpoint_file"
-}
-
-collect_file_line_limit_violations() {
-  local file
-  local line_count
-
-  while IFS= read -r -d '' file; do
-    [ -n "$file" ] || continue
-    line_count=$(git_in_issue_context show ":$file" | wc -l | tr -d '[:space:]')
-    if [ "$line_count" -gt "$MAX_FILE_LINES" ]; then
-      printf '%s\t%s\n' "$file" "$line_count"
-    fi
-  done < <(git_in_issue_context diff --cached --name-only --diff-filter=ACMR -z)
-}
-
-check_file_line_limit() {
-  local file
-  local line_count
-  local violations=0
-
-  while IFS="$(printf '\t')" read -r file line_count; do
-    [ -n "$file" ] || continue
-    echo "❌ $file has $line_count lines. Files must be $MAX_FILE_LINES lines or fewer."
-    violations=1
-  done < <(collect_file_line_limit_violations)
-
-  return $violations
-}
-
-ensure_publishable_file_sizes() {
-  local issue=$1
-  local title=$2
-  local task_slug=$3
-  local prompt_file=$4
-  local codex_output_file=$5
-  local violations
-
-  stage_relevant_issue_files
-  if git_in_issue_context diff --cached --quiet; then
-    return 0
-  fi
-
-  violations=$(collect_file_line_limit_violations)
-  if [ -z "$violations" ]; then
-    return 0
-  fi
-
-  check_file_line_limit
-  echo "🔧 Staged files exceed the $MAX_FILE_LINES-line limit. Asking coding agent to refactor before publish."
-  write_line_limit_fix_prompt "$prompt_file" "$issue" "$title" "$task_slug" "$violations"
-  run_codex_prompt "$prompt_file" "$codex_output_file" "remediate file line-limit violations" append "${CURRENT_ISSUE_WORKTREE:-$(pwd)}"
-
-  stage_relevant_issue_files
-  if check_file_line_limit; then
-    return 0
-  fi
-
-  echo "❌ Commit aborted due to file size limit."
-  return 1
 }
 
 # Resolve selected coding agent for a workflow step.

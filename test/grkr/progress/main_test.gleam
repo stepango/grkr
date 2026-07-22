@@ -3,8 +3,8 @@ import gleam/option
 import gleam/string
 import gleeunit/should
 import grkr/progress/checkpoint_stage
+import grkr/progress/linear_mutation_types
 import grkr/progress/main as progress
-import grkr/progress/linear_mutation
 
 pub fn main() {
   gleeunit.main()
@@ -126,7 +126,7 @@ pub fn check_linear_token_availability_test() {
   let result = progress.check_linear_token_availability(mock_getter)
 
   result
-  |> should.equal(linear_mutation.TokenAvailable)
+  |> should.equal(linear_mutation_types.TokenAvailable)
 }
 
 pub fn explain_unavailable_token_test() {

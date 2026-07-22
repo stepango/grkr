@@ -2,23 +2,23 @@
 # Stable facade path for neutral shared helpers (GitHub + Linear issue paths).
 # bin/grkr sources only this file (BEFORE lib/linear_issue.sh and lib/github_issue.sh).
 #
-# Concern-split slices 1–3 (docs/design-issue-shared-concern-split.md):
+# Concern-split slices 1–4 (docs/design-issue-shared-concern-split.md):
 #   attach_issue_logs → issue_shared_attach.sh (sourced below; fail-closed).
 #   run_progress_cli + checkpoint_marker → issue_shared_progress.sh (sourced below; fail-closed).
 #   collect_file_line_limit_violations + check_file_line_limit +
 #     ensure_publishable_file_sizes → issue_shared_line_limit.sh (sourced below; fail-closed).
+#   build_command_list + cleanup_test_result_logs +
+#     write_test_checkpoint_with_header → issue_shared_test_write.sh (sourced below; fail-closed).
 # Historical "Slice 1–5" labels from shared-helpers extract (#136–#144 /
 # design-grkr-shared-helpers-extract.md) are historical extract-into-shared order;
 # do not confuse them with concern-split slice numbers in the design above.
 #
 # Remaining bodies STILL in this facade until later concern-split slices:
-#   - test-write cluster: build_command_list, cleanup_test_result_logs,
-#     write_test_checkpoint_with_header
 #   - coding-agent bridge: _grkr_coding_*, backends, run_coding_agent_prompt,
 #     run_codex_prompt (GRKR_CODING_AGENT=codex|grok default codex)
 #
-# Current facade source order (slices 1–3 landed; coding_agent still in-file):
-#   attach → progress → line_limit
+# Current facade source order (slices 1–4 landed; coding_agent still in-file):
+#   attach → progress → line_limit → test_write
 # Future full order (design §4):
 #   coding_agent → progress → test_write → line_limit → attach
 #
@@ -30,7 +30,8 @@
 #
 # Progress CLI ambient deps (SCRIPT_DIR / optional GRKR_GLEAM_PROJECT_ROOT) live
 # in issue_shared_progress.sh header; line-limit ambient deps live in
-# issue_shared_line_limit.sh header; remaining clusters keep call-time deps above.
+# issue_shared_line_limit.sh header; test-write ambient deps (checkpoint_marker)
+# live in issue_shared_test_write.sh header; coding-agent keeps call-time deps above.
 
 # Source attach sibling (concern-split slice 1). Fail closed if missing so tests
 # that copy lib/ cannot silently omit the sibling.
@@ -62,102 +63,15 @@ else
   return 1 2>/dev/null || exit 1
 fi
 
-build_command_list() {
-  local command_count=0
-
-  if [ -n "${BUILD_COMMAND:-}" ]; then
-    printf '%s\n' "$BUILD_COMMAND"
-    command_count=$((command_count + 1))
-  fi
-
-  if [ -n "${TEST_COMMAND:-}" ]; then
-    printf '%s\n' "$TEST_COMMAND"
-    command_count=$((command_count + 1))
-  fi
-
-  if [ "$command_count" -eq 0 ]; then
-    printf '%s\n' "npm test"
-  fi
-}
-
-cleanup_test_result_logs() {
-  local results_file=$1
-  local log_file
-
-  [ -f "$results_file" ] || return 0
-  while IFS="$(printf '\t')" read -r _ _ log_file; do
-    [ -n "$log_file" ] || continue
-    rm -f "$log_file"
-  done < "$results_file"
-}
-
-# Shared body writer for test checkpoint (thin reuse for GitHub + Linear).
-# GitHub callers use write_test_checkpoint_file (preserves "Issue #N: title" + gh behavior).
-# Linear calls this directly with "Linear issue ID: title" (no # on identifier).
-# All sections, marker, excerpts, risks, recommendation identical.
-# Extracted per design-linear-test-stage.md to avoid duplication while keeping GitHub ensure_test_checkpoint 100% unchanged.
-write_test_checkpoint_with_header() {
-  local checkpoint_file=$1
-  local header_line=$2
-  local task_slug=$3
-  local commands_file=$4
-  local results_file=$5
-  local recommendation=$6
-  local overall_result=$7
-  local total_commands=$8
-  local passed_commands=$9
-  local failed_commands=${10}
-
-  {
-    printf '%s\n\n' "$(checkpoint_marker test "$task_slug")"
-    printf '## Test checkpoint\n\n'
-    printf '%s\n\n' "$header_line"
-
-    printf '### Commands run\n\n'
-    while IFS= read -r command; do
-      [ -n "$command" ] || continue
-      printf -- '- `%s`\n' "$command"
-    done < "$commands_file"
-    printf '\n'
-
-    printf '### Pass/fail summary\n\n'
-    printf -- '- Overall result: %s\n' "$overall_result"
-    printf -- '- Commands passed: %s/%s\n' "$passed_commands" "$total_commands"
-    if [ "$failed_commands" -gt 0 ]; then
-      printf -- '- Commands failed: %s\n' "$failed_commands"
-    fi
-    while IFS="$(printf '\t')" read -r status command _; do
-      [ -n "$command" ] || continue
-      printf -- '- `%s`: %s\n' "$command" "$status"
-    done < "$results_file"
-    printf '\n'
-
-    printf '### Output excerpts\n\n'
-    while IFS="$(printf '\t')" read -r status command log_file; do
-      [ -n "$command" ] || continue
-      printf '#### `%s`\n\n' "$command"
-      printf '```text\n'
-      if [ -s "$log_file" ]; then
-        sed -n '1,20p' "$log_file"
-        if [ "$(wc -l < "$log_file" | tr -d '[:space:]')" -gt 20 ]; then
-          printf '...\n'
-        fi
-      else
-        printf '(no output)\n'
-      fi
-      printf '```\n\n'
-    done < "$results_file"
-
-    printf '### Remaining risks\n\n'
-    if [ "$failed_commands" -gt 0 ]; then
-      printf -- '- At least one configured verification command failed; inspect the command output above before merging.\n'
-    fi
-    printf -- '- The checkpoint covers only the configured local verification commands; GitHub-side checks and broader manual validation may still be pending.\n\n'
-
-    printf '### Recommendation\n\n'
-    printf '%s\n' "$recommendation"
-  } > "$checkpoint_file"
-}
+# Source test_write sibling (concern-split slice 4). Fail closed if missing.
+# progress is sourced above so checkpoint_marker resolves at call time.
+TEST_WRITE_LIB_CANDIDATE="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)/issue_shared_test_write.sh"
+if [ -f "$TEST_WRITE_LIB_CANDIDATE" ]; then
+  . "$TEST_WRITE_LIB_CANDIDATE"
+else
+  echo "❌ missing issue_shared test_write module: $TEST_WRITE_LIB_CANDIDATE" >&2
+  return 1 2>/dev/null || exit 1
+fi
 
 # Resolve selected coding agent for a workflow step.
 # Precedence: step override → GRKR_CODING_AGENT / CODING_AGENT → codex.

@@ -186,7 +186,7 @@ fn classify_grok(
     b -> b
   }
   let model = case string.trim(get_env("GROK_MODEL")) {
-    "" -> "grok-build"
+    "" -> "grok-4.5"
     m -> m
   }
   let max_turns = case string.trim(get_env("GROK_MAX_TURNS")) {

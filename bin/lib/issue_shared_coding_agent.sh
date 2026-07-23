@@ -101,7 +101,7 @@ _grkr_run_grok_backend() {
   "$bin" \
     --prompt-file "$prompt_file" \
     --cwd "$workdir" \
-    -m "${GROK_MODEL:-grok-build}" \
+    -m "${GROK_MODEL:-grok-4.5}" \
     --yolo \
     --permission-mode bypassPermissions \
     --max-turns "${GROK_MAX_TURNS:-60}" \

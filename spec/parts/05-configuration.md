@@ -49,12 +49,12 @@ GRKR_CODING_AGENT="codex"   # or "grok"
 # GRKR_AGENT_IMPLEMENT="codex"
 # GRKR_AGENT_REMEDIATE="grok"
 # GRKR_AGENT_COMMENT="codex"  # Gleam comment-classify only
-# GRKR_AGENT_RESOLVE="grok"   # reserved for resolve_pr (slice 2)
+# GRKR_AGENT_RESOLVE="grok"   # Gleam resolve_pr ConflictResolve
 CODEX_BIN="codex"
 CODEX_MODEL="gpt-5-codex"
 CODEX_ARGS="-c model=$CODEX_MODEL"
 # GROK_BIN=""                 # default: grok on PATH or ~/.grok/bin/grok
-# GROK_MODEL="grok-build"
+# GROK_MODEL="grok-4.5"       # default; pin GROK_MODEL=grok-build if needed
 # GROK_MAX_TURNS="60"
 # GROK_ARGS=""                # extra headless flags, e.g. --check
 

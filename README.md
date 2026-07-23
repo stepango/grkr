@@ -45,7 +45,7 @@ GRKR_AGENT_REMEDIATE=grok
 
 # Backend knobs
 CODEX_ARGS="-c model=$CODEX_MODEL"
-GROK_MODEL=grok-build
+GROK_MODEL=grok-4.5          # default; pin GROK_MODEL=grok-build if needed
 GROK_MAX_TURNS=60
 ```
 
@@ -56,7 +56,7 @@ scripts/coding-agent-eval-matrix.sh
 # report: docs/eval-results/coding-agent-matrix-latest.md
 ```
 
-Put these in `.grkr/config.sh` or the environment. Doctor validates only the selected agent. Design: [`docs/design-swappable-coding-agent.md`](docs/design-swappable-coding-agent.md). Polish follow-ups (doctor COMMENT/RESOLVE template + optional `GROK_MODEL`→`grok-4.5`; artifact rename **NO-GO**; third backend **DEFER**): [`docs/design-coding-agent-polish.md`](docs/design-coding-agent-polish.md).
+Put these in `.grkr/config.sh` or the environment. Doctor validates only the selected agent. Design: [`docs/design-swappable-coding-agent.md`](docs/design-swappable-coding-agent.md). Polish (doctor COMMENT/RESOLVE template + `GROK_MODEL` default `grok-4.5`; artifact rename **NO-GO**; third backend **DEFER**): [`docs/design-coding-agent-polish.md`](docs/design-coding-agent-polish.md).
 
 
 ```bash

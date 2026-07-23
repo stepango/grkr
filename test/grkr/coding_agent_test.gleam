@@ -294,6 +294,38 @@ pub fn classify_grok_argv_test() {
   ])
 }
 
+pub fn classify_grok_default_model_test() {
+  // Empty GROK_MODEL → product default grok-4.5
+  let inv =
+    coding_agent.classify_invocation(
+      Grok,
+      "ignored-prompt-on-stdin",
+      "/work/tree",
+      env_from([#("GROK_BIN", "/opt/grok")]),
+      False,
+      Some("/tmp/grkr-agent-prompt.xyz"),
+    )
+  inv.bin |> should.equal("/opt/grok")
+  inv.stdin |> should.equal(None)
+  inv.args
+  |> should.equal([
+    "--prompt-file",
+    "/tmp/grkr-agent-prompt.xyz",
+    "--cwd",
+    "/work/tree",
+    "-m",
+    "grok-4.5",
+    "--yolo",
+    "--permission-mode",
+    "bypassPermissions",
+    "--max-turns",
+    "60",
+    "--output-format",
+    "plain",
+    "--no-memory",
+  ])
+}
+
 pub fn classify_grok_with_timeout_and_args_test() {
   let inv =
     coding_agent.classify_invocation(
@@ -311,6 +343,7 @@ pub fn classify_grok_with_timeout_and_args_test() {
   list.contains(inv.args, "120") |> should.equal(True)
   list.contains(inv.args, "grok") |> should.equal(True)
   list.contains(inv.args, "--prompt-file") |> should.equal(True)
+  list.contains(inv.args, "grok-4.5") |> should.equal(True)
   list.contains(inv.args, "--check") |> should.equal(True)
   inv.stdin |> should.equal(None)
 }

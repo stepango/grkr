@@ -49,7 +49,8 @@ ${GROK_BIN:-grok|~/.grok/bin/grok} \
 
 1. **Gleam direct exec still hardcodes `codex`**:
    - `src/grkr/resolve_pr/codex.gleam` (PR conflict resolve)
-   - `src/grkr/workflow/handle_comment.gleam` + `supervisor/comment_handler.gleam` (comment classify)
+   - `src/grkr/workflow/handle_comment_codex.gleam` + `supervisor/comment_handler_codex.gleam` (comment classify)
+   - Design: [`docs/design-gleam-coding-agent-swap.md`](design-gleam-coding-agent-swap.md) (**GO**; kanban t_2c485c25). Slice 1 = shared helper + both comment twins; slice 2 = resolve_pr.
 2. Optional rename of artifact dir `codex/implementation.log.parts/` → `agent/` (keep path stable or dual-write).
 3. Optional third backend (`claude` / custom argv template via `GRKR_AGENT_CMD`).
 

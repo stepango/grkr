@@ -1,5 +1,5 @@
 //// Shared coding-agent selection + classify/resolve argv assembly.
-//// Slice 1: comment-classify callers; Resolve mode forward-compat for slice 2.
+//// Slice 1: comment-classify; slice 2: resolve_pr ConflictResolve.
 //// Env/argv parity: bin/lib/issue_shared_coding_agent.sh + docs/design-gleam-coding-agent-swap.md
 
 import gleam/int
@@ -253,7 +253,6 @@ pub fn run(
       case mode {
         Classify -> run_classify(agent, prompt, workdir, get_env, exec, fs)
         ConflictResolve ->
-          // Slice 2 wires resolve_pr; keep shape available.
           run_conflict_resolve(agent, prompt, workdir, get_env, exec, fs)
       }
   }
@@ -319,7 +318,7 @@ fn run_conflict_resolve(
   exec: ExecFn,
   fs: FsDeps,
 ) -> ExecOutcome {
-  // Forward-compat for slice 2 (resolve_pr). Preserve today's Codex shape.
+  // resolve_pr: preserve Codex exec --full-auto + prompt-as-argv + empty stdin.
   case agent {
     Codex -> {
       let bin = case string.trim(get_env("CODEX_BIN")) {

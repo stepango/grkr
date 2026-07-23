@@ -15,7 +15,7 @@ import grkr/resolve_pr/types
 
 pub fn resolve_with_codex(
   pr: types.PullRequest,
-  _worktree_path: String,
+  worktree_path: String,
   strategy: types.ResolutionStrategy,
 ) -> Result(types.ResolutionResult, String) {
   case git.get_conflicted_files() {
@@ -35,7 +35,7 @@ pub fn resolve_with_codex(
           )
         })
 
-      case codex.resolve_conflicts(conflicts) {
+      case codex.resolve_conflicts(conflicts, worktree_path) {
         Ok(resolutions) -> {
           case
             validate_and_apply_resolutions(
@@ -101,7 +101,7 @@ pub fn resolve_with_codex(
         }
         Error(err) -> {
           let _result = git.abort_merge_or_rebase()
-          Error("Codex resolution failed: " <> err)
+          Error("Coding agent resolution failed: " <> err)
         }
       }
     }

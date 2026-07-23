@@ -1,5 +1,5 @@
-//// Unit tests for grkr/coding_agent: agent_name precedence + classify argv
-//// via injected env/exec (no real coding-agent binary).
+//// Unit tests for grkr/coding_agent: agent_name precedence + classify/resolve
+//// argv via injected env/exec (no real coding-agent binary).
 
 import gleam/dict
 import gleam/list
@@ -10,7 +10,8 @@ import gleeunit
 import gleeunit/should
 
 import grkr/coding_agent.{
-  Classify, Codex, Comment, ExecFailed, ExecOk, Grok, Invocation, Resolve,
+  Classify, Codex, Comment, ConflictResolve, ExecFailed, ExecOk, Grok,
+  Invocation, Resolve,
 }
 
 pub fn main() {
@@ -413,4 +414,161 @@ pub fn classify_output_maps_failure_test() {
   string.contains(out, "invocation failed or timed out")
   |> should.equal(True)
   string.contains(out, "CLASS: refuse") |> should.equal(True)
+}
+
+// --- ConflictResolve (slice 2 resolve_pr path) ---
+
+pub fn run_codex_conflict_resolve_default_argv_test() {
+  cap_reset()
+  let prompt = "resolve-this-conflict-prompt"
+  let outcome =
+    coding_agent.run(
+      Resolve,
+      ConflictResolve,
+      prompt,
+      "/wt-resolve",
+      env_from([]),
+      fake_exec_no_timeout,
+      fake_fs(),
+    )
+  case outcome {
+    ExecOk(s) -> s |> should.equal("CODEX-OK")
+    _ -> should.fail()
+  }
+  let calls = cap_calls()
+  list.length(calls) |> should.equal(1)
+  let assert [#(bin, args, stdin)] = calls
+  bin |> should.equal("codex")
+  // Codex resolve: exec --full-auto + prompt-as-argv + empty stdin (no timeout/sandbox/--cd)
+  list.length(args) |> should.equal(3)
+  list.take(args, 2) |> should.equal(["exec", "--full-auto"])
+  case list.last(args) {
+    Ok(last) -> last |> should.equal(prompt)
+    Error(_) -> should.fail()
+  }
+  list.any(args, fn(a) { a == "--sandbox" }) |> should.equal(False)
+  list.any(args, fn(a) { a == "workspace-write" }) |> should.equal(False)
+  list.any(args, fn(a) { a == "120" }) |> should.equal(False)
+  stdin |> should.equal("")
+  // no prompt file writes on Codex path
+  list.length(cap_writes()) |> should.equal(0)
+}
+
+pub fn run_codex_conflict_resolve_bin_and_args_test() {
+  cap_reset()
+  let prompt = "p-body"
+  let outcome =
+    coding_agent.run(
+      Resolve,
+      ConflictResolve,
+      prompt,
+      "/wt",
+      env_from([
+        #("CODEX_BIN", "my-codex"),
+        #("CODEX_ARGS", "--foo bar"),
+        #("CODEX_EXTRA_ARGS", "--skip-git-repo-check"),
+      ]),
+      fake_exec_no_timeout,
+      fake_fs(),
+    )
+  case outcome {
+    ExecOk(_) -> Nil
+    _ -> should.fail()
+  }
+  let assert [#(bin, args, stdin)] = cap_calls()
+  bin |> should.equal("my-codex")
+  args
+  |> should.equal([
+    "exec",
+    "--full-auto",
+    "--foo",
+    "bar",
+    "--skip-git-repo-check",
+    prompt,
+  ])
+  stdin |> should.equal("")
+}
+
+pub fn run_grok_conflict_resolve_prompt_file_test() {
+  cap_reset()
+  let prompt = "conflict-prompt-text"
+  let outcome =
+    coding_agent.run(
+      Resolve,
+      ConflictResolve,
+      prompt,
+      "/work/resolve-wt",
+      env_from([
+        #("GRKR_AGENT_RESOLVE", "grok"),
+        #("GROK_BIN", "grok"),
+      ]),
+      fake_exec_no_timeout,
+      fake_fs(),
+    )
+  case outcome {
+    ExecOk(s) -> s |> should.equal("GROK-OK")
+    _ -> should.fail()
+  }
+  let writes = cap_writes()
+  list.length(writes) |> should.equal(1)
+  let assert [#(path, body)] = writes
+  body |> should.equal(prompt)
+  string.contains(path, "grkr-agent-prompt.") |> should.equal(True)
+  list.contains(cap_unlinks(), path) |> should.equal(True)
+
+  let calls = cap_calls()
+  list.length(calls) |> should.equal(1)
+  let assert [#(bin, args, stdin)] = calls
+  bin |> should.equal("grok")
+  list.contains(args, "--prompt-file") |> should.equal(True)
+  list.contains(args, path) |> should.equal(True)
+  list.contains(args, "--cwd") |> should.equal(True)
+  list.contains(args, "/work/resolve-wt") |> should.equal(True)
+  // no timeout wrapper on ConflictResolve Grok path
+  list.contains(args, "120") |> should.equal(False)
+  stdin |> should.equal("")
+}
+
+pub fn run_conflict_resolve_honors_grkr_coding_agent_resolve_test() {
+  cap_reset()
+  let outcome =
+    coding_agent.run(
+      Resolve,
+      ConflictResolve,
+      "p",
+      "/w",
+      env_from([
+        #("GRKR_CODING_AGENT", "codex"),
+        #("GRKR_CODING_AGENT_RESOLVE", "grok"),
+        #("GROK_BIN", "grok"),
+      ]),
+      fake_exec_no_timeout,
+      fake_fs(),
+    )
+  case outcome {
+    ExecOk(s) -> s |> should.equal("GROK-OK")
+    _ -> should.fail()
+  }
+  let assert [#(bin, _, _)] = cap_calls()
+  bin |> should.equal("grok")
+}
+
+pub fn run_conflict_resolve_unknown_agent_fails_test() {
+  cap_reset()
+  let outcome =
+    coding_agent.run(
+      Resolve,
+      ConflictResolve,
+      "p",
+      "/w",
+      env_from([#("GRKR_AGENT_RESOLVE", "claude")]),
+      fake_exec_no_timeout,
+      fake_fs(),
+    )
+  case outcome {
+    ExecFailed(2, _, err) ->
+      string.contains(err, "Unknown coding agent") |> should.equal(True)
+    _ -> should.fail()
+  }
+  list.length(cap_calls()) |> should.equal(0)
 }

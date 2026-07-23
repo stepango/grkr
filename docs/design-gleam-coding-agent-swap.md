@@ -333,8 +333,8 @@ Smoke tests today grep shell issue-path logs, not these Gleam strings — low bl
 | **0 (this card)** | `docs/design-gleam-coding-agent-swap.md` + parent follow-up one-liner | Design complete vs acceptance; PR open; no product code | none |
 | **1 (one implement card)** | Add `src/grkr/coding_agent.gleam` (+ minimal ffi if needed); wire **both** `handle_comment_codex.gleam` and `comment_handler_codex.gleam`; thread workdir; Grok temp prompt file; env matrix for step `comment` | See bullets below | low |
 | **2** | Wire `resolve_pr/codex.gleam`; temp prompt for Grok; step `resolve`; generalize error strings; unit tests for `agent_name` + argv shape (mock exec) | See bullets below | low–med |
-| **3 (optional docs/config)** | spec/05 + config template comments for `GRKR_AGENT_COMMENT` / `GRKR_AGENT_RESOLVE`; parent design checkbox; README one-liner if user-facing | docs accuracy | none |
-| **4 (optional)** | Align `GROK_MODEL` default shell+Gleam to `grok-4.5` together | explicit separate card | policy |
+| **3 (optional docs/config)** | spec/05 + config template comments for `GRKR_AGENT_COMMENT` / `GRKR_AGENT_RESOLVE`; parent design checkbox; README one-liner if user-facing | **GO** as polish **P0** — [`design-coding-agent-polish.md`](design-coding-agent-polish.md) | none |
+| **4 (optional)** | Align `GROK_MODEL` default shell+Gleam to `grok-4.5` together | **GO** as polish **P1** — [`design-coding-agent-polish.md`](design-coding-agent-polish.md) | policy |
 
 ### Slice 1 acceptance (implement card)
 
@@ -347,16 +347,18 @@ Smoke tests today grep shell issue-path logs, not these Gleam strings — low bl
 - [x] No shell issue-path edits; no resolve_pr behavior change in this slice.
 - [x] Files stay ≤1000 LOC.
 
-**Slice 1 status (t_45efd0d1):** landed in product PR (this implement card).
+**Slice 1 status (t_45efd0d1):** landed **4553356** / PR #210.
 
 ### Slice 2 acceptance
 
-- [ ] `resolve_conflicts` uses helper with step `Resolve`.
-- [ ] Codex path: still `exec --full-auto` + prompt argv + empty stdin (parity).
-- [ ] Grok path: `--prompt-file` + headless flags; parse surface unchanged.
-- [ ] Fail strings say `Coding agent` not hardcoded `Codex` (or dual-mention); tests updated if any.
-- [ ] Unit tests: agent selection + classify/resolve argv construction with fake exec.
-- [ ] `gleam build` / `gleam test`; `test/worker-resolve-pr.sh` if applicable still green under default codex.
+- [x] `resolve_conflicts` uses helper with step `Resolve`.
+- [x] Codex path: still `exec --full-auto` + prompt argv + empty stdin (parity).
+- [x] Grok path: `--prompt-file` + headless flags; parse surface unchanged.
+- [x] Fail strings say `Coding agent` not hardcoded `Codex` (or dual-mention); tests updated if any.
+- [x] Unit tests: agent selection + classify/resolve argv construction with fake exec.
+- [x] `gleam build` / `gleam test`; `test/worker-resolve-pr.sh` if applicable still green under default codex.
+
+**Slice 2 status (t_beed04ab):** landed **c55f8e1** / PR #212.
 
 ---
 

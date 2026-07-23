@@ -338,14 +338,16 @@ Smoke tests today grep shell issue-path logs, not these Gleam strings — low bl
 
 ### Slice 1 acceptance (implement card)
 
-- [ ] `coding_agent.agent_name(Comment)` respects `GRKR_AGENT_COMMENT` → `GRKR_CODING_AGENT`/`CODING_AGENT` → `codex`.
-- [ ] Both comment modules call shared helper; still export `run_codex_classify` / `parse_codex_output`.
-- [ ] `GRKR_CODING_AGENT` unset/`codex`: argv+stdin+timeout+sandbox **identical** to today (no `--full-auto` added).
-- [ ] `GRKR_CODING_AGENT=grok`: headless grok argv with `--prompt-file`, shell-aligned flags; prompt not on argv; temp file cleaned up.
-- [ ] Non-zero/timeout → synthetic CLASS:refuse + REPLY containing `invocation failed or timed out`.
-- [ ] `gleam build` + `gleam test` green.
-- [ ] No shell issue-path edits; no resolve_pr behavior change in this slice.
-- [ ] Files stay ≤1000 LOC.
+- [x] `coding_agent.agent_name(Comment)` respects `GRKR_AGENT_COMMENT` → `GRKR_CODING_AGENT`/`CODING_AGENT` → `codex`.
+- [x] Both comment modules call shared helper; still export `run_codex_classify` / `parse_codex_output`.
+- [x] `GRKR_CODING_AGENT` unset/`codex`: argv+stdin+timeout+sandbox **identical** to today (no `--full-auto` added).
+- [x] `GRKR_CODING_AGENT=grok`: headless grok argv with `--prompt-file`, shell-aligned flags; prompt not on argv; temp file cleaned up.
+- [x] Non-zero/timeout → synthetic CLASS:refuse + REPLY containing `invocation failed or timed out`.
+- [x] `gleam build` + `gleam test` green.
+- [x] No shell issue-path edits; no resolve_pr behavior change in this slice.
+- [x] Files stay ≤1000 LOC.
+
+**Slice 1 status (t_45efd0d1):** landed in product PR (this implement card).
 
 ### Slice 2 acceptance
 

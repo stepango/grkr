@@ -61,7 +61,8 @@ fn do_handle(comment_id: String) {
       let worktree_info = worktree.create_comment_worktree(comment_id, ctx, repo, main_branch)
 
       // 4+5. prompt + codex
-      let codex_out = codex.run_codex_classify(ctx, worktree_info.branch)
+      let codex_out =
+        codex.run_codex_classify(ctx, worktree_info.branch, worktree_info.dir)
 
       let #(class, reply, changes) = codex.parse_codex_output(codex_out)
 

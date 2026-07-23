@@ -1,48 +1,71 @@
 //// handle_comment_codex.gleam
-//// Codex classify prompt + parse (CLASS/REPLY/CHANGES) for handle_comment (LOC hygiene).
-//// Policy text, prompt assembly, parse logic moved verbatim.
+//// Classify prompt + parse (CLASS/REPLY/CHANGES) for handle_comment (LOC hygiene).
+//// Coding-agent exec via grkr/coding_agent (GRKR_CODING_AGENT / GRKR_AGENT_COMMENT).
 
 import gleam/int
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{type Option}
 import gleam/string
 
+import grkr/coding_agent
 import grkr/workflow/ffi.{ExecResult}
 import grkr/workflow/handle_comment_types.{type CommentContext}
 
-pub fn run_codex_classify(ctx: CommentContext, branch: String) -> String {
+pub fn run_codex_classify(
+  ctx: CommentContext,
+  branch: String,
+  workdir: String,
+) -> String {
   let policy = "Follow AGENTS.md, spec/parts/*, and grkr v2 rules: minimal targeted changes only; always prefer answer/refuse over broad edits; respect 1000 LOC/file limit; use worktrees; post checkpoints for complex work; GitHub-only in this phase (no Linear mutations here). Be concise and professional."
 
   let prompt = "You are grkr, the autonomous repo robot.\n\nRAW COMMAND (from @:robot: comment #" <> ctx.id <> " by @" <> ctx.user_login <> "):\n" <> ctx.raw_cmd <> "\n\nCONTEXT:\n- Repo: " <> ctx.repo <> "\n- " <> case ctx.is_pr { True -> "PR " False -> "" } <> "Issue #" <> ctx.issue_number <> ": " <> ctx.issue_title <> "\n  State: " <> ctx.issue_state <> "\n  URL: " <> ctx.html_url <> "\n- Issue/PR body (truncated): " <> string.slice(ctx.issue_body, 0, 800) <> "\n- Recent thread comments (newest first, truncated): " <> ctx.recent_comments_json <> "\n- Current worktree branch: " <> branch <> "\n- Policy: " <> policy <> "\n\nTASK:\nClassify the intent of the RAW COMMAND and respond as one of:\n- answer-only: provide helpful reply, no code changes\n- code-change: describe + (if safe/minimal) note that edit would be made here\n- triage: suggest next step or label\n- refuse: politely decline with short reason (e.g. too vague, out of scope, needs more info)\n\nOUTPUT FORMAT (exact, parseable):\nCLASS: <answer-only|code-change|triage|refuse>\nREPLY: <1-6 sentence professional reply text for posting as GitHub comment. Include classification and any caveats. Do NOT include raw prompt.>\nCHANGES: <short description of any code intent or N/A>\n\nDo not execute external commands yourself; only describe. Keep REPLY under 1200 chars."
 
-  let _ = ffi.console_log("   building codex prompt (len=" <> int.to_string(string.length(prompt)) <> ")")
+  let _ =
+    ffi.console_log(
+      "   building coding-agent prompt (len="
+      <> int.to_string(string.length(prompt))
+      <> ")",
+    )
 
-  let codex_bin = "codex"
-  // use timeout wrapper if available for parity; else direct (may hang in rare cases)
-  let has_timeout = case ffi.executable("which", ["timeout"], None) {
-    ExecResult(0, _, _) -> True
-    _ -> False
-  }
+  let outcome =
+    coding_agent.run_with_defaults(
+      coding_agent.Comment,
+      coding_agent.Classify,
+      prompt,
+      workdir,
+      exec_adapter,
+      fs_deps(),
+    )
 
-  let #(cmd_bin, cmd_args, use_input) = case has_timeout {
-    True -> #("timeout", ["120", codex_bin, "exec", "--sandbox", "workspace-write"], True)
-    False -> #(codex_bin, ["exec", "--sandbox", "workspace-write"], True)
-  }
+  let out = coding_agent.classify_output(outcome, ctx.raw_cmd)
 
-  let input = case use_input {
-    True -> Some(prompt)
-    False -> None
-  }
-
-  let out = case ffi.executable(cmd_bin, cmd_args, input) {
-    ExecResult(0, stdout, _) -> stdout
-    ExecResult(_, stdout, stderr) -> {
-      stdout <> "\n" <> stderr <> "\nCLASS: refuse\nREPLY: Codex invocation failed or timed out for command: " <> ctx.raw_cmd <> ". Treating as non-actionable.\nCHANGES: N/A"
-    }
-  }
-
-  let _ = ffi.console_log("   codex raw output (truncated): " <> string.slice(out, 0, 300) <> "...")
+  let _ =
+    ffi.console_log(
+      "   coding-agent raw output (truncated): "
+      <> string.slice(out, 0, 300)
+      <> "...",
+    )
   out
+}
+
+fn exec_adapter(
+  bin: String,
+  args: List(String),
+  input: Option(String),
+) -> coding_agent.ExecOutcome {
+  case ffi.executable(bin, args, input) {
+    ExecResult(0, stdout, _) -> coding_agent.ExecOk(stdout)
+    ExecResult(code, stdout, stderr) ->
+      coding_agent.ExecFailed(code, stdout, stderr)
+  }
+}
+
+fn fs_deps() -> coding_agent.FsDeps {
+  coding_agent.FsDeps(
+    temp_path: ffi.tl_temp_path,
+    write_text: ffi.tl_write_text,
+    unlink: ffi.tl_unlink_file,
+  )
 }
 
 pub fn parse_codex_output(out: String) -> #(String, String, String) {

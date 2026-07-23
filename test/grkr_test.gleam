@@ -1,3 +1,4 @@
+import grkr/coding_agent_test
 import grkr/issue_provider_test
 import grkr/linear/config_test
 import grkr/linear/e2e_test
@@ -25,6 +26,7 @@ import grkr/supervisor/types_test as supervisor_types_test
 import grkr/workflow/implement_stage_test
 
 pub fn main() {
+  coding_agent_test.main()
   issue_provider_test.main()
   config_test.main()
   e2e_test.main()

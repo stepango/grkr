@@ -41,12 +41,15 @@ BUILD_COMMAND="./scripts/build.sh"
 BOT_GIT_NAME="robot"
 BOT_GIT_EMAIL="robot@example.com"
 
-# Coding agent backend (issue decision/implement + line-limit remediation)
+# Coding agent backend (issue decision/implement + line-limit remediation;
+# Gleam @:robot: comment-classify also honors GRKR_CODING_AGENT / GRKR_AGENT_COMMENT)
 GRKR_CODING_AGENT="codex"   # or "grok"
 # Optional per-step overrides (else fall back to GRKR_CODING_AGENT):
 # GRKR_AGENT_DECISION="grok"
 # GRKR_AGENT_IMPLEMENT="codex"
 # GRKR_AGENT_REMEDIATE="grok"
+# GRKR_AGENT_COMMENT="codex"  # Gleam comment-classify only
+# GRKR_AGENT_RESOLVE="grok"   # reserved for resolve_pr (slice 2)
 CODEX_BIN="codex"
 CODEX_MODEL="gpt-5-codex"
 CODEX_ARGS="-c model=$CODEX_MODEL"
@@ -67,7 +70,7 @@ REFUSAL_REQUIRES_BACKLOG_MOVE="true"
 
 `TODO_VALUE`, `IN_PROGRESS_VALUE`, `DONE_VALUE`, and `BACKLOG_VALUE` are matched against the live project field options case-insensitively after trimming and collapsing whitespace, so config can safely use `In Progress` even when the project option is `In progress`.
 
-`GRKR_CODING_AGENT` selects the coding backend for the shared `run_codex_prompt` bridge (alias `run_coding_agent_prompt`). Default is `codex`. Set `grok` to use Grok Build CLI with the same prompt files and log persistence. Env vars override config when set. `CODEX_ARGS` is passed through on the codex path (was previously documented but unused).
+`GRKR_CODING_AGENT` selects the coding backend for the shared `run_codex_prompt` bridge (alias `run_coding_agent_prompt`) and for Gleam `@:robot:` comment-classify (`src/grkr/coding_agent.gleam`). Default is `codex`. Set `grok` to use Grok Build CLI with the same prompt files and log persistence. Optional `GRKR_AGENT_COMMENT` overrides the global agent for comment-classify only (shell issue path ignores it). Env vars override config when set. `CODEX_ARGS` is passed through on the codex path (was previously documented but unused).
 
 Optional recommended settings:
 

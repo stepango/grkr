@@ -29,7 +29,7 @@ No changes to user-facing commands, config, or entrypoints (still `robot-main.sh
 
 ### Coding agent (Codex / Grok)
 
-Issue decision + implement (and line-limit remediation) go through one bridge (`run_codex_prompt` / `run_coding_agent_prompt`).
+Issue decision + implement (and line-limit remediation) go through one shell bridge (`run_codex_prompt` / `run_coding_agent_prompt`). Gleam `@:robot:` comment-classify uses the same global selector via `src/grkr/coding_agent.gleam` (optional `GRKR_AGENT_COMMENT`; resolve_pr still Codex-hardcoded until slice 2 — design [`docs/design-gleam-coding-agent-swap.md`](docs/design-gleam-coding-agent-swap.md)).
 
 ```bash
 # Default / global
@@ -39,6 +39,9 @@ GRKR_CODING_AGENT=codex   # or grok
 GRKR_AGENT_DECISION=grok
 GRKR_AGENT_IMPLEMENT=codex
 GRKR_AGENT_REMEDIATE=grok
+# Gleam comment-classify only (shell issue path ignores these):
+# GRKR_AGENT_COMMENT=codex
+# GRKR_AGENT_RESOLVE=grok   # reserved; wired in resolve_pr slice 2
 
 # Backend knobs
 CODEX_ARGS="-c model=$CODEX_MODEL"

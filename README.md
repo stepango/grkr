@@ -56,7 +56,7 @@ scripts/coding-agent-eval-matrix.sh
 # report: docs/eval-results/coding-agent-matrix-latest.md
 ```
 
-Put these in `.grkr/config.sh` or the environment. Doctor validates only the selected agent. Design: [`docs/design-swappable-coding-agent.md`](docs/design-swappable-coding-agent.md). Polish (doctor COMMENT/RESOLVE template + `GROK_MODEL` default `grok-4.5`; artifact rename **NO-GO**; third backend **DEFER**): [`docs/design-coding-agent-polish.md`](docs/design-coding-agent-polish.md).
+Put these in `.grkr/config.sh` or the environment. Doctor validates only the selected agent. Design: [`docs/design-swappable-coding-agent.md`](docs/design-swappable-coding-agent.md). Polish P0+P1 **landed** @ **b49a072** / #215 (design [`docs/design-coding-agent-polish.md`](docs/design-coding-agent-polish.md)). Next product thinning (optional Gleam LOC hygiene): [`docs/design-next-product-after-coding-agent-polish.md`](docs/design-next-product-after-coding-agent-polish.md).
 
 
 ```bash

@@ -1,6 +1,6 @@
 # Design: Coding-agent polish follow-ups
 
-**Status**: Design (docs-only)  
+**Status**: Design — P0+P1 **landed** @ **b49a072** / PR #215 (t_49452ed3)  
 **Date**: 2026-07-23  
 **Base tip**: origin/main **2e32cbe** (docs tip-sync #213 after product **c55f8e1** / #212)  
 **Kanban**: t_df8f9141  
@@ -285,3 +285,5 @@ test/grkr-coding-agent-swap.sh
 | 5 | Codex inventory | scan only; no renames |
 
 **Implement order:** single product PR **P0+P1** preferred (tiny).
+
+**Landed:** P0+P1 @ **b49a072** / PR #215. Next: [`design-next-product-after-coding-agent-polish.md`](design-next-product-after-coding-agent-polish.md).

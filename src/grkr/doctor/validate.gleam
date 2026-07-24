@@ -1,388 +1,67 @@
-import gleam/list
-import gleam/option.{None, Some}
-import gleam/string
-import grkr/doctor/config_parse
+//// validate.gleam
+//// Thin public facade (LOC hygiene split, t_74a7a161).
+//// Stable module: grkr/doctor/validate
+//// Delegates to validate_{tools,agent,config,run}. Zero intentional behavior change.
+//// doctor/cli.gleam is the sole caller (run_validate / run_create_config).
 
-type ExecResult {
-  ExecResult(exit_code: Int, stdout: String, stderr: String)
-}
+import grkr/doctor/validate_agent as agent
+import grkr/doctor/validate_config as config
+import grkr/doctor/validate_run as run_mod
+import grkr/doctor/validate_tools as tools
 
-@external(javascript, "../doctor/exec.mjs", "executable")
-fn executable(command: String, args: List(String), input: String) -> ExecResult
-
-@external(javascript, "../doctor/env.mjs", "get_env")
-fn get_env(name: String) -> String
-
-@external(javascript, "../doctor/fs.mjs", "read_text")
-fn read_text(path: String) -> Result(String, String)
-
-@external(javascript, "../doctor/fs.mjs", "write_text")
-fn write_text(path: String, content: String) -> Result(Nil, String)
-
-@external(javascript, "../doctor/fs.mjs", "exists")
-fn path_exists(path: String) -> Bool
-
-@external(javascript, "../doctor/fs.mjs", "mkdir_p")
-fn mkdir_p(path: String) -> Bool
-
-@external(javascript, "../doctor/fs.mjs", "probe_writable_dir")
-fn probe_writable_dir(path: String) -> Bool
-
-@external(javascript, "console", "log")
-fn console_log(s: String) -> Nil
-
+// --- config / paths ---
 pub fn grkr_root() -> String {
-  case get_env("GRKR_ROOT") {
-    "" -> {
-      case git_toplevel() {
-        Ok(root) -> root
-        Error(_) -> "."
-      }
-    }
-    root -> root
-  }
+  config.grkr_root()
 }
 
 pub fn config_file_path() -> String {
-  case get_env("GRKR_CONFIG_FILE") {
-    "" -> grkr_root() <> "/.grkr/config.sh"
-    path -> path
-  }
+  config.config_file_path()
 }
 
-fn git_toplevel() -> Result(String, Nil) {
-  case executable("git", ["rev-parse", "--show-toplevel"], "") {
-    ExecResult(0, stdout, _) -> Ok(string.trim(stdout))
-    _ -> Error(Nil)
-  }
-}
-
-fn fail(msg: String) -> Nil {
-  console_log("❌ " <> msg)
-}
-
-fn tool_on_path(tool: String) -> Bool {
-  case executable("command", ["-v", tool], "") {
-    ExecResult(0, _, _) -> True
-    _ -> False
-  }
-}
-
+// --- tools + gh auth ---
 pub fn validate_tools() -> Bool {
-  let tools = ["jq", "git", "gh", "timeout", "flock"]
-  list.fold(tools, True, fn(ok, tool) {
-    case ok {
-      False -> False
-      True ->
-        case tool_on_path(tool) {
-          True -> True
-          False -> {
-            fail(tool <> " is required but not installed.")
-            False
-          }
-        }
-    }
-  })
+  tools.validate_tools()
 }
 
 pub fn validate_gh_auth() -> Bool {
-  case executable("gh", ["auth", "status"], "") {
-    ExecResult(0, _, _) -> True
-    _ -> {
-      fail("GitHub authentication failed. Run: gh auth login")
-      False
-    }
-  }
+  tools.validate_gh_auth()
 }
 
+// --- coding agent ---
 pub fn validate_codex() -> Bool {
-  validate_named_tool("codex", "codex is required but not installed.")
+  agent.validate_codex()
 }
 
 pub fn validate_grok() -> Bool {
-  case tool_on_path("grok") {
-    True -> validate_named_tool("grok", "grok is required but not installed.")
-    False ->
-      case path_exists(home_dir() <> "/.grok/bin/grok") {
-        True ->
-          case executable(home_dir() <> "/.grok/bin/grok", ["--help"], "") {
-            ExecResult(0, _, _) -> True
-            _ -> {
-              fail("grok is installed at ~/.grok/bin/grok but not runnable.")
-              False
-            }
-          }
-        False -> {
-          fail(
-            "grok is required (GRKR_CODING_AGENT=grok) but not installed. Install Grok Build CLI or set GROK_BIN.",
-          )
-          False
-        }
-      }
-  }
+  agent.validate_grok()
 }
 
-/// Selected coding agent from env, then config.sh. Default: codex.
 pub fn coding_agent_name() -> String {
-  case string.lowercase(string.trim(get_env("GRKR_CODING_AGENT"))) {
-    "" ->
-      case string.lowercase(string.trim(get_env("CODING_AGENT"))) {
-        "" -> coding_agent_from_config()
-        other -> other
-      }
-    agent -> agent
-  }
+  agent.coding_agent_name()
 }
 
-fn coding_agent_from_config() -> String {
-  let path = config_file_path()
-  case path_exists(path) {
-    False -> "codex"
-    True ->
-      case read_text(path) {
-        Error(_) -> "codex"
-        Ok(content) -> {
-          let assignments = config_parse.parse_config_assignments(content)
-          case config_parse.config_get(assignments, "GRKR_CODING_AGENT") {
-            Some(v) -> string.lowercase(string.trim(v))
-            None ->
-              case config_parse.config_get(assignments, "CODING_AGENT") {
-                Some(v) -> string.lowercase(string.trim(v))
-                None -> "codex"
-              }
-          }
-        }
-      }
-  }
-}
-
-fn home_dir() -> String {
-  case get_env("HOME") {
-    "" -> "."
-    h -> h
-  }
-}
-
-fn validate_named_tool(tool: String, missing_msg: String) -> Bool {
-  case tool_on_path(tool) {
-    False -> {
-      fail(missing_msg)
-      False
-    }
-    True ->
-      case executable(tool, ["--help"], "") {
-        ExecResult(0, _, _) -> True
-        _ -> {
-          fail(tool <> " is installed but not runnable.")
-          False
-        }
-      }
-  }
-}
-
-/// Validate only the configured coding agent (codex default, or grok).
 pub fn validate_coding_agent() -> Bool {
-  case coding_agent_name() {
-    "codex" -> validate_codex()
-    "grok" -> validate_grok()
-    other -> {
-      fail(
-        "Unknown GRKR_CODING_AGENT="
-          <> other
-          <> " (supported: codex, grok).",
-      )
-      False
-    }
-  }
+  agent.validate_coding_agent()
 }
 
+// --- config + remote + grkr-dir ---
 pub fn validate_config_file() -> Bool {
-  let path = config_file_path()
-  case path_exists(path) {
-    False -> {
-      fail("Missing config file: " <> path)
-      False
-    }
-    True ->
-      case read_text(path) {
-        Error(_) -> {
-          fail("Unable to load config file: " <> path)
-          False
-        }
-        Ok(content) -> {
-          let assignments = config_parse.parse_config_assignments(content)
-          let missing = config_parse.missing_required_keys(assignments)
-          case missing {
-            [] -> True
-            _ -> {
-              list.each(missing, fn(var) {
-                fail("Missing required config value: " <> var)
-              })
-              False
-            }
-          }
-        }
-      }
-  }
+  config.validate_config_file()
 }
 
 pub fn validate_repo_remote() -> Bool {
-  let path = config_file_path()
-  case read_text(path) {
-    Error(_) -> False
-    Ok(content) -> {
-      let assignments = config_parse.parse_config_assignments(content)
-      case config_parse.config_get(assignments, "REPO") {
-        None -> False
-        Some(repo_raw) -> {
-          case executable("git", ["remote", "get-url", "origin"], "") {
-            ExecResult(0, stdout, _) -> {
-              let remote_url = string.trim(stdout)
-              case config_parse.normalize_repo_slug(remote_url) {
-                Error(_) -> {
-                  fail("Unsupported origin remote URL: " <> remote_url)
-                  False
-                }
-                Ok(remote_slug) -> {
-                  let expected = case config_parse.normalize_repo_slug(repo_raw) {
-                    Ok(normalized) -> normalized
-                    Error(_) -> repo_raw
-                  }
-                  case remote_slug == expected {
-                    True -> True
-                    False -> {
-                      fail(
-                        "Origin remote "
-                          <> remote_slug
-                          <> " does not match configured repo "
-                          <> expected
-                          <> ".",
-                      )
-                      False
-                    }
-                  }
-                }
-              }
-            }
-            _ -> {
-              fail("Unable to read git remote origin.")
-              False
-            }
-          }
-        }
-      }
-    }
-  }
+  config.validate_repo_remote()
 }
 
 pub fn validate_grkr_dir() -> Bool {
-  let grkr_dir = grkr_root() <> "/.grkr"
-  case mkdir_p(grkr_dir) {
-    False -> {
-      fail("Unable to create " <> grkr_dir <> ".")
-      False
-    }
-    True ->
-      case probe_writable_dir(grkr_dir) {
-        True -> True
-        False -> {
-          fail("Unable to write to " <> grkr_dir <> ".")
-          False
-        }
-      }
-  }
+  config.validate_grkr_dir()
 }
 
-/// Full startup validation (parity with doctor_validate in shell).
+// --- orchestrator ---
 pub fn run_validate() -> Int {
-  let tools_ok = validate_tools()
-  let gh_ok = validate_gh_auth()
-  let agent_ok = validate_coding_agent()
-
-  let config_path = config_file_path()
-  let config_ok = case path_exists(config_path) {
-    False -> {
-      fail("Missing config file: " <> config_path)
-      False
-    }
-    True -> {
-      let cfg_ok = validate_config_file()
-      let remote_ok = validate_repo_remote()
-      cfg_ok && remote_ok
-    }
-  }
-
-  let grkr_ok = validate_grkr_dir()
-
-  let all_ok = tools_ok && gh_ok && agent_ok && config_ok && grkr_ok
-  case all_ok {
-    True -> {
-      console_log(
-        "✅ Startup validation passed (coding agent: "
-          <> coding_agent_name()
-          <> ").",
-      )
-      0
-    }
-    False -> 1
-  }
+  run_mod.run_validate()
 }
 
 pub fn run_create_config(project_number: String) -> Int {
-  let path = config_file_path()
-  case path_exists(path) {
-    True -> {
-      fail("Config file already exists: " <> path)
-      1
-    }
-    False -> write_default_config(project_number)
-  }
-}
-
-fn write_default_config(project_number: String) -> Int {
-  case string.trim(project_number) {
-    "" -> {
-      fail(
-        "PROJECT_NUMBER is required to create "
-          <> config_file_path()
-          <> ".",
-      )
-      1
-    }
-    _ ->
-      case executable("git", ["remote", "get-url", "origin"], "") {
-        ExecResult(0, stdout, _) -> {
-          let remote_url = string.trim(stdout)
-          case config_parse.normalize_repo_slug(remote_url) {
-            Error(_) -> {
-              fail("Unsupported origin remote URL: " <> remote_url)
-              1
-            }
-            Ok(remote_slug) -> {
-              let owner = case string.split(remote_slug, "/") {
-                [o, ..] -> o
-                _ -> remote_slug
-              }
-              let content =
-                config_parse.default_config_template(
-                  remote_slug,
-                  owner,
-                  string.trim(project_number),
-                )
-              case write_text(config_file_path(), content) {
-                Error(_) -> {
-                  fail("Unable to create " <> config_file_path() <> ".")
-                  1
-                }
-                Ok(_) -> 0
-              }
-            }
-          }
-        }
-        _ -> {
-          fail("Unable to read git remote origin.")
-          1
-        }
-      }
-  }
+  run_mod.run_create_config(project_number)
 }

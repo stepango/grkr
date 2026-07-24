@@ -8,6 +8,7 @@ import gleam/option.{type Option}
 import gleam/string
 
 import grkr/coding_agent
+import grkr/coding_agent_types as ca_types
 import grkr/workflow/ffi.{ExecResult}
 import grkr/workflow/handle_comment_types.{type CommentContext}
 
@@ -29,8 +30,8 @@ pub fn run_codex_classify(
 
   let outcome =
     coding_agent.run_with_defaults(
-      coding_agent.Comment,
-      coding_agent.Classify,
+      ca_types.Comment,
+      ca_types.Classify,
       prompt,
       workdir,
       exec_adapter,
@@ -54,14 +55,14 @@ fn exec_adapter(
   input: Option(String),
 ) -> coding_agent.ExecOutcome {
   case ffi.executable(bin, args, input) {
-    ExecResult(0, stdout, _) -> coding_agent.ExecOk(stdout)
+    ExecResult(0, stdout, _) -> ca_types.ExecOk(stdout)
     ExecResult(code, stdout, stderr) ->
-      coding_agent.ExecFailed(code, stdout, stderr)
+      ca_types.ExecFailed(code, stdout, stderr)
   }
 }
 
 fn fs_deps() -> coding_agent.FsDeps {
-  coding_agent.FsDeps(
+  ca_types.FsDeps(
     temp_path: ffi.tl_temp_path,
     write_text: ffi.tl_write_text,
     unlink: ffi.tl_unlink_file,

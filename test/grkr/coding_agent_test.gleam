@@ -9,8 +9,9 @@ import gleam/string
 import gleeunit
 import gleeunit/should
 
-import grkr/coding_agent.{
-  Classify, Codex, Comment, ConflictResolve, ExecFailed, ExecOk, Grok,
+import grkr/coding_agent
+import grkr/coding_agent_types.{
+  Classify, Codex, Comment, ConflictResolve, ExecFailed, ExecOk, FsDeps, Grok,
   Invocation, Resolve,
 }
 
@@ -79,7 +80,7 @@ fn fake_exec_no_timeout(
 }
 
 fn fake_fs() -> coding_agent.FsDeps {
-  coding_agent.FsDeps(
+  FsDeps(
     temp_path: fn(prefix) { "/tmp/" <> prefix <> "test" },
     write_text: fn(path, body) {
       cap_record_write(path, body)

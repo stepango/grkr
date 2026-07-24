@@ -50,7 +50,7 @@ ${GROK_BIN:-grok|~/.grok/bin/grok} \
 1. ~~**Gleam direct exec still hardcodes `codex`**~~ **DONE** — slice 1 comment classify **4553356** / #210; slice 2 resolve_pr **c55f8e1** / #212; design [`docs/design-gleam-coding-agent-swap.md`](design-gleam-coding-agent-swap.md) (**a87f379** / #207).
 2. Optional rename of artifact dir `codex/implementation.log.parts/` → `agent/` — **NO-GO** leave forever (resume risk / low ROI). See [`docs/design-coding-agent-polish.md`](design-coding-agent-polish.md).
 3. Optional third backend (`claude` / custom argv template via `GRKR_AGENT_CMD`) — **DEFER** until a concrete consumer. See polish design.
-4. Align `GROK_MODEL` default shell+Gleam to product **`grok-4.5`** (paired flip) + doctor template `GRKR_AGENT_COMMENT` / `GRKR_AGENT_RESOLVE` comments — **GO** (P0+P1). See [`docs/design-coding-agent-polish.md`](design-coding-agent-polish.md).
+4. ~~Align `GROK_MODEL` default shell+Gleam to product **`grok-4.5`** (paired flip) + doctor template `GRKR_AGENT_COMMENT` / `GRKR_AGENT_RESOLVE` comments~~ **DONE** @ **b49a072** / #215 (design polish **910ba27** / #214). See [`docs/design-coding-agent-polish.md`](design-coding-agent-polish.md).
 
 ## Non-goals
 

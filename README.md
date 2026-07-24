@@ -29,7 +29,7 @@ No changes to user-facing commands, config, or entrypoints (still `robot-main.sh
 
 ### Coding agent (Codex / Grok)
 
-Issue decision + implement (and line-limit remediation) go through one shell bridge (`run_codex_prompt` / `run_coding_agent_prompt`). Gleam `@:robot:` comment-classify and `resolve_pr` conflict-resolve use the same global selector via `src/grkr/coding_agent.gleam` (optional `GRKR_AGENT_COMMENT` / `GRKR_AGENT_RESOLVE` — design [`docs/design-gleam-coding-agent-swap.md`](docs/design-gleam-coding-agent-swap.md)).
+Issue decision + implement (and line-limit remediation) go through one shell bridge (`run_codex_prompt` / `run_coding_agent_prompt`). Gleam `@:robot:` comment-classify and `resolve_pr` conflict-resolve use the same global selector via `src/grkr/coding_agent.gleam` thin facade + concern modules (types/select/classify/run; slice 1 t_e7ea2b4b) (optional `GRKR_AGENT_COMMENT` / `GRKR_AGENT_RESOLVE` — design [`docs/design-gleam-coding-agent-swap.md`](docs/design-gleam-coding-agent-swap.md)).
 
 ```bash
 # Default / global
@@ -56,7 +56,7 @@ scripts/coding-agent-eval-matrix.sh
 # report: docs/eval-results/coding-agent-matrix-latest.md
 ```
 
-Put these in `.grkr/config.sh` or the environment. Doctor validates only the selected agent. Design: [`docs/design-swappable-coding-agent.md`](docs/design-swappable-coding-agent.md). Polish P0+P1 **landed** @ **b49a072** / #215 (design [`docs/design-coding-agent-polish.md`](docs/design-coding-agent-polish.md)). Next product thinning (optional Gleam LOC hygiene): [`docs/design-next-product-after-coding-agent-polish.md`](docs/design-next-product-after-coding-agent-polish.md).
+Put these in `.grkr/config.sh` or the environment. Doctor validates only the selected agent. Design: [`docs/design-swappable-coding-agent.md`](docs/design-swappable-coding-agent.md). Polish P0+P1 **landed** @ **b49a072** / #215 (design [`docs/design-coding-agent-polish.md`](docs/design-coding-agent-polish.md)). coding_agent concern-split slice 1 **landed** (t_e7ea2b4b: 399→105 thin facade + types/select/classify/run; zero behavior change). Next product thinning: [`docs/design-next-product-after-coding-agent-polish.md`](docs/design-next-product-after-coding-agent-polish.md) (slice 2 doctor/validate).
 
 
 ```bash

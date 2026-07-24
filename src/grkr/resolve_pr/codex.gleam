@@ -9,6 +9,7 @@ import gleam/option.{type Option, None, Some}
 import gleam/string
 
 import grkr/coding_agent
+import grkr/coding_agent_types as ca_types
 import grkr/resolve_pr/types
 
 type ExecResult {
@@ -30,8 +31,8 @@ fn resolve_single_conflict(
 
   let outcome =
     coding_agent.run_with_defaults(
-      coding_agent.Resolve,
-      coding_agent.ConflictResolve,
+      ca_types.Resolve,
+      ca_types.ConflictResolve,
       prompt,
       workdir,
       exec_adapter,
@@ -39,12 +40,12 @@ fn resolve_single_conflict(
     )
 
   case outcome {
-    coding_agent.ExecOk(output) ->
+    ca_types.ExecOk(output) ->
       case parse_codex_response(output) {
         Ok(resolution) -> Ok(resolution)
         Error(err) -> Error("Failed to parse coding agent response: " <> err)
       }
-    coding_agent.ExecFailed(code, stdout, stderr) ->
+    ca_types.ExecFailed(code, stdout, stderr) ->
       Error(
         "Coding agent command failed: "
         <> case string.trim(stderr) {
@@ -65,14 +66,14 @@ fn exec_adapter(
     None -> ""
   }
   case javascript_executable(bin, args, stdin) {
-    ExecResult(0, stdout, _) -> coding_agent.ExecOk(stdout)
+    ExecResult(0, stdout, _) -> ca_types.ExecOk(stdout)
     ExecResult(code, stdout, stderr) ->
-      coding_agent.ExecFailed(code, stdout, stderr)
+      ca_types.ExecFailed(code, stdout, stderr)
   }
 }
 
 fn fs_deps() -> coding_agent.FsDeps {
-  coding_agent.FsDeps(
+  ca_types.FsDeps(
     temp_path: javascript_temp_path,
     write_text: javascript_write_file,
     unlink: javascript_unlink_file,
